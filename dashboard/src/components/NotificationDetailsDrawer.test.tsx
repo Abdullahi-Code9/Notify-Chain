@@ -187,4 +187,28 @@ describe('NotificationDetailsDrawer', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('notif-42');
     expect(await screen.findByText('Notification ID copied')).toBeInTheDocument();
   });
+
+  it('keeps the event detail copy workflow available at phone width', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+
+    render(
+      <NotificationDetailsDrawer
+        isOpen={true}
+        notification={makeNotification()}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Close drawer' })).toBeInTheDocument();
+    expect(screen.getByTitle('TXHASH123')).toHaveTextContent('TXHASH123');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy transaction hash' }));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('TXHASH123');
+    expect(await screen.findByText('Tx Hash copied')).toBeInTheDocument();
+  });
 });
