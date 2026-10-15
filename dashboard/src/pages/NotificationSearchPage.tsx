@@ -649,6 +649,8 @@ export function NotificationSearchPage() {
           response?.results.length === 0 && (
             <EmptyState
               icon="🕵️"
+              title="No notifications match your search"
+              message="Try a broader search or adjust the notification type, status, and date filters."
               action={{
                 label: 'Clear filters',
                 onClick: clearAll,

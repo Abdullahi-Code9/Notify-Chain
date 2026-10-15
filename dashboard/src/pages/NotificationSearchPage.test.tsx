@@ -204,6 +204,26 @@ describe('NotificationSearchPage filters', () => {
     ).toBeInTheDocument();
   });
 
+  it('explains empty search results and offers a filter reset', async () => {
+    render(<NotificationSearchPage />);
+
+    fireEvent.change(screen.getByLabelText(/free-text search/i), {
+      target: { value: 'missing notification' },
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(
+      await screen.findByText('No notifications match your search'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/try a broader search or adjust the notification type/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /clear filters/i })).toBeInTheDocument();
+  });
+
   it('clears type, status, and date filters', async () => {
     render(<NotificationSearchPage />);
 
