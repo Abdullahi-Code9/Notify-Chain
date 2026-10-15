@@ -19,6 +19,7 @@ import { pollingMetrics } from './polling-metrics';
 import { RpcRateLimiter } from './rpc-rate-limiter';
 import { normalizeSorobanEvent } from './event-normalization';
 import { provenanceDiagnostic, validateEventProvenance } from './event-provenance';
+import { EventQuarantineController } from './event-quarantine';
 import { StellarRpcManager } from './stellar-rpc-manager';
 import { safeLedgerRangeValidation } from '../utils/ledger-range-validator';
 
@@ -36,6 +37,7 @@ export class EventSubscriber {
   private lastSuccessfulPollAt: number | null = null;
   private rpcRateLimiter: RpcRateLimiter | null = null;
   private backfillStartLedger: number | null = null;
+  private readonly quarantine = new EventQuarantineController();
 
   constructor(config: Config, deduplicationService?: EventDeduplicationService) {
     this.config = config;
@@ -218,11 +220,28 @@ export class EventSubscriber {
         }> = [];
         for (const [eventIndex, event] of events.entries()) {
           const correlationId = generateCorrelationId();
+          if (this.quarantine.isBlocked(event?.id, contractConfig.address)) {
+            logger.warn('Skipping quarantined event', {
+              requestId,
+              correlationId,
+              contractAddress: contractConfig.address,
+              eventId: event?.id,
+            });
+            continue;
+          }
           try {
             if (this.shouldProcessEvent(event, contractConfig, requestId, correlationId)) {
               processableEvents.push({ event, correlationId });
             }
           } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.quarantine.recordMalformed({
+              eventId: typeof event?.id === 'string' ? event.id : '',
+              contractAddress: contractConfig.address,
+              ledger: typeof event?.ledger === 'number' ? event.ledger : null,
+              reason: message,
+              category: 'malformed_payload',
+            });
             logger.warn('Skipping malformed event', {
               requestId,
               correlationId,
@@ -230,7 +249,7 @@ export class EventSubscriber {
               eventIndex,
               eventId: event?.id,
               eventType: event?.type,
-              error: error instanceof Error ? error.message : String(error),
+              error: message,
             });
           }
         }
@@ -318,6 +337,13 @@ export class EventSubscriber {
 
     const validation = validateEventPayload(event);
     if (!validation.valid) {
+      this.quarantine.recordMalformed({
+        eventId: typeof event.id === 'string' ? event.id : '',
+        contractAddress: contractConfig.address,
+        ledger: typeof event.ledger === 'number' ? event.ledger : null,
+        reason: validation.reason ?? 'invalid event payload',
+        category: validation.error?.category ?? 'malformed_payload',
+      });
       logger.warn('Skipping invalid event payload', {
         requestId,
         correlationId,
