@@ -116,9 +116,8 @@ describe('NotificationDetailsDrawer', () => {
     expect(copyButtons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders payload section with copy action for long values (#680)', () => {
-    const longPayload =
-      '{"detail":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}';
+  it('renders nested payload values in an expandable structured view', () => {
+    const longPayload = '{"detail":{"message":"hello"},"items":[1,2]}';
     const notification = makeNotification({
       value: longPayload,
       txHash: 'abcdef1234567890abcdef1234567890abcdef12',
@@ -133,7 +132,11 @@ describe('NotificationDetailsDrawer', () => {
     );
 
     expect(screen.getByText('Payload')).toBeInTheDocument();
-    expect(container.querySelector('.drawer__payload')).toHaveTextContent(longPayload);
+    expect(container.querySelector('.drawer__payload')).toHaveTextContent('Object (2)');
+    expect(screen.getByText('detail: Object (1)')).toBeInTheDocument();
+    expect(screen.queryByText(/message: "hello"/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('detail: Object (1)'));
+    expect(screen.getByText('message: "hello"')).toBeInTheDocument();
     expect(container.querySelector('.drawer__row--stack')).toBeTruthy();
   });
 

@@ -2562,6 +2562,23 @@ body {
   padding: 8px 10px;
 }
 
+.drawer__payload-node > summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.drawer__payload-children {
+  margin-left: 6px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.drawer__payload-leaf {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .drawer__action {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
