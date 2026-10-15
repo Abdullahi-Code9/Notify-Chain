@@ -78,8 +78,8 @@ describe('NotificationDetailsDrawer', () => {
     expect(await screen.findByText('Delivered')).toBeInTheDocument();
     expect(await screen.findByText('unit-test')).toBeInTheDocument();
 
-    const txCopyButtons = screen.getAllByRole('button', { name: 'Copy' });
-    fireEvent.click(txCopyButtons[txCopyButtons.length - 1]);
+    const txHashRow = screen.getByTitle('TXHASH123').closest('.drawer__row')!;
+    fireEvent.click(txHashRow.querySelector('button')!);
     expect(await screen.findByText('Copy failed')).toBeInTheDocument();
   });
 
@@ -112,7 +112,7 @@ describe('NotificationDetailsDrawer', () => {
     // The shortened version should be displayed
     expect(screen.getByTitle('notif-42')).toBeInTheDocument();
     // A copy button for the Notification ID should be present
-    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
+    const copyButtons = screen.getAllByRole('button', { name: /^Copy/ });
     expect(copyButtons.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -150,7 +150,7 @@ describe('NotificationDetailsDrawer', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Close drawer' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /^Copy/ }).length).toBeGreaterThan(0);
   });
 
   it('does not render Notification ID row when relatedNotificationId is absent', () => {

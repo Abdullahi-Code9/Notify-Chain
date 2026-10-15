@@ -242,6 +242,7 @@ export function NotificationDetailsDrawer({
               type="button"
               className="drawer__action"
               onClick={() => void tryCopy('Address', sender.address)}
+              aria-label="Copy sender address"
             >
               Copy
             </button>
@@ -270,6 +271,7 @@ export function NotificationDetailsDrawer({
                 type="button"
                 className="drawer__action"
                 onClick={() => void tryCopy('Notification ID', notification.relatedNotificationId!)}
+                aria-label="Copy notification ID"
               >
                 Copy
               </button>
@@ -288,6 +290,7 @@ export function NotificationDetailsDrawer({
               type="button"
               className="drawer__action"
               onClick={() => void tryCopy('Event ID', notification.eventId)}
+              aria-label="Copy event ID"
             >
               Copy
             </button>
@@ -302,6 +305,7 @@ export function NotificationDetailsDrawer({
                 type="button"
                 className="drawer__action"
                 onClick={() => void tryCopy('Tx Hash', notification.txHash!)}
+                aria-label="Copy transaction hash"
               >
                 Copy
               </button>
