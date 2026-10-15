@@ -1,0 +1,855 @@
+{
+  "info": {
+    "_postman_id": "notify-chain-api-v1",
+    "name": "NotifyChain API — Public Workflows",
+    "description": "Complete Postman collection for the NotifyChain Listener HTTP API (issue #992).\n\nAll public endpoints are included and grouped by workflow. Secrets and\nper-environment values are parameterized via collection variables so a\nmaintainer can execute every request against a local instance immediately\nafter importing this file.\n\n## Quick-start\n1. Import this file into Postman (File → Import).\n2. Open \"Environments\" and set the variables listed below, or edit the\n   collection-level defaults directly.\n3. Start the listener: `cd listener && npm run dev`\n4. Run the \"Health\" request to confirm connectivity, then explore by folder.\n\n## Collection variables (override per environment)\n| Variable            | Default                | Purpose                                    |\n|---------------------|------------------------|--------------------------------------------|\n| `base_url`          | http://localhost:3000  | Listener service URL                       |\n| `api_key`           | dev-api-key-1          | X-API-Key for protected endpoints          |\n| `webhook_secret`    | change-me-in-production| HMAC-SHA256 secret for POST /api/webhooks  |\n| `webhook_key_id`    | key-1                  | Key identifier sent in X-Webhook-Key-Id    |\n| `schedule_id`       | 1                      | Notification ID used in GET/DELETE /api/schedule/:id |\n| `template_id`       | 1                      | Template ID used in template GET/PUT/DELETE |\n| `user_id`           | user-123               | User ID for preferences endpoints          |\n\n## Signature helper (Pre-request script)\nThe `POST /api/v1/webhooks` request includes a Pre-request Script that\nautomatically computes a valid HMAC-SHA256 signature using the collection\nvariables, so no manual signing is required.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",         "value": "http://localhost:3000", "type": "string" },
+    { "key": "api_key",          "value": "dev-api-key-1",        "type": "string" },
+    { "key": "webhook_secret",   "value": "change-me-in-production", "type": "string" },
+    { "key": "webhook_key_id",   "value": "key-1",                "type": "string" },
+    { "key": "schedule_id",      "value": "1",                    "type": "string" },
+    { "key": "template_id",      "value": "1",                    "type": "string" },
+    { "key": "user_id",          "value": "user-123",             "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Infrastructure",
+      "description": "Non-versioned infrastructure endpoints. These are not prefixed with /api/v1 and have no planned deprecation.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Returns an aggregated health status for every service dependency:\nStellar RPC, Discord, SQLite database, and the in-memory event registry.\n\nResponds with 200 when all dependencies are healthy, or 503 when any\ncritical dependency reports an error."
+          },
+          "response": [
+            {
+              "name": "200 OK — all healthy",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"ok\",\n  \"timestamp\": \"2026-10-15T12:00:00.000Z\",\n  \"services\": {\n    \"stellarRpc\": { \"status\": \"ok\", \"latencyMs\": 42 },\n    \"discord\":    { \"status\": \"ok\", \"latencyMs\": 18 },\n    \"database\":   { \"status\": \"ok\" },\n    \"eventRegistry\": { \"status\": \"ok\", \"eventCount\": 12 }\n  }\n}"
+            },
+            {
+              "name": "503 Service Unavailable — degraded",
+              "status": "Service Unavailable",
+              "code": 503,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"error\",\n  \"timestamp\": \"2026-10-15T12:00:00.000Z\",\n  \"services\": {\n    \"stellarRpc\": { \"status\": \"error\", \"detail\": \"Health check timed out\" },\n    \"discord\":    { \"status\": \"ok\", \"latencyMs\": 18 },\n    \"database\":   { \"status\": \"ok\" },\n    \"eventRegistry\": { \"status\": \"ok\", \"eventCount\": 0 }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "description": "On-chain event registry. Displays events polled from the Stellar RPC and ingested into the in-memory registry.",
+      "item": [
+        {
+          "name": "List events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/events",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "events"]
+            },
+            "description": "Returns all events in the in-memory registry. Use ?limit=N to cap the response.\n\nThe response header `X-API-Version: v1` confirms the active API version."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-API-Version", "value": "v1" }
+              ],
+              "body": "{\n  \"count\": 2,\n  \"events\": [\n    {\n      \"id\": \"evt-001\",\n      \"contractAddress\": \"CEXAMPLECONTRACT\",\n      \"eventName\": \"transfer\",\n      \"ledger\": 100123,\n      \"timestamp\": \"2026-10-15T11:00:00.000Z\",\n      \"data\": { \"from\": \"GABC\", \"to\": \"GXYZ\", \"amount\": \"100\" }\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List events (with limit)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/events?limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "events"],
+              "query": [{ "key": "limit", "value": "5" }]
+            },
+            "description": "Returns at most 5 events from the in-memory registry."
+          },
+          "response": []
+        },
+        {
+          "name": "Indexing health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/indexing/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "indexing", "health"]
+            },
+            "description": "Reports how far behind the indexer is relative to the live Stellar network tip.\n\nKey fields:\n- `ledgerLag` — how many ledgers behind the indexed tip is\n- `processingDelayMs` — time since the last event was ingested\n- `status` — `synced | syncing | degraded`"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"synced\",\n  \"timestamp\": \"2026-10-15T12:00:00.000Z\",\n  \"indexedLedger\": 100200,\n  \"networkTipLedger\": 100202,\n  \"ledgerLag\": 2,\n  \"processingDelayMs\": 850,\n  \"lastIngestedAt\": \"2026-10-15T11:59:59.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Contract pause status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "status"]
+            },
+            "description": "Returns the on-chain pause / active status for each configured contract address."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "description": "Inbound signed webhook acceptance. External services post signed events here.\n\nAll requests MUST be signed with HMAC-SHA256. See the Pre-request Script on\n'Accept signed webhook' for the automatic signing logic.",
+      "item": [
+        {
+          "name": "Accept signed webhook",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Automatically compute a valid HMAC-SHA256 signature.",
+                  "// Requires the CryptoJS library bundled in Postman.",
+                  "const secret    = pm.collectionVariables.get('webhook_secret');",
+                  "const keyId     = pm.collectionVariables.get('webhook_key_id');",
+                  "const rawBody   = pm.request.body.raw;",
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "",
+                  "// Signing input: '<timestamp>.<raw-body>'",
+                  "const signingInput = timestamp + '.' + rawBody;",
+                  "const hex = CryptoJS.HmacSHA256(signingInput, secret).toString(CryptoJS.enc.Hex);",
+                  "const signature = 'sha256=' + hex;",
+                  "",
+                  "pm.request.headers.upsert({ key: 'X-Webhook-Signature',  value: signature });",
+                  "pm.request.headers.upsert({ key: 'X-Webhook-Key-Id',     value: keyId });",
+                  "pm.request.headers.upsert({ key: 'X-Webhook-Timestamp',  value: timestamp });"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Response has verified:true', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.verified).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Webhook-Signature",  "value": "{{computed_in_prerequest}}", "description": "Set automatically by Pre-request Script" },
+              { "key": "X-Webhook-Key-Id",     "value": "{{webhook_key_id}}" },
+              { "key": "X-Webhook-Timestamp",  "value": "{{computed_in_prerequest}}", "description": "Set automatically by Pre-request Script" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"notification\",\n  \"id\": \"evt-postman-001\",\n  \"contractAddress\": \"CEXAMPLECONTRACTADDRESSAAAAAAAAAAAA\",\n  \"eventName\": \"transfer\",\n  \"data\": {\n    \"from\": \"GABC\",\n    \"to\": \"GXYZ\",\n    \"amount\": \"100\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhooks"]
+            },
+            "description": "Submit a signed notification payload.\n\nThe Pre-request Script computes the HMAC-SHA256 signature automatically:\n  signingInput = timestamp + '.' + rawBody\n  signature    = 'sha256=' + HMAC-SHA256(signingInput, webhook_secret)\n\nThe server validates:\n1. `X-Webhook-Signature` has the `sha256=` prefix\n2. `X-Webhook-Key-Id` matches a configured secret\n3. `X-Webhook-Timestamp` is within 5 minutes\n4. The HMAC over `timestamp.rawBody` matches\n\nReturns 202 Accepted when the signature is valid."
+          },
+          "response": [
+            {
+              "name": "202 Accepted",
+              "status": "Accepted",
+              "code": 202,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"status\": \"accepted\", \"verified\": true }"
+            },
+            {
+              "name": "401 Unauthorized — invalid signature",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": \"Invalid signature\", \"code\": \"AUTH_INVALID_SIGNATURE\" }"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Notifications — Scheduling",
+      "description": "Create, inspect, and cancel scheduled notifications.",
+      "item": [
+        {
+          "name": "Schedule a notification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Response has id', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.be.a('number');",
+                  "  pm.collectionVariables.set('schedule_id', json.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key",    "value": "{{api_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"executeAt\": \"2026-12-01T09:00:00.000Z\",\n  \"targetRecipient\": \"https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_TOKEN\",\n  \"notificationType\": \"discord\",\n  \"payload\": {\n    \"content\": \"Scheduled notification from NotifyChain\",\n    \"embeds\": [\n      {\n        \"title\": \"Event Alert\",\n        \"description\": \"A monitored contract event occurred.\",\n        \"color\": 5814783\n      }\n    ]\n  },\n  \"priority\": 5,\n  \"maxRetries\": 3,\n  \"metadata\": {\n    \"source\": \"postman-test\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule"]
+            },
+            "description": "Schedule a notification for future delivery.\n\nRequired fields:\n- `executeAt` — ISO 8601 datetime (UTC)\n- `targetRecipient` — delivery URL (Discord webhook, etc.)\n- `payload` — notification body\n\nOptional:\n- `notificationType` — `discord` (default)\n- `priority` — 1 (high) to 10 (low)\n- `maxRetries` — retry budget (default: 3)\n- `metadata` — arbitrary key/value pairs"
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"id\": 42 }"
+            },
+            {
+              "name": "400 Bad Request — missing fields",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": \"Missing required fields: executeAt, payload, targetRecipient\", \"code\": \"MISSING_FIELDS\" }"
+            }
+          ]
+        },
+        {
+          "name": "Get scheduled notification",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/{{schedule_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "{{schedule_id}}"]
+            },
+            "description": "Fetch a single scheduled notification by its numeric ID.\n`schedule_id` is set automatically when 'Schedule a notification' is run first."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel scheduled notification",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/{{schedule_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "{{schedule_id}}"]
+            },
+            "description": "Cancel a pending scheduled notification. Once delivered, a notification cannot be cancelled."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"id\": 42, \"cancelled\": true }"
+            }
+          ]
+        },
+        {
+          "name": "Scheduler statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "stats"]
+            },
+            "description": "Aggregate counts: pending, processing, delivered, failed, and dead-letter notifications."
+          },
+          "response": []
+        },
+        {
+          "name": "Execution metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/execution-metrics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "execution-metrics"]
+            },
+            "description": "Execution timing metrics for the notification scheduler."
+          },
+          "response": []
+        },
+        {
+          "name": "Retry distribution",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/retry-distribution",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "retry-distribution"]
+            },
+            "description": "Distribution of retry counts across all notifications."
+          },
+          "response": []
+        },
+        {
+          "name": "Retry statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/retry-statistics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "retry-statistics"]
+            },
+            "description": "Detailed retry attempt statistics."
+          },
+          "response": []
+        },
+        {
+          "name": "Queue visibility (pending jobs)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/queue?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "queue"],
+              "query": [{ "key": "limit", "value": "20" }]
+            },
+            "description": "Lists up to `limit` pending jobs from the scheduler queue."
+          },
+          "response": []
+        },
+        {
+          "name": "Job monitor snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/jobs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "jobs"]
+            },
+            "description": "Background job monitoring snapshot including recent jobs and failures."
+          },
+          "response": []
+        },
+        {
+          "name": "Failed jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedule/jobs/failures",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedule", "jobs", "failures"]
+            },
+            "description": "Returns the most recent failed job entries from the job monitor."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications — History & Search",
+      "description": "Query delivered notification history and search across past events.",
+      "item": [
+        {
+          "name": "Notification history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/history?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "history"],
+              "query": [
+                { "key": "limit",  "value": "20" },
+                { "key": "cursor", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Paginated delivery history using cursor-based pagination.\n\nQuery params:\n- `limit` — page size (default: 20)\n- `cursor` — opaque cursor from the previous response's `nextCursor` field"
+          },
+          "response": []
+        },
+        {
+          "name": "Search notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/search?q=transfer",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "search"],
+              "query": [
+                { "key": "q",      "value": "transfer" },
+                { "key": "status", "value": "delivered", "disabled": true },
+                { "key": "limit",  "value": "20",        "disabled": true }
+              ]
+            },
+            "description": "Full-text and filter-based search over the notification history."
+          },
+          "response": []
+        },
+        {
+          "name": "Notification health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "health"]
+            },
+            "description": "Returns notification pipeline health including DLQ depth, failure rates, and backpressure status."
+          },
+          "response": []
+        },
+        {
+          "name": "Validate notification batch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"targetRecipient\": \"https://discord.com/api/webhooks/ID/TOKEN\",\n    \"executeAt\": \"2026-12-01T09:00:00.000Z\",\n    \"payload\": { \"content\": \"Test notification 1\" }\n  },\n  {\n    \"targetRecipient\": \"https://discord.com/api/webhooks/ID2/TOKEN2\",\n    \"executeAt\": \"2026-12-02T09:00:00.000Z\",\n    \"payload\": { \"content\": \"Test notification 2\" }\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/validate-batch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "validate-batch"]
+            },
+            "description": "Validates a batch of notifications without scheduling them.\n\nAccepts an array of notification objects or `{ notifications: [...] }`."
+          },
+          "response": [
+            {
+              "name": "200 OK — all valid",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"valid\": true, \"processedCount\": 2, \"errors\": [] }"
+            },
+            {
+              "name": "200 OK — validation errors",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"valid\": false, \"processedCount\": 2, \"errors\": [{ \"index\": 0, \"code\": \"MISSING_FIELD\", \"message\": \"targetRecipient is required\" }] }"
+            }
+          ]
+        },
+        {
+          "name": "Import notifications (JSON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key",    "value": "{{api_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"targetRecipient\": \"https://discord.com/api/webhooks/ID/TOKEN\",\n    \"executeAt\": \"2026-12-01T09:00:00.000Z\",\n    \"payload\": { \"content\": \"Imported notification\" },\n    \"notificationType\": \"discord\"\n  }\n]",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/import",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "import"]
+            },
+            "description": "Bulk-import notifications from a JSON array or CSV body.\n\nProtected by `X-API-Key` when API keys are configured on the server."
+          },
+          "response": []
+        },
+        {
+          "name": "Search suggestions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/search/suggestions?q=transfer",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "search", "suggestions"],
+              "query": [{ "key": "q", "value": "transfer" }]
+            },
+            "description": "Returns autocomplete suggestions for the search bar."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "description": "Notification delivery analytics and metrics history.",
+      "item": [
+        {
+          "name": "Analytics snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analytics"]
+            },
+            "description": "Returns the current analytics aggregator snapshot.\n\nAppend `?reset=true` to reset the counters after reading."
+          },
+          "response": []
+        },
+        {
+          "name": "Analytics history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics/history?limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analytics", "history"],
+              "query": [
+                { "key": "limit", "value": "100" },
+                { "key": "since", "value": "2026-10-01T00:00:00.000Z", "disabled": true }
+              ]
+            },
+            "description": "Returns persisted metrics snapshots. Supports `?limit` and `?since` (ISO timestamp) filters."
+          },
+          "response": []
+        },
+        {
+          "name": "Rate-limit metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/rate-limit/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rate-limit", "metrics"]
+            },
+            "description": "Returns current rate-limiter state. This endpoint is exempt from the rate limiter itself."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "description": "Notification template CRUD. Templates support Handlebars-style `{{variable}}` substitution.",
+      "item": [
+        {
+          "name": "Create template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Response has id', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.be.a('number');",
+                  "  pm.collectionVariables.set('template_id', json.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uniqueKey\": \"transfer-alert-v1\",\n  \"name\": \"Transfer Alert\",\n  \"description\": \"Fired when a token transfer is detected on-chain\",\n  \"channelType\": \"discord\",\n  \"bodyTemplate\": \"**Transfer detected** — {{amount}} XLM from {{from}} to {{to}}\",\n  \"subjectTemplate\": \"New Transfer: {{amount}} XLM\",\n  \"variables\": [\"amount\", \"from\", \"to\"],\n  \"defaultValues\": { \"amount\": \"0\" },\n  \"createdBy\": \"postman-test\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates"]
+            },
+            "description": "Create a new notification template.\n\nRequired fields: `uniqueKey`, `name`, `channelType`, `bodyTemplate`\n\n`channelType` must be one of: `discord`, `webhook`, `email`, `sms`\n\nThe `template_id` collection variable is updated on success."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"id\": 1, \"uniqueKey\": \"transfer-alert-v1\" }"
+            },
+            {
+              "name": "400 Bad Request — missing fields",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": \"Missing required fields: uniqueKey, name, channelType, bodyTemplate\" }"
+            },
+            {
+              "name": "409 Conflict — duplicate unique key",
+              "status": "Conflict",
+              "code": 409,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": \"Template with this unique key already exists\" }"
+            }
+          ]
+        },
+        {
+          "name": "List templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates"],
+              "query": [
+                { "key": "channelType", "value": "discord",  "disabled": true },
+                { "key": "activeOnly",  "value": "true",     "disabled": true }
+              ]
+            },
+            "description": "List all templates. Filter by `channelType` or `activeOnly=true`."
+          },
+          "response": []
+        },
+        {
+          "name": "Get template by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates/{{template_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates", "{{template_id}}"]
+            },
+            "description": "Fetch a single template by numeric ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get template by unique key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates/by-key/transfer-alert-v1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates", "by-key", "transfer-alert-v1"]
+            },
+            "description": "Fetch a template by its human-readable `uniqueKey` (e.g. `transfer-alert-v1`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update template",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Transfer Alert (Updated)\",\n  \"bodyTemplate\": \"**Transfer** — {{amount}} XLM sent from {{from}} → {{to}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates/{{template_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates", "{{template_id}}"]
+            },
+            "description": "Partially update a template. Only supplied fields are changed."
+          },
+          "response": []
+        },
+        {
+          "name": "Render template",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateId\": {{template_id}},\n  \"context\": {\n    \"amount\": \"150\",\n    \"from\": \"GABC...\",\n    \"to\":   \"GXYZ...\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates/render",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates", "render"]
+            },
+            "description": "Render a template by substituting `context` values into the body/subject templates.\n\nPass either `templateId` (number) or `uniqueKey` (string) — not both."
+          },
+          "response": []
+        },
+        {
+          "name": "Template statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates", "stats"]
+            },
+            "description": "Returns global template usage statistics. Append `?templateId=N` for per-template stats."
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate template (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/templates/{{template_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "templates", "{{template_id}}"]
+            },
+            "description": "Soft-deactivates a template (sets `isActive = false`). Append `?hard=true` for permanent deletion."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Preferences",
+      "description": "Per-user notification preferences.",
+      "item": [
+        {
+          "name": "Get user preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/preferences/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "preferences", "{{user_id}}"]
+            },
+            "description": "Retrieve notification preferences for a user."
+          },
+          "response": []
+        },
+        {
+          "name": "Update user preferences",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channels\": [\"discord\"],\n  \"quiet_hours\": { \"start\": \"22:00\", \"end\": \"08:00\" },\n  \"event_filters\": [\"transfer\", \"task_completed\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/preferences/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "preferences", "{{user_id}}"]
+            },
+            "description": "Create or replace notification preferences for a user."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Archive",
+      "description": "Notification archive — long-term cold storage for delivered events.",
+      "item": [
+        {
+          "name": "List archived notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "archive"]
+            },
+            "description": "Returns all archived notification records."
+          },
+          "response": []
+        },
+        {
+          "name": "Get archived notification",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/archive/{{schedule_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "archive", "{{schedule_id}}"]
+            },
+            "description": "Fetch a single archived notification record by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Run archival job",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/archive/run",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "archive", "run"]
+            },
+            "description": "Trigger the archival sweep manually — moves eligible delivered notifications to cold storage."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
