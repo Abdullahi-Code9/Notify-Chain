@@ -17,6 +17,7 @@ import { EventProcessingQueue } from './event-processing-queue';
 import { NotificationExpirationService } from './notification-expiration';
 import { pollingMetrics } from './polling-metrics';
 import { RpcRateLimiter } from './rpc-rate-limiter';
+import { normalizeSorobanEvent } from './event-normalization';
 import { StellarRpcManager } from './stellar-rpc-manager';
 import { safeLedgerRangeValidation } from '../utils/ledger-range-validator';
 
@@ -456,7 +457,20 @@ export class EventSubscriber {
   ): Promise<boolean> {
     correlationId = correlationId || requestId || generateCorrelationId();
     const eventStart = Date.now();
-    const eventName = getEventName(event.topic);
+    const normalized = normalizeSorobanEvent(event, {
+      contractAddress: contractConfig.address,
+    });
+    if (!normalized.ok) {
+      logger.warn('Skipping event that failed normalization', {
+        requestId: correlationId,
+        correlationId,
+        contractAddress: contractConfig.address,
+        eventId: event.id,
+        errors: normalized.errors.map((error) => error.detail),
+      });
+      return false;
+    }
+    const eventName = normalized.event.eventName;
     const isDryRun = this.config.dryRun === true;
 
     // Check persistent deduplication first (to catch reorg duplicates)
