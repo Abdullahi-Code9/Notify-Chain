@@ -18,6 +18,7 @@ import { NotificationExpirationService } from './notification-expiration';
 import { pollingMetrics } from './polling-metrics';
 import { RpcRateLimiter } from './rpc-rate-limiter';
 import { normalizeSorobanEvent } from './event-normalization';
+import { provenanceDiagnostic, validateEventProvenance } from './event-provenance';
 import { StellarRpcManager } from './stellar-rpc-manager';
 import { safeLedgerRangeValidation } from '../utils/ledger-range-validator';
 
@@ -471,6 +472,20 @@ export class EventSubscriber {
       return false;
     }
     const eventName = normalized.event.eventName;
+    const provenance = validateEventProvenance({
+      network: this.config.stellarNetwork,
+      contract: normalized.event.contractAddress,
+      ledger: normalized.event.ledger,
+      ingestionPath: this.lastCursors.has(contractConfig.address) ? 'rpc-poll' : 'backfill',
+    });
+    if (provenance.ok) {
+      logger.info('Event provenance', {
+        requestId: correlationId,
+        correlationId,
+        eventId: normalized.event.eventId,
+        ...provenanceDiagnostic(provenance.provenance),
+      });
+    }
     const isDryRun = this.config.dryRun === true;
 
     // Check persistent deduplication first (to catch reorg duplicates)
