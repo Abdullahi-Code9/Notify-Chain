@@ -78,8 +78,8 @@ describe('NotificationDetailsDrawer', () => {
     expect(await screen.findByText('Delivered')).toBeInTheDocument();
     expect(await screen.findByText('unit-test')).toBeInTheDocument();
 
-    const txCopyButtons = screen.getAllByRole('button', { name: 'Copy' });
-    fireEvent.click(txCopyButtons[txCopyButtons.length - 1]);
+    const txHashRow = screen.getByTitle('TXHASH123').closest('.drawer__row')!;
+    fireEvent.click(txHashRow.querySelector('button')!);
     expect(await screen.findByText('Copy failed')).toBeInTheDocument();
   });
 
@@ -112,13 +112,12 @@ describe('NotificationDetailsDrawer', () => {
     // The shortened version should be displayed
     expect(screen.getByTitle('notif-42')).toBeInTheDocument();
     // A copy button for the Notification ID should be present
-    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
+    const copyButtons = screen.getAllByRole('button', { name: /^Copy/ });
     expect(copyButtons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders payload section with copy action for long values (#680)', () => {
-    const longPayload =
-      '{"detail":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}';
+  it('renders nested payload values in an expandable structured view', () => {
+    const longPayload = '{"detail":{"message":"hello"},"items":[1,2]}';
     const notification = makeNotification({
       value: longPayload,
       txHash: 'abcdef1234567890abcdef1234567890abcdef12',
@@ -133,7 +132,11 @@ describe('NotificationDetailsDrawer', () => {
     );
 
     expect(screen.getByText('Payload')).toBeInTheDocument();
-    expect(container.querySelector('.drawer__payload')).toHaveTextContent(longPayload);
+    expect(container.querySelector('.drawer__payload')).toHaveTextContent('Object (2)');
+    expect(screen.getByText('detail: Object (1)')).toBeInTheDocument();
+    expect(screen.queryByText(/message: "hello"/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('detail: Object (1)'));
+    expect(screen.getByText('message: "hello"')).toBeInTheDocument();
     expect(container.querySelector('.drawer__row--stack')).toBeTruthy();
   });
 
@@ -147,7 +150,7 @@ describe('NotificationDetailsDrawer', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Close drawer' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /^Copy/ }).length).toBeGreaterThan(0);
   });
 
   it('does not render Notification ID row when relatedNotificationId is absent', () => {
@@ -183,5 +186,29 @@ describe('NotificationDetailsDrawer', () => {
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('notif-42');
     expect(await screen.findByText('Notification ID copied')).toBeInTheDocument();
+  });
+
+  it('keeps the event detail copy workflow available at phone width', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: jest.fn().mockResolvedValue(undefined),
+      },
+    });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+
+    render(
+      <NotificationDetailsDrawer
+        isOpen={true}
+        notification={makeNotification()}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Close drawer' })).toBeInTheDocument();
+    expect(screen.getByTitle('TXHASH123')).toHaveTextContent('TXHASH123');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy transaction hash' }));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('TXHASH123');
+    expect(await screen.findByText('Tx Hash copied')).toBeInTheDocument();
   });
 });

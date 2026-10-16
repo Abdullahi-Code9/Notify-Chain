@@ -63,6 +63,42 @@ export interface NotificationDetailsDrawerProps {
   fetchMetadata?: (event: BlockchainEvent) => Promise<NotificationDetailsMetadata>;
 }
 
+function PayloadNode({ label, value, depth = 0 }: { label: string; value: unknown; depth?: number }) {
+  const [visibleCount, setVisibleCount] = useState(100);
+  const isArray = Array.isArray(value);
+  const isObject = value !== null && typeof value === 'object' && !isArray;
+
+  if (isArray || isObject) {
+    const entries = isArray
+      ? value.map((item, index) => [String(index), item] as const)
+      : Object.entries(value as Record<string, unknown>);
+    const kind = isArray ? 'Array' : 'Object';
+
+    return (
+      <details className="drawer__payload-node" open={depth === 0}>
+        <summary>{label}: {kind} ({entries.length})</summary>
+        <div className="drawer__payload-children">
+          {entries.slice(0, visibleCount).map(([key, child]) => (
+            <PayloadNode key={key} label={key} value={child} depth={depth + 1} />
+          ))}
+          {visibleCount < entries.length && (
+            <button
+              type="button"
+              className="drawer__action"
+              onClick={() => setVisibleCount((count) => count + 100)}
+            >
+              Show {Math.min(100, entries.length - visibleCount)} more
+            </button>
+          )}
+        </div>
+      </details>
+    );
+  }
+
+  const displayValue = typeof value === 'string' ? JSON.stringify(value) : String(value);
+  return <div className="drawer__payload-leaf">{label}: {displayValue}</div>;
+}
+
 export function NotificationDetailsDrawer({
   isOpen,
   notification,
@@ -148,6 +184,14 @@ export function NotificationDetailsDrawer({
 
   const presentation = getEventTypePresentation(notification.eventName ?? notification.type);
   const formattedPayload = formatRawPayload(notification.value);
+  let parsedPayload: unknown;
+  if (formattedPayload.isValidJson) {
+    try {
+      parsedPayload = JSON.parse(formattedPayload.formatted);
+    } catch {
+      parsedPayload = undefined;
+    }
+  }
 
   const sender =
     fetchState.status === 'success'
@@ -198,6 +242,7 @@ export function NotificationDetailsDrawer({
               type="button"
               className="drawer__action"
               onClick={() => void tryCopy('Address', sender.address)}
+              aria-label="Copy sender address"
             >
               Copy
             </button>
@@ -226,6 +271,7 @@ export function NotificationDetailsDrawer({
                 type="button"
                 className="drawer__action"
                 onClick={() => void tryCopy('Notification ID', notification.relatedNotificationId!)}
+                aria-label="Copy notification ID"
               >
                 Copy
               </button>
@@ -244,6 +290,7 @@ export function NotificationDetailsDrawer({
               type="button"
               className="drawer__action"
               onClick={() => void tryCopy('Event ID', notification.eventId)}
+              aria-label="Copy event ID"
             >
               Copy
             </button>
@@ -258,6 +305,7 @@ export function NotificationDetailsDrawer({
                 type="button"
                 className="drawer__action"
                 onClick={() => void tryCopy('Tx Hash', notification.txHash!)}
+                aria-label="Copy transaction hash"
               >
                 Copy
               </button>
@@ -306,9 +354,13 @@ export function NotificationDetailsDrawer({
                 </pre>
               </div>
             ) : (
-              <pre className="drawer__payload" title={notification.value}>
-                {notification.value}
-              </pre>
+              <div className="drawer__payload" aria-label="Structured event payload">
+                {parsedPayload !== undefined && parsedPayload !== null && typeof parsedPayload === 'object' ? (
+                  <PayloadNode label="payload" value={parsedPayload} />
+                ) : (
+                  <pre title={formattedPayload.formatted}>{formattedPayload.formatted}</pre>
+                )}
+              </div>
             )}
 
             <button
