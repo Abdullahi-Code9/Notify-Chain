@@ -1,8 +1,9 @@
 # API Versioning Strategy
 
-**Issue**: #386  
+**Issues**: #386, #984  
 **Status**: Active — `/api/v1/` is the current stable version  
-**Last updated**: 2026-07-28
+**Last updated**: 2026-10-15  
+**Implementation**: `listener/src/api/api-version-registry.ts`
 
 ---
 
@@ -171,3 +172,91 @@ expect(res.headers.get('X-API-Version')).toBe('v1');
 const body = await res.json();
 expect(body).toHaveProperty('events');
 ```
+
+---
+
+## Version Registry (issue #984)
+
+The versioning strategy is now codified as a **central registry** in
+`listener/src/api/api-version-registry.ts`. This module is the single
+source of truth for:
+
+- URL path normalisation (`/api/v1/*` → `/api/*`)
+- The full route catalog with lifecycle status per endpoint
+- Automatic `Deprecation`, `Sunset`, and `Link` header injection
+- Machine-readable catalog exposed at `GET /api/version`
+
+### Route lifecycle
+
+Every public route has an explicit lifecycle status:
+
+| Status       | Meaning                                                         | Response headers added                  |
+|--------------|-----------------------------------------------------------------|-----------------------------------------|
+| `active`     | Stable, fully supported                                         | `X-API-Version: v1`                     |
+| `deprecated` | Still functional but will be removed; migrate before Sunset     | `Deprecation: true`, `Sunset`, `Link`   |
+| `sunset`     | Route removed — returns `410 Gone`                              | —                                       |
+
+### Deprecation headers (RFC 8594)
+
+When a route enters the `deprecated` stage, every response carries:
+
+```
+Deprecation: true
+Sunset: Wed, 01 Jul 2027 00:00:00 GMT
+Link: </api/v2/events>; rel="successor-version"
+X-Deprecation-Reason: <human-readable reason>
+```
+
+Clients **must** monitor for `Deprecation: true` and migrate to the URL
+in the `Link` header before the `Sunset` date.
+
+### Version catalog endpoint
+
+```
+GET /api/version
+GET /api/v1/version
+```
+
+Returns a JSON summary of the current versioning state including route
+counts and any deprecated routes with their sunset dates. Useful for
+automated monitoring and client health checks.
+
+---
+
+## Compatibility expectations
+
+| Consumer type         | Required action                        | Deadline   |
+|-----------------------|----------------------------------------|------------|
+| Unversioned `/api/`   | None — routes remain active indefinitely | —         |
+| `/api/v1/` prefix     | Watch for `Deprecation` headers         | ≥ 6 months |
+| Any route marked sunset | Migrate to successor URL             | Before Sunset date |
+
+Unversioned `/api/*` routes have no planned deprecation date.
+
+---
+
+## Adding a breaking change (step-by-step)
+
+1. **Implement** the new behaviour at `/api/v2/<endpoint>`.
+2. **Add a v2 normalisation rule** in `api-version-registry.ts`:
+   ```typescript
+   export const SUPPORTED_VERSIONS: ReadonlyArray<string> = ['v1', 'v2'];
+   ```
+3. **Mark the v1 route deprecated** in `ROUTE_CATALOG`:
+   ```typescript
+   {
+     method: 'GET',
+     path: '/api/events',
+     version: 'v1',
+     status: 'deprecated',
+     deprecatedSince: '2027-01-01',
+     sunsetDate: '2027-07-01',          // at least 6 months out
+     successorUrl: '/api/v2/events',
+     deprecationReason: 'Pagination shape changed in v2',
+   }
+   ```
+4. **Document** the breaking change in `CHANGELOG.md` and this file.
+5. After the Sunset date, change the entry to `status: 'sunset'`.
+
+The `applyVersionHeaders()` function in the registry handles all header
+injection automatically — no route handler changes are needed.

@@ -17,7 +17,7 @@
  */
 
 import logger from '../utils/logger';
-import { sendWebhook, WebhookSendOptions, DnsRebindingError } from './webhook-sender';
+import { sendWebhook, WebhookSendOptions } from './webhook-sender';
 
 export interface WebhookDeliveryOptions {
   /** Request timeout in milliseconds (default: 10 000). */
@@ -111,7 +111,7 @@ export class WebhookDeliveryService {
     } catch (err) {
       const durationMs = Date.now() - startMs;
       const isTimeout = err instanceof Error && err.name === 'AbortError';
-      const isDnsBlocked = err instanceof DnsRebindingError;
+      const isDnsBlocked = err instanceof Error && err.name === 'DnsRebindingError';
       const errorReason = isTimeout
         ? `Webhook request timed out after ${timeoutMs}ms`
         : err instanceof Error
@@ -122,8 +122,8 @@ export class WebhookDeliveryService {
         // DNS rebinding block is a permanent failure — retrying will not help
         logger.error('Webhook delivery blocked by DNS rebinding guard — no retry', {
           ...logCtx,
-          hostname: (err as DnsRebindingError).hostname,
-          blockedAddress: (err as DnsRebindingError).blockedAddress,
+          hostname: (err as { hostname?: string }).hostname,
+          blockedAddress: (err as { blockedAddress?: string }).blockedAddress,
           error: errorReason,
           durationMs,
         });
