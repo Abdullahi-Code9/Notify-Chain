@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Modal } from './Modal';
-import type { 
-  NotificationTemplate, 
+import type {
+  NotificationTemplate,
   TemplateVariableValues,
   DiscordPayload,
   EmailPayload,
@@ -23,23 +23,19 @@ export interface TemplatePreviewModalProps {
   template: NotificationTemplate;
 }
 
-export function TemplatePreviewModal({ 
-  isOpen, 
-  onClose, 
-  template 
-}: TemplatePreviewModalProps) {
+export function TemplatePreviewModal({ isOpen, onClose, template }: TemplatePreviewModalProps) {
   const templateVariables = useMemo(
     () => template.variables || extractVariables(template.body),
-    [template]
+    [template],
   );
 
-  const [variableValues, setVariableValues] = useState<TemplateVariableValues>(
-    () => getSampleVariableValues(template)
+  const [variableValues, setVariableValues] = useState<TemplateVariableValues>(() =>
+    getSampleVariableValues(template),
   );
 
   const validation = useMemo(
     () => validateVariables(template, variableValues),
-    [template, variableValues]
+    [template, variableValues],
   );
 
   const renderedPayload = useMemo(() => {
@@ -50,7 +46,7 @@ export function TemplatePreviewModal({
   }, [template, variableValues, validation.valid]);
 
   const handleVariableChange = (varName: string, value: string) => {
-    setVariableValues(prev => ({
+    setVariableValues((prev) => ({
       ...prev,
       [varName]: value,
     }));
@@ -68,18 +64,10 @@ export function TemplatePreviewModal({
       size="large"
       footer={
         <div className="template-preview__footer-actions">
-          <button 
-            className="button button--secondary" 
-            onClick={handleReset}
-            type="button"
-          >
+          <button className="button button--secondary" onClick={handleReset} type="button">
             Reset to Samples
           </button>
-          <button 
-            className="button button--primary" 
-            onClick={onClose}
-            type="button"
-          >
+          <button className="button button--primary" onClick={onClose} type="button">
             Close
           </button>
         </div>
@@ -96,7 +84,7 @@ export function TemplatePreviewModal({
             </div>
             <div className="template-preview__metadata-item">
               <span className="template-preview__label">Type:</span>
-              <span 
+              <span
                 className="template-preview__badge"
                 style={{ backgroundColor: getNotificationTypeColor(template.type) }}
               >
@@ -111,15 +99,11 @@ export function TemplatePreviewModal({
             </div>
             <div className="template-preview__metadata-item">
               <span className="template-preview__label">Created:</span>
-              <span className="template-preview__value">
-                {template.createdAt.toLocaleString()}
-              </span>
+              <span className="template-preview__value">{template.createdAt.toLocaleString()}</span>
             </div>
             <div className="template-preview__metadata-item">
               <span className="template-preview__label">Updated:</span>
-              <span className="template-preview__value">
-                {template.updatedAt.toLocaleString()}
-              </span>
+              <span className="template-preview__value">{template.updatedAt.toLocaleString()}</span>
             </div>
           </div>
         </section>
@@ -134,12 +118,9 @@ export function TemplatePreviewModal({
               Customize the variable values to see how the template will render with different data.
             </p>
             <div className="template-preview__variables">
-              {templateVariables.map(varName => (
+              {templateVariables.map((varName) => (
                 <div key={varName} className="template-preview__variable">
-                  <label 
-                    htmlFor={`var-${varName}`}
-                    className="template-preview__variable-label"
-                  >
+                  <label htmlFor={`var-${varName}`} className="template-preview__variable-label">
                     {varName}
                     {validation.missingVariables.includes(varName) && (
                       <span className="template-preview__required">*</span>
@@ -212,35 +193,35 @@ function DiscordPreview({ payload }: { payload: DiscordPayload }) {
         <div className="preview-discord__avatar">N</div>
         <div className="preview-discord__author">
           <span className="preview-discord__name">NotifyChain Bot</span>
-          <span className="preview-discord__timestamp">Today at {new Date().toLocaleTimeString()}</span>
+          <span className="preview-discord__timestamp">
+            Today at {new Date().toLocaleTimeString()}
+          </span>
         </div>
       </div>
-      
-      {payload.content && (
-        <div className="preview-discord__content">
-          {payload.content}
-        </div>
-      )}
-      
+
+      {payload.content && <div className="preview-discord__content">{payload.content}</div>}
+
       {payload.embeds && payload.embeds.length > 0 && (
         <div className="preview-discord__embeds">
           {payload.embeds.map((embed, idx) => (
-            <div 
-              key={idx} 
+            <div
+              key={idx}
               className="preview-discord__embed"
-              style={{ borderLeftColor: embed.color ? `#${embed.color.toString(16).padStart(6, '0')}` : '#5865F2' }}
+              style={{
+                borderLeftColor: embed.color
+                  ? `#${embed.color.toString(16).padStart(6, '0')}`
+                  : '#5865F2',
+              }}
             >
-              {embed.title && (
-                <div className="preview-discord__embed-title">{embed.title}</div>
-              )}
+              {embed.title && <div className="preview-discord__embed-title">{embed.title}</div>}
               {embed.description && (
                 <div className="preview-discord__embed-description">{embed.description}</div>
               )}
               {embed.fields && embed.fields.length > 0 && (
                 <div className="preview-discord__embed-fields">
                   {embed.fields.map((field, fieldIdx) => (
-                    <div 
-                      key={fieldIdx} 
+                    <div
+                      key={fieldIdx}
                       className={`preview-discord__embed-field ${field.inline ? 'preview-discord__embed-field--inline' : ''}`}
                     >
                       <div className="preview-discord__embed-field-name">{field.name}</div>
@@ -268,7 +249,9 @@ function EmailPreview({ payload }: { payload: EmailPayload }) {
       <div className="preview-email__header">
         <div className="preview-email__field">
           <span className="preview-email__label">From:</span>
-          <span className="preview-email__value">{payload.from || 'notifications@notifychain.com'}</span>
+          <span className="preview-email__value">
+            {payload.from || 'notifications@notifychain.com'}
+          </span>
         </div>
         <div className="preview-email__field">
           <span className="preview-email__label">To:</span>
@@ -293,27 +276,23 @@ function EmailPreview({ payload }: { payload: EmailPayload }) {
 function SmsPreview({ payload }: { payload: SmsPayload }) {
   const charCount = payload.message.length;
   const segmentCount = Math.ceil(charCount / 160);
-  
+
   return (
     <div className="preview-sms">
       <div className="preview-sms__device">
         <div className="preview-sms__screen">
-          <div className="preview-sms__bubble">
-            {payload.message}
-          </div>
-          <div className="preview-sms__timestamp">
-            {new Date().toLocaleTimeString()}
-          </div>
+          <div className="preview-sms__bubble">{payload.message}</div>
+          <div className="preview-sms__timestamp">{new Date().toLocaleTimeString()}</div>
         </div>
       </div>
       <div className="preview-sms__info">
-        <span className={`preview-sms__count ${charCount > 160 ? 'preview-sms__count--warning' : ''}`}>
+        <span
+          className={`preview-sms__count ${charCount > 160 ? 'preview-sms__count--warning' : ''}`}
+        >
           {charCount} characters
         </span>
         {segmentCount > 1 && (
-          <span className="preview-sms__segments">
-            ({segmentCount} SMS segments)
-          </span>
+          <span className="preview-sms__segments">({segmentCount} SMS segments)</span>
         )}
       </div>
     </div>
@@ -334,7 +313,9 @@ function WebhookPreview({ payload }: { payload: WebhookPayload }) {
         </div>
       </div>
       <div className="preview-webhook__body">
-        <pre><code>{JSON.stringify(payload, null, 2)}</code></pre>
+        <pre>
+          <code>{JSON.stringify(payload, null, 2)}</code>
+        </pre>
       </div>
     </div>
   );

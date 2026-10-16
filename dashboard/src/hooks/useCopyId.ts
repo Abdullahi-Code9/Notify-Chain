@@ -19,7 +19,7 @@ export function useCopyId(resetMs = 1800) {
       }
       return ok;
     },
-    [resetMs]
+    [resetMs],
   );
 
   return { copy, copied };

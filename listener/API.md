@@ -31,12 +31,15 @@ For a centralized list of API errors, causes, examples, and troubleshooting step
 
 Returns the operational status of all service dependencies.
 
+The `uptimeSeconds` field reports the listener process uptime in seconds, measured from process startup.
+
 **Response `200`** — all systems operational (or Discord degraded but Stellar RPC healthy)
 
 ```json
 {
   "status": "ok",
   "timestamp": "2024-06-20T14:00:00.000Z",
+  "uptimeSeconds": 123.45,
   "services": {
     "stellarRpc": { "status": "ok", "latencyMs": 42 },
     "discord": { "status": "ok", "latencyMs": 87 },
@@ -185,7 +188,7 @@ Returns all stored contract events, newest first.
 
 | Name  | Type   | Required | Description                                          |
 |-------|--------|----------|------------------------------------------------------|
-| limit | number | No       | Maximum number of events to return (default: all)    |
+| limit | number | No       | Maximum number of events to return (default: 20, max: 100) |
 
 **Response `200`**
 
@@ -628,6 +631,30 @@ Full-text and field-based search across scheduled notifications.
 ```json
 { "error": "..." }
 ```
+
+---
+
+### POST /api/notifications/:id/cancel
+
+Cancel a pending scheduled notification. An optional `reason` may be supplied for auditing.
+
+**Path Parameters**
+
+| Name | Type   | Required | Description                              |
+|------|--------|----------|------------------------------------------|
+| id   | number | Yes      | Numeric identifier of the notification   |
+
+**Request Body** (optional)
+
+```json
+{
+  "reason": "Duplicate request"
+}
+```
+
+**Response `200`**
+
+Returns the full `ScheduledNotification` object, now including `cancellationReason` if provided.
 
 ---
 

@@ -1,0 +1,51 @@
+# Configuration Audit Allowlist
+#
+# This file contains environment variables that are documented but not directly
+# referenced in application code. Each variable should have a comment explaining
+# why it's exempt from the unused configuration check.
+#
+# Format:
+#   # Reason for exemption
+#   VARIABLE_NAME
+#
+# Example:
+#   # Used by Docker Compose at runtime
+#   DATABASE_URL
+#
+
+# Vite environment variables are accessed through import.meta.env and may not
+# be directly referenced in source code but are used by the build process
+# VITE_STELLAR_NETWORK
+# VITE_EVENTS_API_URL
+
+# Node.js runtime environment variable
+# Used by logger and runtime detection, not always directly referenced
+NODE_ENV
+
+# Logging configuration
+# Used by Winston logger configuration
+LOG_LEVEL
+
+# ============================================================================
+# Task Bounty Contract Deployment Variables
+# These are used by deployment scripts and hardhat/truffle configuration
+# They are not referenced in smart contract source code
+# ============================================================================
+
+# Private key for contract deployment (used by deployment tools)
+PRIVATE_KEY
+
+# Ethereum RPC URLs for different networks (used by hardhat/truffle)
+MAINNET_RPC_URL
+SEPOLIA_RPC_URL
+
+# Etherscan API key for contract verification (used by hardhat-etherscan plugin)
+ETHERSCAN_API_KEY
+
+# Deployed contract addresses (documented for reference, not consumed by code)
+BOUNTY_ADDRESS
+RESOLVER_ADDRESS
+FACTORY_ADDRESS
+
+# Contract administrator address (used by deployment scripts)
+ARBITRATOR

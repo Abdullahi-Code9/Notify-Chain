@@ -38,10 +38,7 @@
  *   which rows are included (only matching notifications are exported).
  */
 
-import type {
-  NotificationSearchParams,
-  NotificationSearchResult,
-} from '../services/eventsApi';
+import type { NotificationSearchParams, NotificationSearchResult } from '../services/eventsApi';
 
 export type NotificationExportFormat = 'json' | 'csv';
 
@@ -55,7 +52,7 @@ export interface NotificationExportDocument {
 
 export function buildNotificationExportJson(
   notifications: NotificationSearchResult[],
-  filters: Partial<NotificationSearchParams> = {}
+  filters: Partial<NotificationSearchParams> = {},
 ): string {
   const doc: NotificationExportDocument = {
     exportedAt: new Date().toISOString(),
@@ -67,9 +64,7 @@ export function buildNotificationExportJson(
   return JSON.stringify(doc, null, 2);
 }
 
-export function buildNotificationExportCsv(
-  notifications: NotificationSearchResult[]
-): string {
+export function buildNotificationExportCsv(notifications: NotificationSearchResult[]): string {
   const headers = [
     'id',
     'source',
@@ -97,7 +92,7 @@ export function buildNotificationExportCsv(
       n.payload ?? '',
     ]
       .map(escapeCsvField)
-      .join(',')
+      .join(','),
   );
 
   return [headers.join(','), ...rows].join('\n');
@@ -106,7 +101,7 @@ export function buildNotificationExportCsv(
 export function buildNotificationExportBlob(
   notifications: NotificationSearchResult[],
   format: NotificationExportFormat,
-  filters: Partial<NotificationSearchParams> = {}
+  filters: Partial<NotificationSearchParams> = {},
 ): { blob: Blob; filename: string } {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   if (format === 'csv') {

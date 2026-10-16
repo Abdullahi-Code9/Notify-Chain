@@ -38,7 +38,7 @@ interface AnalyticsData {
     acknowledgmentRates: number[];
   };
 }
-
+// this is the app logo
 const Skeleton = ({ className = "" }: { className?: string }) => (
   <div
     className={`animate-pulse bg-slate-200 rounded ${className}`}

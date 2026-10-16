@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { NotificationAPI } from './notification-api';
 import { ScheduledNotificationRepository } from './scheduled-notification-repository';
 import { NotificationType } from '../types/scheduled-notification';
@@ -5,7 +6,7 @@ import { ValidationError } from '../utils/validation';
 
 function makeRepository(): jest.Mocked<Pick<ScheduledNotificationRepository, 'create'>> {
   return {
-    create: jest.fn().mockResolvedValue(1),
+    create: jest.fn<() => Promise<number>>().mockResolvedValue(1),
   };
 }
 
@@ -35,7 +36,12 @@ describe('NotificationAPI.scheduleNotification', () => {
     const input = baseInput();
     const id = await api.scheduleNotification(input);
     expect(id).toBe(1);
-    expect(repository.create).toHaveBeenCalledWith(input, undefined);
+    // scheduleNotification() stamps the payload with the current protocol
+    // version (ensureNotificationVersion) before handing it to the repository.
+    expect(repository.create).toHaveBeenCalledWith(
+      { ...input, payload: { ...input.payload, version: 1 } },
+      undefined,
+    );
   });
 
   it('rejects a missing executeAt', async () => {
@@ -124,25 +130,26 @@ describe('NotificationAPI.scheduleNotification', () => {
     const input = { ...baseInput(), priority: 999 };
     await expect(api.scheduleNotification(input)).rejects.toThrow();
     expect(repository.create).not.toHaveBeenCalled();
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
-import { NotificationAPI } from './notification-api';
+  });
+});
+
 import { PayloadTooLargeError, DEFAULT_MAX_PAYLOAD_SIZE_BYTES } from '../utils/payload-size-validator';
-import { NotificationType } from '../types/scheduled-notification';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function futureDate(offsetMs = 60_000): Date {
-  return new Date(Date.now() + offsetMs);
-}
-
-/** Return a payload whose JSON representation is exactly `targetBytes` bytes. */
-function payloadOfExactBytes(targetBytes: number): Record<string, string> {
-  const overhead = Buffer.byteLength(JSON.stringify({ data: '' }), 'utf8'); // '{"data":""}' = 11
+/**
+ * Return a payload whose JSON representation is exactly `targetBytes` bytes
+ * *after* scheduleNotification() stamps it with the protocol version (#see
+ * ensureNotificationVersion) — the fixture already carries `version` so the
+ * stamping step is a no-op and doesn't grow the payload past the boundary.
+ */
+function payloadOfExactBytes(targetBytes: number): Record<string, unknown> {
+  const overhead = Buffer.byteLength(JSON.stringify({ data: '', version: 1 }), 'utf8');
   const fillLength = targetBytes - overhead;
   if (fillLength < 0) throw new Error(`targetBytes ${targetBytes} too small for wrapper`);
-  return { data: 'x'.repeat(fillLength) };
+  return { data: 'x'.repeat(fillLength), version: 1 };
 }
 
 // ---------------------------------------------------------------------------

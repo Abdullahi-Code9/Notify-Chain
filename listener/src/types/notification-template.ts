@@ -98,7 +98,6 @@ export interface ChannelNotificationTemplateRow {
 }
 
 export interface AuditedNotificationTemplate {
-export interface NotificationTemplateOld {
   id: string;
   name: string;
   type: string;

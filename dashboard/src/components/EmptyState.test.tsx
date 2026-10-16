@@ -6,7 +6,7 @@ expect.extend(toHaveNoViolations);
 
 test('EmptyState has no accessibility violations', async () => {
   const { container } = render(
-    <EmptyState title="No results" message="Try adjusting your filters." />
+    <EmptyState title="No results" message="Try adjusting your filters." />,
   );
   const results = await axe(container);
   expect(results).toHaveNoViolations();
@@ -26,12 +26,7 @@ test('omits the title when none is provided', () => {
 
 test('renders an action button and fires its callback on click', () => {
   const onClick = jest.fn();
-  render(
-    <EmptyState
-      message="No templates yet."
-      action={{ label: 'Create Template', onClick }}
-    />
-  );
+  render(<EmptyState message="No templates yet." action={{ label: 'Create Template', onClick }} />);
   fireEvent.click(screen.getByRole('button', { name: 'Create Template' }));
   expect(onClick).toHaveBeenCalledTimes(1);
 });

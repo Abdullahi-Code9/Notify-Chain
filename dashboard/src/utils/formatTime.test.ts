@@ -1,4 +1,10 @@
-import { formatTimestamp, formatTimestampShort, parseToDate } from './formatTime';
+import {
+  formatRelativeTimestamp,
+  formatTimestamp,
+  formatTimestampShort,
+  parseToDate,
+  RELATIVE_TIMESTAMP_THRESHOLD_MS,
+} from './formatTime';
 
 // 2024-01-15 14:30:45 UTC
 const FIXED_TIMESTAMP_MS = 1705329045000;
@@ -138,5 +144,29 @@ describe('formatTimestampShort', () => {
     expect(formatTimestampShort(null)).toBe('Unknown time');
     expect(formatTimestampShort(undefined)).toBe('Unknown time');
     expect(formatTimestampShort('invalid date string')).toBe('Unknown time');
+  });
+});
+
+describe('formatRelativeTimestamp', () => {
+  const now = FIXED_TIMESTAMP_MS;
+
+  it('formats recent past timestamps with relative values', () => {
+    expect(formatRelativeTimestamp(now - 2 * 60 * 1000, now)).toBe('2 minutes ago');
+  });
+
+  it('formats recent future timestamps correctly', () => {
+    expect(formatRelativeTimestamp(now + 2 * 60 * 1000, now)).toBe('in 2 minutes');
+  });
+
+  it('uses the exact timestamp at the relative threshold', () => {
+    expect(formatRelativeTimestamp(now - RELATIVE_TIMESTAMP_THRESHOLD_MS, now)).toContain('2024');
+  });
+
+  it('uses "just now" for timestamps less than one second old', () => {
+    expect(formatRelativeTimestamp(now - 500, now)).toBe('just now');
+  });
+
+  it('returns the fallback for invalid timestamps', () => {
+    expect(formatRelativeTimestamp('invalid date string', now)).toBe('Unknown time');
   });
 });

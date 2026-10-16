@@ -4,7 +4,9 @@ import * as timelineApi from '../services/timelineApi';
 import type { NotificationTimeline } from '../types/timeline';
 
 jest.mock('../services/timelineApi');
-const mockFetch = timelineApi.fetchTimeline as jest.MockedFunction<typeof timelineApi.fetchTimeline>;
+const mockFetch = timelineApi.fetchTimeline as jest.MockedFunction<
+  typeof timelineApi.fetchTimeline
+>;
 
 const MOCK_TIMELINE: NotificationTimeline = {
   notificationId: 7,
@@ -82,9 +84,7 @@ describe('NotificationTimelineView', () => {
     fireEvent.change(screen.getByLabelText(/notification id/i), { target: { value: '7' } });
     fireEvent.submit(screen.getByRole('search'));
 
-    await waitFor(() =>
-      expect(screen.getByText(/no history entries/i)).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText(/no history entries/i)).toBeInTheDocument());
   });
 
   it('shows API error message on fetch failure', async () => {
@@ -98,7 +98,11 @@ describe('NotificationTimelineView', () => {
 
   it('disables button while loading', async () => {
     let resolve!: (v: NotificationTimeline) => void;
-    mockFetch.mockReturnValue(new Promise((r) => { resolve = r; }));
+    mockFetch.mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
 
     renderView();
     fireEvent.change(screen.getByLabelText(/notification id/i), { target: { value: '1' } });
@@ -107,7 +111,9 @@ describe('NotificationTimelineView', () => {
     expect(screen.getByRole('button', { name: /loading/i })).toBeDisabled();
 
     resolve(MOCK_TIMELINE);
-    await waitFor(() => expect(screen.getByRole('button', { name: /view timeline/i })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /view timeline/i })).not.toBeDisabled(),
+    );
   });
 
   it('renders a copy button for the notification ID in the timeline summary', async () => {

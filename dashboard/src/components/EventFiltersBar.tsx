@@ -24,12 +24,8 @@ export const EventFiltersBar = memo(function EventFiltersBar() {
     <section className="event-filters" aria-label="Event filters">
       <div className="event-filters__group">
         <label htmlFor="event-search">Search</label>
-        <SearchAutocomplete 
-          value={filters.search} 
-          onChange={(value) => setSearch(value)} 
-        />
+        <SearchAutocomplete value={filters.search} onChange={(value) => setSearch(value)} />
       </div>
-
       <div className="event-filters__group">
         <label htmlFor="contract-filter">Contract</label>
         <select
@@ -45,7 +41,6 @@ export const EventFiltersBar = memo(function EventFiltersBar() {
           ))}
         </select>
       </div>
-
       <div className="event-filters__group">
         <label htmlFor="event-type-filter">Event type</label>
         <select
@@ -61,7 +56,6 @@ export const EventFiltersBar = memo(function EventFiltersBar() {
           ))}
         </select>
       </div>
-
       {/* Sort control (#495) */}
       <div className="event-filters__group">
         <label htmlFor="event-sort">Sort by</label>
@@ -72,13 +66,15 @@ export const EventFiltersBar = memo(function EventFiltersBar() {
           aria-label="Sort notifications"
         >
           {SORT_OPTIONS.map(({ value, label }) => (
-            <option key={value} value={value}>{label}</option>
+            <option key={value} value={value}>
+              {label}
+            </option>
           ))}
         </select>
       </div>
-
-<p className="event-filters__count" aria-live="polite" role="status">
+      <p className="event-filters__count" aria-live="polite" role="status">
         {totalCount.toLocaleString()} events loaded
-      </p>    </section>
+      </p>{' '}
+    </section>
   );
 });

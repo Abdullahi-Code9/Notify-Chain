@@ -27,7 +27,7 @@ export function generateMockExports(): NotificationExport[] {
     'Webhook delivery metrics',
     'Client preferences dump',
     'API access token usage report',
-    'Failure recovery logs'
+    'Failure recovery logs',
   ];
 
   return names.map((name, index) => {
@@ -46,11 +46,12 @@ export function generateMockExports(): NotificationExport[] {
 
     // Determine size and count
     const recordCount = (index + 1) * 384 + (index % 3) * 12;
-    const fileSize = status === 'Failed' 
-      ? '0 KB' 
-      : status === 'Processing'
-        ? '--'
-        : `${((recordCount * 0.15) + (index % 5)).toFixed(1)} KB`;
+    const fileSize =
+      status === 'Failed'
+        ? '0 KB'
+        : status === 'Processing'
+          ? '--'
+          : `${(recordCount * 0.15 + (index % 5)).toFixed(1)} KB`;
 
     return {
       id: `exp-${1000 + index}`,
@@ -59,7 +60,7 @@ export function generateMockExports(): NotificationExport[] {
       status,
       createdAt: baseTime - index * 3 * 3600 * 1000 - (index % 5) * 15 * 60 * 1000,
       recordCount: status === 'Failed' ? 0 : recordCount,
-      fileSize
+      fileSize,
     };
   });
 }

@@ -72,6 +72,19 @@ The following messages mark each stage of the notification pipeline:
 | Scheduled notification | `info`  | `Processing scheduled notification`                   |
 | Registry at capacity   | `warn`  | `Event registry at capacity, evicting oldest events`  |
 
+## Event registry retention
+
+The in-memory event registry is a bounded display cache, not the source of
+record for processed events. It retains at most `maxEvents` entries (10,000 by
+default) and removes entries older than its TTL (24 hours by default) when the
+cleanup interval runs. Insertion order determines eviction when the capacity
+is reached.
+
+An event is keyed by contract address and event ID. Re-adding an event already
+in the retention window returns the existing entry without increasing memory
+usage. Events evicted by capacity or TTL are still protected from replay by
+the persistent `processed_events` deduplication table used by the subscriber.
+
 ## Error Formatting
 
 Errors passed in the `error` metadata field are automatically normalized into a structured object with `message`, `name`, `stack`, and optional `cause` fields. Use the exported `formatError()` helper when formatting errors outside the logger.

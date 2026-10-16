@@ -136,7 +136,11 @@ export const NotificationSearchBar = memo(function NotificationSearchBar() {
       </div>
 
       {/* Clear all */}
-      {(inputValue || txHashInput || filters.status !== 'all' || filters.dateFrom || filters.dateTo) && (
+      {(inputValue ||
+        txHashInput ||
+        filters.status !== 'all' ||
+        filters.dateFrom ||
+        filters.dateTo) && (
         <button
           type="button"
           className="notif-search__clear"

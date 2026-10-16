@@ -1,4 +1,4 @@
-import { SubscriptionService } from './subscription-service';
+import { SubscriptionService, isBlankChannelName } from './subscription-service';
 import { SubscribeInput } from '../types/subscription';
 
 describe('SubscriptionService', () => {
@@ -91,6 +91,38 @@ describe('SubscriptionService', () => {
         expect(result.error).toBe('INVALID_INPUT');
         expect(result.subscription).toBeNull();
       }
+    });
+
+    // ── Issue #479: whitespace-only channel names ─────────────────────────
+    it('rejects a channel name that is a single space', () => {
+      const result = service.subscribe({ userId: 'user-1', channel: ' ' });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('INVALID_INPUT');
+      expect(result.message).toMatch(/whitespace/i);
+      expect(result.subscription).toBeNull();
+    });
+
+    it('rejects a channel name consisting entirely of tabs and spaces', () => {
+      const result = service.subscribe({ userId: 'user-1', channel: '   \t  ' });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('INVALID_INPUT');
+      expect(result.subscription).toBeNull();
+    });
+
+    it('rejects a channel name that is a newline character', () => {
+      const result = service.subscribe({ userId: 'user-1', channel: '\n' });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('INVALID_INPUT');
+      expect(result.subscription).toBeNull();
+    });
+
+    it('accepts a channel name that contains leading/trailing spaces around a valid word', () => {
+      // Trimming is for validation only; we do NOT silently mutate the channel value.
+      // A name like "  discord  " still fails because only pure-whitespace is rejected.
+      // However " discord " has non-whitespace content, so it is accepted as-is.
+      const result = service.subscribe({ userId: 'user-1', channel: ' discord ' });
+      expect(result.success).toBe(true);
+      expect(result.subscription?.channel).toBe(' discord ');
     });
 
     it('preserves the original subscription when rejecting duplicates', () => {
@@ -220,5 +252,36 @@ describe('SubscriptionService', () => {
       expect(service.count()).toBe(0);
       expect(service.getUserSubscriptions('user-1')).toEqual([]);
     });
+  });
+});
+
+// ── Issue #479: isBlankChannelName helper ─────────────────────────────────
+describe('isBlankChannelName', () => {
+  it('returns true for an empty string', () => {
+    expect(isBlankChannelName('')).toBe(true);
+  });
+
+  it('returns true for a string of only spaces', () => {
+    expect(isBlankChannelName('   ')).toBe(true);
+  });
+
+  it('returns true for a string of only tabs', () => {
+    expect(isBlankChannelName('\t\t')).toBe(true);
+  });
+
+  it('returns true for mixed whitespace characters', () => {
+    expect(isBlankChannelName(' \t\n\r ')).toBe(true);
+  });
+
+  it('returns false for a normal channel name', () => {
+    expect(isBlankChannelName('discord')).toBe(false);
+  });
+
+  it('returns false for a name with surrounding whitespace but real content', () => {
+    expect(isBlankChannelName('  email  ')).toBe(false);
+  });
+
+  it('returns false for a single non-whitespace character', () => {
+    expect(isBlankChannelName('x')).toBe(false);
   });
 });

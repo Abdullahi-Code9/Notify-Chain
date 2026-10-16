@@ -37,7 +37,7 @@ export const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => {
 export function filterEventsByDateRange(
   events: BlockchainEvent[],
   start: Date | null,
-  end: Date | null
+  end: Date | null,
 ): BlockchainEvent[] {
   if (!start && !end) return events;
 
@@ -58,14 +58,12 @@ export function filterEventsByDateRange(
 export function aggregateHeatmapData(
   events: BlockchainEvent[],
   startDate: Date | null = null,
-  endDate: Date | null = null
+  endDate: Date | null = null,
 ): HeatmapData {
   const filtered = filterEventsByDateRange(events, startDate, endDate);
 
   // Build the 7×24 count grid
-  const counts: number[][] = Array.from({ length: 7 }, () =>
-    Array.from({ length: 24 }, () => 0)
-  );
+  const counts: number[][] = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
 
   let maxCount = 0;
   let minTs = Infinity;
@@ -92,17 +90,14 @@ export function aggregateHeatmapData(
       hour,
       count,
       intensity: maxCount > 0 ? count / maxCount : 0,
-    }))
+    })),
   );
 
   return {
     cells,
     maxCount,
     totalCount: filtered.length,
-    dateRange:
-      minTs <= maxTs
-        ? { start: new Date(minTs), end: new Date(maxTs) }
-        : null,
+    dateRange: minTs <= maxTs ? { start: new Date(minTs), end: new Date(maxTs) } : null,
   };
 }
 

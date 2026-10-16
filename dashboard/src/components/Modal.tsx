@@ -118,10 +118,7 @@ export function Modal({
 
   return (
     // Backdrop — click outside to dismiss
-    <div
-      className="modal-backdrop"
-      onClick={handleBackdropClick}
-    >
+    <div className="modal-backdrop" onClick={handleBackdropClick}>
       {/* Dialog */}
       <div
         ref={modalRef}
@@ -140,12 +137,7 @@ export function Modal({
           <h2 id="modal-title" className="modal__title">
             {title}
           </h2>
-          <button
-            className="modal__close"
-            onClick={onClose}
-            aria-label="Close modal"
-            type="button"
-          >
+          <button className="modal__close" onClick={onClose} aria-label="Close modal" type="button">
             <span aria-hidden="true">×</span>
           </button>
         </div>

@@ -12,7 +12,11 @@ interface ToastTriggerProps {
 }
 
 // Helper component that exposes toast actions
-function ToastTrigger({ message = 'Test message', variant = 'success' as const, duration = 0 }: ToastTriggerProps) {
+function ToastTrigger({
+  message = 'Test message',
+  variant = 'success' as const,
+  duration = 0,
+}: ToastTriggerProps) {
   const { addToast, removeToast, showSuccess, showError, showInfo, showWarning, toasts } =
     useToast();
   return (

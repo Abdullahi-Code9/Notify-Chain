@@ -54,11 +54,11 @@ const testConfig: Config = {
   stellarRpcUrl: 'https://soroban-testnet.stellar.org:443',
   contractAddresses: [contractConfig],
   pollIntervalMs: 30000,
+  eventBatchSize: 100,
   maxReconnectAttempts: 5,
   reconnectDelayMs: 100,
   eventsApiPort: 8787,
   eventsApiCorsOrigin: 'http://localhost:5173',
-  maxPayloadSizeBytes: 64 * 1024,
 };
 
 function createMockEvent(
@@ -156,6 +156,14 @@ describe('EventSubscriber', () => {
           type: 'contract',
         })
       );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Event processing complete',
+        expect.objectContaining({
+          eventId: 'event-abc',
+          outcome: 'success',
+          durationMs: expect.any(Number),
+        })
+      );
     });
 
     it('processes each valid event in a batch', async () => {
@@ -172,6 +180,67 @@ describe('EventSubscriber', () => {
       await (subscriber as any).checkForEvents();
 
       expect(countLogCalls('info', 'Processing event')).toBe(3);
+    });
+
+    it('continues processing valid events after a malformed event', async () => {
+      const malformedEvent = createMockEvent({
+        id: 'event-malformed',
+        topic: [undefined as unknown as xdr.ScVal],
+      });
+      mockGetEvents.mockResolvedValue({
+        events: [malformedEvent, createMockEvent({ id: 'event-valid' })],
+        cursor: 'cursor-mixed',
+      });
+
+      const subscriber = new EventSubscriber(testConfig);
+      await expect((subscriber as any).checkForEvents()).resolves.toBeUndefined();
+
+      expect(countLogCalls('info', 'Processing event')).toBe(1);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Skipping malformed event',
+        expect.objectContaining({
+          contractAddress: contractConfig.address,
+          eventId: 'event-malformed',
+          eventIndex: 0,
+        })
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Processing event',
+        expect.objectContaining({ eventId: 'event-valid' })
+      );
+    });
+
+    it('continues processing after an individual event-processing failure', async () => {
+      mockGetEvents.mockResolvedValue({
+        events: [
+          createMockEvent({ id: 'event-fails' }),
+          createMockEvent({ id: 'event-after-failure' }),
+        ],
+        cursor: 'cursor-processing-failure',
+      });
+
+      const subscriber = new EventSubscriber(testConfig);
+      const processEvent = jest
+        .spyOn(subscriber as any, 'processEvent')
+        .mockRejectedValueOnce(new Error('unexpected event shape'))
+        .mockResolvedValueOnce(true);
+
+      await expect((subscriber as any).checkForEvents()).resolves.toBeUndefined();
+
+      expect(processEvent).toHaveBeenCalledTimes(2);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Event processing failed; continuing batch',
+        expect.objectContaining({
+          eventId: 'event-fails',
+          error: 'unexpected event shape',
+        })
+      );
+      expect(processEvent).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ id: 'event-after-failure' }),
+        contractConfig,
+        expect.any(String)
+      );
     });
 
     it('does not log received events when RPC returns an empty list', async () => {
@@ -197,6 +266,20 @@ describe('EventSubscriber', () => {
 
       expect(mockGetEvents.mock.calls[0][0]).toMatchObject({ startLedger: 1 });
       expect(mockGetEvents.mock.calls[1][0]).toMatchObject({ cursor: 'cursor-next' });
+    });
+
+    it('uses the configured event batch size for RPC requests', async () => {
+      const configuredBatchSize = 25;
+      const subscriber = new EventSubscriber({
+        ...testConfig,
+        eventBatchSize: configuredBatchSize,
+      });
+
+      await (subscriber as any).checkForEvents();
+
+      expect(mockGetEvents.mock.calls[0][0]).toMatchObject({
+        limit: configuredBatchSize,
+      });
     });
 
     it('tracks cursors independently per contract', async () => {
@@ -533,6 +616,11 @@ describe('EventSubscriber', () => {
         expect.any(Object),
         expect.any(String)
       );
+      const correlationId = mockDiscordService.sendEventNotification.mock.calls[0][2];
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Processing event',
+        expect.objectContaining({ correlationId })
+      );
     });
 
     it('logs warning when Discord notification fails', async () => {
@@ -563,6 +651,10 @@ describe('EventSubscriber', () => {
         'Discord notification failed, adding to retry queue',
         expect.objectContaining({ eventId: 'event-1' })
       );
+      const failureLog = (mockLogger.warn as jest.Mock).mock.calls.find(
+        (call: unknown[]) => call[0] === 'Discord notification failed, adding to retry queue'
+      );
+      expect(failureLog?.[1]).toEqual(expect.objectContaining({ correlationId: expect.any(String) }));
     });
   });
 
@@ -635,7 +727,6 @@ describe('EventSubscriber', () => {
       expect(preferenceStore.isCategoryEnabled).toHaveBeenCalledWith('global', 'discord');
     });
   });
-});
 
   describe('notification expiration (Task 3: Requirements 2.1, 2.2, 2.3)', () => {
     const DEFAULT_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -833,8 +924,9 @@ describe('EventSubscriber', () => {
         receivedAt: fastEventExpiredTime,
       });
       const slowEvent = createMockEvent({
-        id: 'slow-expired',
-        receivedAt: slowEventExpiredTime,
+        id: 'slow-not-expired',
+        receivedAt: NOW - 60 * 60 * 1000, // 1 hour ago (within default 24h)
+        topic: [xdr.ScVal.scvSymbol('OtherEvent')],
       });
 
       // First call returns fast event, second returns slow event
@@ -872,8 +964,9 @@ describe('EventSubscriber', () => {
         })
       );
 
-      // Reset mock counters
-      jest.clearAllMocks();
+      // Reset mock counters without clearing mockGetEvents implementation
+      mockLogger.info.mockClear();
+      mockLogger.warn.mockClear();
 
       // Second check - slow event should NOT be expired (uses default 24h)
       await (subscriber as any).checkForEvents();

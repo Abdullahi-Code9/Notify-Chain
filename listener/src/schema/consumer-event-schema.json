@@ -1,0 +1,174 @@
+{
+  "events": [
+    {
+      "eventName": "AutoshareCreated",
+      "expectedTopics": [{ "name": "creator", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "id", "type": "BytesN<32>" }]
+    },
+    {
+      "eventName": "AutoshareUpdated",
+      "expectedTopics": [{ "name": "updater", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "id", "type": "BytesN<32>" }]
+    },
+    {
+      "eventName": "GroupDeactivated",
+      "expectedTopics": [{ "name": "creator", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "id", "type": "BytesN<32>" }]
+    },
+    {
+      "eventName": "GroupActivated",
+      "expectedTopics": [{ "name": "creator", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "id", "type": "BytesN<32>" }]
+    },
+    {
+      "eventName": "CategoryRegistered",
+      "expectedTopics": [{ "name": "admin", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": []
+    },
+    {
+      "eventName": "ChannelPreferenceUpdated",
+      "expectedTopics": [{ "name": "recipient", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "channel", "type": "u32" }, { "name": "enabled", "type": "bool" }, { "name": "updated_at", "type": "u64" }]
+    },
+    {
+      "eventName": "ContractPaused",
+      "expectedTopics": [{ "name": "admin", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": []
+    },
+    {
+      "eventName": "ContractUnpaused",
+      "expectedTopics": [{ "name": "admin", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": []
+    },
+    {
+      "eventName": "AdminTransferred",
+      "expectedTopics": [{ "name": "old_admin", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "new_admin", "type": "Address" }]
+    },
+    {
+      "eventName": "AuthorizationFailure",
+      "expectedTopics": [{ "name": "caller", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "action", "type": "String" }]
+    },
+    {
+      "eventName": "Withdrawal",
+      "expectedTopics": [{ "name": "token", "type": "Address" }, { "name": "recipient", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "amount", "type": "i128" }]
+    },
+    {
+      "eventName": "NotificationScheduled",
+      "expectedTopics": [{ "name": "creator", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "payload_version", "type": "u32" }]
+    },
+    {
+      "eventName": "NotificationExpired",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "expires_at", "type": "u64" }]
+    },
+    {
+      "eventName": "ScheduledNotificationCancelled",
+      "expectedTopics": [{ "name": "caller", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "notification_id", "type": "BytesN<32>" }]
+    },
+    {
+      "eventName": "NotificationDelivered",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "delivered_by", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "delivered_at", "type": "u64" }]
+    },
+    {
+      "eventName": "NotificationRecalled",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "recalled_by", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "recalled_at", "type": "u64" }]
+    },
+    {
+      "eventName": "NotificationRevoked",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "revoked_by", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": []
+    },
+    {
+      "eventName": "NotificationExtended",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "caller", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "new_expires_at", "type": "u64" }]
+    },
+    {
+      "eventName": "NotificationAcknowledged",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "acknowledger", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "timestamp", "type": "u64" }]
+    },
+    {
+      "eventName": "SubscriptionCancelled",
+      "expectedTopics": [{ "name": "group_id", "type": "BytesN<32>" }, { "name": "subscriber", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "cancelled_at", "type": "u64" }]
+    },
+    {
+      "eventName": "BatchNotificationsCreated",
+      "expectedTopics": [{ "name": "creator", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "count", "type": "u32" }, { "name": "ids", "type": "Vec<BytesN<32>>" }]
+    },
+    {
+      "eventName": "BatchProcessingCompleted",
+      "expectedTopics": [{ "name": "batch_id", "type": "BytesN<32>" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "processed_count", "type": "u32" }]
+    },
+    {
+      "eventName": "AuditRecordAppended",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "action", "type": "AuditAction" }, { "name": "category", "type": "NotificationCategory" }],
+      "expectedFields": [{ "name": "seq", "type": "u64" }, { "name": "actor", "type": "Address" }]
+    },
+    {
+      "eventName": "OwnershipTransferInitiated",
+      "expectedTopics": [{ "name": "previous_owner", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "pending_owner", "type": "Address" }]
+    },
+    {
+      "eventName": "OwnershipTransferred",
+      "expectedTopics": [{ "name": "previous_owner", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "new_owner", "type": "Address" }]
+    },
+    {
+      "eventName": "ReputationUpdated",
+      "expectedTopics": [{ "name": "sender", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "new_score", "type": "i64" }, { "name": "successful_count", "type": "u32" }, { "name": "failed_count", "type": "u32" }]
+    },
+    {
+      "eventName": "NotificationLimitsConfigured",
+      "expectedTopics": [{ "name": "admin", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "max_payload_size", "type": "u32" }, { "name": "max_expiration_seconds", "type": "u64" }, { "name": "min_expiration_seconds", "type": "u64" }, { "name": "max_batch_size", "type": "u32" }]
+    },
+    {
+      "eventName": "ReputationTierChanged",
+      "expectedTopics": [{ "name": "sender", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "old_tier", "type": "u32" }, { "name": "new_tier", "type": "u32" }, { "name": "reputation_score", "type": "i64" }]
+    },
+    {
+      "eventName": "SchemaVersionSet",
+      "expectedTopics": [{ "name": "admin", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "schema_version", "type": "u32" }, { "name": "previous_version", "type": "u32" }]
+    },
+    {
+      "eventName": "NotificationAccessed",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "accessor", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }],
+      "expectedFields": [{ "name": "accessed_at", "type": "u64" }]
+    },
+    {
+      "eventName": "ChannelMetadataUpdated",
+      "expectedTopics": [{ "name": "channel_id", "type": "BytesN<32>" }, { "name": "updater", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "updated_at", "type": "u64" }]
+    },
+    {
+      "eventName": "NotificationArchived",
+      "expectedTopics": [{ "name": "notification_id", "type": "BytesN<32>" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "archived_at", "type": "u64" }, { "name": "archive_reason", "type": "String" }]
+    },
+    {
+      "eventName": "TemplateRegistered",
+      "expectedTopics": [{ "name": "owner", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "template_id", "type": "BytesN<32>" }]
+    },
+    {
+      "eventName": "TemplateUpdated",
+      "expectedTopics": [{ "name": "owner", "type": "Address" }, { "name": "category", "type": "NotificationCategory" }, { "name": "priority", "type": "NotificationPriority" }],
+      "expectedFields": [{ "name": "template_id", "type": "BytesN<32>" }]
+    }
+  ]
+}

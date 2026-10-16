@@ -60,7 +60,7 @@ describe('UserActivityTimeline', () => {
 
     expect(await screen.findByText(/No recent activity yet/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Subscription and notification actions will appear here/i)
+      screen.getByText(/Subscription and notification actions will appear here/i),
     ).toBeInTheDocument();
   });
 

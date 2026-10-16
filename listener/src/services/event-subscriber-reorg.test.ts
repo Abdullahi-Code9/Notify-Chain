@@ -54,6 +54,7 @@ const testConfig: Config = {
   stellarRpcUrl: 'https://soroban-testnet.stellar.org:443',
   contractAddresses: [contractConfig],
   pollIntervalMs: 30000,
+  eventBatchSize: 100,
   maxReconnectAttempts: 5,
   reconnectDelayMs: 100,
   eventsApiPort: 8787,

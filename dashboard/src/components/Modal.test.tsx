@@ -9,7 +9,7 @@ describe('Modal', () => {
     const { queryByRole } = render(
       <Modal isOpen={false} onClose={() => {}} title="Details">
         <p>Body</p>
-      </Modal>
+      </Modal>,
     );
 
     expect(queryByRole('dialog')).not.toBeInTheDocument();
@@ -24,7 +24,7 @@ describe('Modal', () => {
         footer={<button type="button">Confirm</button>}
       >
         <p>Modal body content</p>
-      </Modal>
+      </Modal>,
     );
 
     expect(getByRole('dialog')).toBeInTheDocument();
@@ -38,7 +38,7 @@ describe('Modal', () => {
     const { getByLabelText } = render(
       <Modal isOpen onClose={onClose} title="Close me">
         <p>Body</p>
-      </Modal>
+      </Modal>,
     );
 
     fireEvent.click(getByLabelText(/close modal/i));
@@ -50,7 +50,7 @@ describe('Modal', () => {
     render(
       <Modal isOpen onClose={onClose} title="Escapable">
         <p>Body</p>
-      </Modal>
+      </Modal>,
     );
 
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -61,7 +61,7 @@ describe('Modal', () => {
     const { container } = render(
       <Modal isOpen onClose={() => {}} title="Accessible modal">
         <p>Body</p>
-      </Modal>
+      </Modal>,
     );
     // Backdrop uses role=button while containing focusable controls; exclude nested-interactive.
     const results = await axe(container, {

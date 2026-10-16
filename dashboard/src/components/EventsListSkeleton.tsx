@@ -3,7 +3,9 @@ interface EventsListSkeletonProps {
 }
 
 function SkeletonLine({ width }: { width: string }) {
-  return <span className="skeleton-block skeleton-block--inline" style={{ width }} aria-hidden="true" />;
+  return (
+    <span className="skeleton-block skeleton-block--inline" style={{ width }} aria-hidden="true" />
+  );
 }
 
 export function EventsListSkeleton({ rows = 8 }: EventsListSkeletonProps) {

@@ -212,10 +212,7 @@ CI/CD and GitHub metadata:
 
 ### `scripts/`
 
-Repo-level shell utilities:
-
-- `health-check.sh` — HTTP health probe used in staging workflows
-- `run-fuzz-coverage.sh` — contract fuzz coverage helper
+Repo-level shell utilities (removed — health check and fuzz coverage scripts are no longer present).
 
 ### `tools/`
 

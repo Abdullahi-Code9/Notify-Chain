@@ -1,19 +1,10 @@
-import {
-  StellarWalletsKit,
-  Networks,
-  KitEventType,
-} from '@creit.tech/stellar-wallets-kit';
+import { StellarWalletsKit, Networks, KitEventType } from '@creit.tech/stellar-wallets-kit';
 import { defaultModules } from '@creit.tech/stellar-wallets-kit/modules/utils';
 import { ModuleType } from '@creit.tech/stellar-wallets-kit';
-import {
-  useWalletStore,
-  getPersistedWalletId,
-  setPersistedWalletId,
-} from '../store/walletStore';
+import { useWalletStore, getPersistedWalletId, setPersistedWalletId } from '../store/walletStore';
 import { getStellarNetworkName } from '../config/stellarNetwork';
 
-const NETWORK =
-  getStellarNetworkName() === 'PUBLIC' ? Networks.PUBLIC : Networks.TESTNET;
+const NETWORK = getStellarNetworkName() === 'PUBLIC' ? Networks.PUBLIC : Networks.TESTNET;
 
 let initialized = false;
 

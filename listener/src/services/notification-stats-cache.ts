@@ -2,9 +2,25 @@ import NodeCache from 'node-cache';
 import logger from '../utils/logger';
 
 /**
- * Statistics snapshot for notification scheduler
+ * Operational metrics for notification queue activity (#797).
  */
-export interface NotificationStats {
+export interface QueueOperationalMetrics {
+  /** Number of notifications currently pending delivery in queue. */
+  pendingNotifications: number;
+  /** Number of notifications currently being processed. */
+  processingNotifications: number;
+  /** Total count of successfully delivered notifications. */
+  successfulDeliveries: number;
+  /** Total count of permanently failed deliveries. */
+  failedDeliveries: number;
+  /** Total count of retry attempts across all notifications. */
+  retryAttempts: number;
+}
+
+/**
+ * Statistics snapshot for notification scheduler, enriched with queue operational metrics (#797).
+ */
+export interface NotificationStats extends Partial<QueueOperationalMetrics> {
   pending: number;
   processing: number;
   completed: number;
@@ -75,9 +91,10 @@ export class NotificationStatsCache {
    * @param ttl - Optional custom TTL in seconds
    */
   set(stats: NotificationStats, ttl?: number): void {
-    const success = ttl !== undefined
-      ? this.cache.set(this.CACHE_KEY, stats, ttl)
-      : this.cache.set(this.CACHE_KEY, stats);
+    const success =
+      ttl !== undefined
+        ? this.cache.set(this.CACHE_KEY, stats, ttl)
+        : this.cache.set(this.CACHE_KEY, stats);
 
     if (success) {
       logger.debug('[StatsCache] Stats cached', { ttl: ttl ?? this.ttlSeconds });
@@ -144,7 +161,8 @@ export class NotificationStatsCache {
    * @notice Check if stats are currently cached
    */
   has(): boolean {
-    return this.cache.has(this.CACHE_KEY);
+    return this.cache.get(this.CACHE_KEY) !== undefined;
+    return (this.cache as any).has(this.CACHE_KEY);
   }
 
   /**

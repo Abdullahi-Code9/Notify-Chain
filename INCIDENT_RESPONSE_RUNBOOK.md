@@ -38,6 +38,7 @@ For small incidents one maintainer may hold multiple roles, but the incident com
    - Pause high-volume jobs if they are amplifying failures.
    - Recover stale scheduler locks if dispatchers crashed.
    - Increase worker capacity only after confirming the backing service is healthy.
+   - For suspected database corruption, accidental deletion, or data loss, follow [Database Backup and Restore](docs/DATABASE_BACKUP_RESTORE.md) and restore the newest verified backup.
 6. Communicate status using the templates below.
 7. Verify recovery with user-visible checks and relevant tests.
 8. Downgrade or resolve the incident.

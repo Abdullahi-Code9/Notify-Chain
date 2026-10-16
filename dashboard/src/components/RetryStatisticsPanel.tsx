@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  fetchRetryStatistics,
-  generateMockRetryStatistics,
-} from '../services/retryStatisticsApi';
+import { fetchRetryStatistics, generateMockRetryStatistics } from '../services/retryStatisticsApi';
 import type { RetryStatistics } from '../types/retryStatistics';
 import { formatAverageRetries, formatRetryRate } from '../types/retryStatistics';
 

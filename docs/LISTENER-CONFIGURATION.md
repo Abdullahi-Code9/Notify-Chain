@@ -23,11 +23,18 @@ For secrets-handling guidance (what must not be committed), also see [ENVIRONMEN
 2. [How configuration is loaded](#how-configuration-is-loaded)
 3. [Required vs optional](#required-vs-optional)
 4. [Configuration reference](#configuration-reference)
-5. [Examples](#examples)
-6. [Environment differences](#environment-differences)
-7. [Recommended values (operational guidance)](#recommended-values-operational-guidance)
-8. [Troubleshooting](#troubleshooting)
-9. [Related documentation](#related-documentation)
+5. [Environment configuration matrix](#environment-configuration-matrix)
+6. [Examples](#examples)
+7. [Environment differences](#environment-differences)
+8. [Recommended values (operational guidance)](#recommended-values-operational-guidance)
+9. [Troubleshooting](#troubleshooting)
+10. [Related documentation](#related-documentation)
+
+---
+
+## Environment configuration matrix
+
+For a single consolidated master table specifying all environment variables, their types, required/optional status, defaults, sensitivity classifications, and environment applicability, consult [docs/ENVIRONMENT_MATRIX.md](ENVIRONMENT_MATRIX.md).
 
 ---
 
@@ -214,6 +221,16 @@ Also used by the DB-backed retry scheduler for `baseDelayMs` / `multiplier` / `j
 | `RETRY_SCHEDULER_PROCESSOR_ID` | string | unset | No | Worker identity (useful with multiple instances) |
 | `RETRY_SCHEDULER_BATCH_SIZE` | integer | `10` | No (defaulted) | Jobs per tick |
 | `RETRY_MAX_DELAY_MS` | integer (ms) | `3600000` (1h) | No (defaulted) | Max backoff clamp for retry scheduler |
+
+### Outbound webhook requests
+
+| Name | Type | Default | Required | Purpose / effect |
+|------|------|---------|----------|------------------|
+| `WEBHOOK_TIMEOUT_MS` | integer (ms) | `10000` | No (defaulted) | Timeout for outbound webhook POSTs, applied independently of other network operations |
+
+`WEBHOOK_TIMEOUT_MS` is validated at startup: non-numeric values abort startup with a `ConfigError`, and values below `1` or above `300000` (5 minutes) are rejected. When a webhook does not respond within the configured timeout the request is aborted and recorded as a distinct **timeout** failure (rather than a generic network or HTTP error), so it is visible separately in logs and retry handling.
+
+**Recommended (guidance):** leave the `10000` ms default for typical endpoints; lower it when the receiver is expected to be fast and you want to fail over sooner, and raise it (up to `300000`) only for endpoints with a known long processing time.
 
 ### Scheduled notification scheduler
 

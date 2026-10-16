@@ -30,12 +30,17 @@ jest.mock('../store/preference-store', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Return a payload whose JSON representation is exactly `targetBytes` bytes. */
-function payloadOfExactBytes(targetBytes: number): Record<string, string> {
-  const overhead = Buffer.byteLength(JSON.stringify({ data: '' }), 'utf8');
+/**
+ * Return a payload whose JSON representation is exactly `targetBytes` bytes
+ * *after* scheduleNotification() stamps it with the protocol version (see
+ * ensureNotificationVersion) — the fixture already carries `version` so the
+ * stamping step is a no-op and doesn't grow the payload past the boundary.
+ */
+function payloadOfExactBytes(targetBytes: number): Record<string, unknown> {
+  const overhead = Buffer.byteLength(JSON.stringify({ data: '', version: 1 }), 'utf8');
   const fillLength = targetBytes - overhead;
   if (fillLength < 0) throw new Error(`targetBytes ${targetBytes} too small`);
-  return { data: 'x'.repeat(fillLength) };
+  return { data: 'x'.repeat(fillLength), version: 1 };
 }
 
 function futureIso(offsetMs = 60_000): string {

@@ -1,6 +1,13 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { ContractConfig } from '../types';
 import logger from '../utils/logger';
+import { generateCorrelationId } from '../utils/request-id';
+import {
+  RetryFailureType,
+  RetryPolicy,
+  RetryPolicyConfig,
+  classifyError,
+} from './retry-policy';
 
 export enum Priority {
   Low = 0,
@@ -14,6 +21,15 @@ export interface EventProcessingQueueOptions {
   maxRetries?: number;
   baseDelayMs?: number;
   priorityWeights?: { high: number; medium: number; low: number };
+  /**
+   * Retry policy overrides for attempt budgeting and failure eligibility.
+   * Anything omitted falls back to `RETRY_POLICY_DEFAULTS`.
+   *
+   * Note: this queue keeps its own unbounded `baseDelayMs * 2^attempt` backoff,
+   * so only the `maxAttempts` and `retryableFailureTypes` knobs are taken from
+   * the policy here — the delay knobs are ignored by design.
+   */
+  retryPolicy?: Pick<Partial<RetryPolicyConfig>, 'maxAttempts' | 'retryableFailureTypes'>;
 }
 
 export type EventProcessor = (
@@ -53,6 +69,7 @@ export class EventProcessingQueue {
   private readonly processor: EventProcessor;
   private timer: ReturnType<typeof setInterval> | null = null;
   private priorityCounters: { high: number; medium: number; low: number } = { high: 0, medium: 0, low: 0 };
+  private readonly policy: RetryPolicy;
 
   // Metrics
   private metrics = {
@@ -60,15 +77,7 @@ export class EventProcessingQueue {
     totalProcessed: 0,
     totalSucceeded: 0,
     totalFailed: 0,
-    processingTimes: [] as number[],
-  };
-
-  // Metrics
-  private metrics = {
-    totalEnqueued: 0,
-    totalProcessed: 0,
-    totalSucceeded: 0,
-    totalFailed: 0,
+    totalSkippedPermanent: 0,
     processingTimes: [] as number[],
   };
 
@@ -79,6 +88,12 @@ export class EventProcessingQueue {
     this.maxRetries = options?.maxRetries ?? DEFAULTS.maxRetries;
     this.baseDelayMs = options?.baseDelayMs ?? DEFAULTS.baseDelayMs;
     this.priorityWeights = options?.priorityWeights ?? DEFAULTS.priorityWeights;
+    this.policy = new RetryPolicy(options?.retryPolicy);
+  }
+
+  /** The policy governing every retry decision made by this queue. */
+  getRetryPolicy(): RetryPolicy {
+    return this.policy;
   }
 
   enqueue(
@@ -87,11 +102,13 @@ export class EventProcessingQueue {
     requestId?: string,
     priority: Priority = Priority.Medium
   ): boolean {
+    const correlationId = requestId ?? generateCorrelationId();
     const fingerprint = buildEventFingerprint(event, contractConfig.address);
 
     if (this.queuedFingerprints.has(fingerprint)) {
       logger.info('Skipping duplicate event queue entry', {
-        requestId,
+        requestId: correlationId,
+        correlationId,
         eventId: event.id,
         contractAddress: contractConfig.address,
         fingerprint,
@@ -103,7 +120,8 @@ export class EventProcessingQueue {
     const nextRetryAt = Date.now() + delayMs;
 
     logger.info('Event queued for processing', {
-      requestId,
+      requestId: correlationId,
+      correlationId,
       eventId: event.id,
       contractAddress: contractConfig.address,
       delayMs,
@@ -116,7 +134,7 @@ export class EventProcessingQueue {
     this.queue.push({
       event,
       contractConfig,
-      requestId: requestId ?? '',
+      requestId: correlationId,
       retryCount: 0,
       nextRetryAt,
       fingerprint,
@@ -212,6 +230,7 @@ export class EventProcessingQueue {
   private async processItem(item: QueuedEvent): Promise<void> {
     this.activeFingerprints.add(item.fingerprint);
     const startTime = Date.now();
+    const attempt = item.retryCount + 1;
 
     try {
       const success = await this.processor(item.event, item.contractConfig, item.requestId);
@@ -225,78 +244,111 @@ export class EventProcessingQueue {
         this.metrics.processingTimes.push(duration);
         logger.info('Event processing succeeded', {
           requestId: item.requestId,
+          correlationId: item.requestId,
           eventId: item.event.id,
           contractAddress: item.contractConfig.address,
         });
         return;
       }
 
-      const attempt = item.retryCount + 1;
-
-      if (attempt >= this.maxRetries) {
-        this.queuedFingerprints.delete(item.fingerprint);
-        this.activeFingerprints.delete(item.fingerprint);
-        this.metrics.totalProcessed++;
-        this.metrics.totalFailed++;
-        this.metrics.processingTimes.push(duration);
-        logger.error('Event processing permanently failed after max retries', {
-          requestId: item.requestId,
-          eventId: item.event.id,
-          contractAddress: item.contractConfig.address,
-          totalAttempts: attempt,
-        });
-        return;
-      }
-
-      const delayMs = this.calculateDelay(attempt);
-      const nextRetryAt = Date.now() + delayMs;
-
-      logger.warn('Event processing failed, scheduling retry', {
-        requestId: item.requestId,
-        eventId: item.event.id,
-        contractAddress: item.contractConfig.address,
-        attempt,
-        delayMs,
-        nextRetryAt: new Date(nextRetryAt).toISOString(),
-      });
-
+      // A plain `false` carries no signal, so fall back to the retryable-by-
+      // default `Unknown` classification and let the policy decide.
       this.activeFingerprints.delete(item.fingerprint);
-      this.queue.push({ ...item, retryCount: attempt, nextRetryAt });
+      this.handleFailure(item, attempt, RetryFailureType.Unknown, duration, undefined);
     } catch (error) {
       this.activeFingerprints.delete(item.fingerprint);
-      const duration = Date.now() - startTime;
+      this.handleFailure(
+        item,
+        attempt,
+        classifyError(error),
+        Date.now() - startTime,
+        error,
+      );
+    }
+  }
 
-      const attempt = item.retryCount + 1;
+  /**
+   * Record a failed processing attempt and either requeue the event or retire
+   * it. `crashed` only affects the log wording so rejections stay
+   * distinguishable from a `false` return.
+   */
+  private handleFailure(
+    item: QueuedEvent,
+    attempt: number,
+    failureType: RetryFailureType,
+    duration: number,
+    error: unknown,
+  ): void {
+    const crashed = error !== undefined;
+    const decision = this.policy.evaluate(failureType, attempt, this.maxRetries);
 
-      if (attempt >= this.maxRetries) {
-        this.queuedFingerprints.delete(item.fingerprint);
-        this.metrics.totalProcessed++;
-        this.metrics.totalFailed++;
-        this.metrics.processingTimes.push(duration);
-        logger.error('Event processing crashed after max retries', {
+    if (!decision.shouldRetry) {
+      this.queuedFingerprints.delete(item.fingerprint);
+      this.metrics.totalProcessed++;
+      this.metrics.totalFailed++;
+      if (decision.reason === 'permanent') {
+        this.metrics.totalSkippedPermanent++;
+      }
+      this.metrics.processingTimes.push(duration);
+
+      if (decision.reason === 'permanent') {
+        logger.error('Event processing failed permanently, not retried', {
           requestId: item.requestId,
+          correlationId: item.requestId,
           eventId: item.event.id,
           contractAddress: item.contractConfig.address,
           totalAttempts: attempt,
-          error,
+          failureType,
+          ...(crashed ? { error } : {}),
         });
         return;
       }
 
-      const delayMs = this.calculateDelay(attempt);
-      const nextRetryAt = Date.now() + delayMs;
+      logger.error(
+        crashed
+          ? 'Event processing crashed after max retries'
+          : 'Event processing permanently failed after max retries',
+        {
+          requestId: item.requestId,
+          correlationId: item.requestId,
+          eventId: item.event.id,
+          contractAddress: item.contractConfig.address,
+          totalAttempts: attempt,
+          failureType,
+          ...(crashed ? { error } : {}),
+        },
+      );
+      return;
+    }
 
+    const delayMs = this.calculateDelay(attempt);
+    const nextRetryAt = Date.now() + delayMs;
+
+    if (crashed) {
       logger.error('Event processing crashed, scheduling retry', {
         requestId: item.requestId,
+        correlationId: item.requestId,
         eventId: item.event.id,
         contractAddress: item.contractConfig.address,
         attempt,
         delayMs,
+        failureType,
         error,
       });
-
-      this.queue.push({ ...item, retryCount: attempt, nextRetryAt });
+    } else {
+      logger.warn('Event processing failed, scheduling retry', {
+        requestId: item.requestId,
+        correlationId: item.requestId,
+        eventId: item.event.id,
+        contractAddress: item.contractConfig.address,
+        attempt,
+        delayMs,
+        failureType,
+        nextRetryAt: new Date(nextRetryAt).toISOString(),
+      });
     }
+
+    this.queue.push({ ...item, retryCount: attempt, nextRetryAt });
   }
 
   getMetrics() {

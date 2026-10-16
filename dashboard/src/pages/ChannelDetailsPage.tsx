@@ -115,7 +115,9 @@ function ChannelCard({ ch }: { ch: ChannelDetail }) {
     <article className="cd-channel-card" aria-label={`${ch.label} channel details`}>
       {/* Header */}
       <div className="cd-channel-card__header" style={{ borderColor: ch.color }}>
-        <span className="cd-channel-card__icon" aria-hidden="true">{ch.icon}</span>
+        <span className="cd-channel-card__icon" aria-hidden="true">
+          {ch.icon}
+        </span>
         <div className="cd-channel-card__header-text">
           <h2 className="cd-channel-card__title">{ch.label}</h2>
           <p className="cd-channel-card__protocol">{ch.protocol}</p>
@@ -153,7 +155,11 @@ function ChannelCard({ ch }: { ch: ChannelDetail }) {
         <StatCard
           label="Failed"
           value={formatNumber(ch.stats.failed)}
-          sub={ch.stats.failed > 0 ? `${((ch.stats.failed / ch.stats.sent) * 100).toFixed(1)}%` : undefined}
+          sub={
+            ch.stats.failed > 0
+              ? `${((ch.stats.failed / ch.stats.sent) * 100).toFixed(1)}%`
+              : undefined
+          }
         />
         <StatCard label="Pending" value={String(ch.stats.pending)} />
       </div>
@@ -163,7 +169,11 @@ function ChannelCard({ ch }: { ch: ChannelDetail }) {
 
 function ChannelCardSkeleton() {
   return (
-    <div className="cd-channel-card cd-channel-card--skeleton" aria-busy="true" aria-label="Loading channel">
+    <div
+      className="cd-channel-card cd-channel-card--skeleton"
+      aria-busy="true"
+      aria-label="Loading channel"
+    >
       <div className="cd-skeleton-line cd-skeleton-line--title" />
       <div className="cd-skeleton-line cd-skeleton-line--body" />
       <div className="cd-skeleton-line cd-skeleton-line--body cd-skeleton-line--short" />

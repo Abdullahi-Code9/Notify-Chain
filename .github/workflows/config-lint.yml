@@ -1,0 +1,84 @@
+name: Configuration Drift Detection
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  config-drift:
+    name: Check for Unused Configuration Variables
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Run configuration drift detection
+        id: config-check
+        run: |
+          echo "Running configuration drift detection..."
+          npm run lint:config
+        continue-on-error: true
+      
+      - name: Upload results as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: config-drift-report
+          path: |
+            .config-audit-ignore
+            scripts/check-unused-config.mjs
+          retention-days: 30
+      
+      - name: Comment on PR (if drift detected)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ⚠️ Configuration Drift Detected
+              
+              The configuration drift detection tool found environment variables documented in \`.env.example\` files that are not referenced in the codebase.
+              
+              ### Action Required
+              
+              1. **Review the unreferenced variables** in the check output above
+              2. **Either:**
+                 - Remove unused variables from \`.env.example\` files
+                 - OR add them to \`.config-audit-ignore\` with a clear reason
+              
+              ### How to Fix
+              
+              \`\`\`bash
+              # Run locally to see details
+              npm run lint:config
+              
+              # Add to allowlist if legitimately used externally
+              echo "# Reason for exemption" >> .config-audit-ignore
+              echo "VARIABLE_NAME" >> .config-audit-ignore
+              \`\`\`
+              
+              📚 [Configuration Drift Detection Documentation](docs/CONFIG_DRIFT_DETECTION.md)`
+            })
+      
+      - name: Fail workflow if drift detected
+        if: steps.config-check.outcome == 'failure'
+        run: |
+          echo "❌ Configuration drift detected!"
+          echo "See logs above for details or check the documentation:"
+          echo "docs/CONFIG_DRIFT_DETECTION.md"
+          exit 1

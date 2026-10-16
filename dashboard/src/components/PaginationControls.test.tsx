@@ -27,7 +27,7 @@ describe('PaginationControls', () => {
 
   it('uses custom summary label when provided', () => {
     const { getByText } = render(
-      <PaginationControls {...defaultProps} summaryLabel="notifications" />
+      <PaginationControls {...defaultProps} summaryLabel="notifications" />,
     );
 
     expect(getByText('50 total notifications')).toBeInTheDocument();
@@ -36,7 +36,7 @@ describe('PaginationControls', () => {
   it('navigates to previous and next pages', () => {
     const onPageChange = jest.fn();
     const { getByRole } = render(
-      <PaginationControls {...defaultProps} onPageChange={onPageChange} />
+      <PaginationControls {...defaultProps} onPageChange={onPageChange} />,
     );
 
     fireEvent.click(getByRole('button', { name: /previous/i }));
@@ -47,9 +47,7 @@ describe('PaginationControls', () => {
   });
 
   it('disables Previous on first page and Next on last page', () => {
-    const { getByRole, rerender } = render(
-      <PaginationControls {...defaultProps} page={1} />
-    );
+    const { getByRole, rerender } = render(<PaginationControls {...defaultProps} page={1} />);
     expect(getByRole('button', { name: /previous/i })).toBeDisabled();
 
     rerender(<PaginationControls {...defaultProps} page={5} pageCount={5} />);
@@ -59,7 +57,7 @@ describe('PaginationControls', () => {
   it('changes items per page', () => {
     const onLimitChange = jest.fn();
     const { getByLabelText } = render(
-      <PaginationControls {...defaultProps} onLimitChange={onLimitChange} />
+      <PaginationControls {...defaultProps} onLimitChange={onLimitChange} />,
     );
 
     fireEvent.change(getByLabelText(/items per page/i), { target: { value: '20' } });

@@ -38,11 +38,7 @@ export function WebhookDashboardPage() {
       {error && (
         <div className="webhook-dashboard__banner" role="alert">
           <span>{error}</span>
-          <button
-            type="button"
-            className="webhook-dashboard__banner-retry"
-            onClick={refresh}
-          >
+          <button type="button" className="webhook-dashboard__banner-retry" onClick={refresh}>
             Retry
           </button>
         </div>
@@ -74,10 +70,7 @@ export function WebhookDashboardPage() {
       </section>
 
       {/* Failed deliveries table */}
-      <WebhookFailedTable
-        deliveries={failedDeliveries}
-        isLoading={isLoading}
-      />
+      <WebhookFailedTable deliveries={failedDeliveries} isLoading={isLoading} />
     </main>
   );
 }

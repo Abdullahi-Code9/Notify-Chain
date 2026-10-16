@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  fetchScheduleStats,
-  fetchHealth,
-  fetchAnalytics,
-} from '../services/notificationHealthApi';
+import { fetchScheduleStats, fetchHealth, fetchAnalytics } from '../services/notificationHealthApi';
 import type {
   ScheduleStatsResponse,
   HealthResponse,
@@ -113,7 +109,7 @@ export function NotificationHealthPanel(props: { healthUrl: string; pollInterval
 
       if (allRejected) {
         const errors = [scheduleStatsData, healthData, analyticsData].map(
-          (p) => (p as PromiseRejectedResult).reason
+          (p) => (p as PromiseRejectedResult).reason,
         );
         setError(errors.map((e) => (e instanceof Error ? e.message : String(e))).join(', '));
       }
@@ -251,7 +247,9 @@ export function NotificationHealthPanel(props: { healthUrl: string; pollInterval
           <div className="notification-health__services-grid">
             {health && (
               <>
-                <div className={`notification-health__service ${serviceStatusClass(health.services.stellarRpc.status)}`}>
+                <div
+                  className={`notification-health__service ${serviceStatusClass(health.services.stellarRpc.status)}`}
+                >
                   <div className="notification-health__service-name">Stellar RPC</div>
                   <div className="notification-health__service-status">
                     {serviceStatusLabel(health.services.stellarRpc.status)}
@@ -267,7 +265,9 @@ export function NotificationHealthPanel(props: { healthUrl: string; pollInterval
                     </div>
                   )}
                 </div>
-                <div className={`notification-health__service ${serviceStatusClass(health.services.discord.status)}`}>
+                <div
+                  className={`notification-health__service ${serviceStatusClass(health.services.discord.status)}`}
+                >
                   <div className="notification-health__service-name">Discord</div>
                   <div className="notification-health__service-status">
                     {serviceStatusLabel(health.services.discord.status)}
@@ -283,7 +283,9 @@ export function NotificationHealthPanel(props: { healthUrl: string; pollInterval
                     </div>
                   )}
                 </div>
-                <div className={`notification-health__service ${serviceStatusClass(health.services.eventRegistry.status)}`}>
+                <div
+                  className={`notification-health__service ${serviceStatusClass(health.services.eventRegistry.status)}`}
+                >
                   <div className="notification-health__service-name">Event Registry</div>
                   <div className="notification-health__service-status">
                     {serviceStatusLabel(health.services.eventRegistry.status)}

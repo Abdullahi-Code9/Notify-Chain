@@ -97,28 +97,22 @@ export function useWebhookDashboard(): UseWebhookDashboardResult {
   // Derived data — only recomputed when allDeliveries or filters change
   const filteredDeliveries = useMemo(
     () => filterDeliveries(allDeliveries, filters),
-    [allDeliveries, filters]
+    [allDeliveries, filters],
   );
 
   const failedDeliveries = useMemo(
     () => filteredDeliveries.filter((d) => d.status === 'failed'),
-    [filteredDeliveries]
+    [filteredDeliveries],
   );
 
-  const summary = useMemo(
-    () => computeSummaryMetrics(filteredDeliveries),
-    [filteredDeliveries]
-  );
+  const summary = useMemo(() => computeSummaryMetrics(filteredDeliveries), [filteredDeliveries]);
 
   const chartBuckets = useMemo(
     () => bucketDeliveriesByTime(filteredDeliveries, RANGE_HOURS_MAP[filters.dateRange] ?? 24),
-    [filteredDeliveries, filters.dateRange]
+    [filteredDeliveries, filters.dateRange],
   );
 
-  const eventTypeOptions = useMemo(
-    () => getEventTypeOptions(allDeliveries),
-    [allDeliveries]
-  );
+  const eventTypeOptions = useMemo(() => getEventTypeOptions(allDeliveries), [allDeliveries]);
 
   return {
     isLoading,

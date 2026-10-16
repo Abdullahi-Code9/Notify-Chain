@@ -66,4 +66,3 @@ export function parseIndexingHealth(payload: unknown): IndexingHealth {
     detail,
   };
 }
-

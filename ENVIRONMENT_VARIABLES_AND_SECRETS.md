@@ -39,8 +39,23 @@ Variables marked **Required** are checked by `validateRequiredEnvVars()` in `lis
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
-| `LOG_LEVEL` | `info` | No | Winston log level. Values: `error` \| `warn` \| `info` \| `http` \| `verbose` \| `debug` \| `silly`. |
-| `NODE_ENV` | *(unset)* | No | Set to `production` to enable newline-delimited JSON (structured) log output. Leave unset for human-readable pretty-print during development. |
+| `LOG_LEVEL` | `info` | No | Log verbosity. Exactly one of: `error` \| `warn` \| `info` \| `debug`. Any other value is **rejected at startup** with a `ConfigError`. |
+| `LOG_FORMAT` | *(env-dependent)* | No | Log output format: `json` (newline-delimited JSON for log aggregators) or `pretty` (colourised, human-readable). Defaults to `json` when `NODE_ENV=production`, `pretty` otherwise. Any other value is rejected at startup. |
+| `NODE_ENV` | *(unset)* | No | Set to `production` for production defaults. Affects the `LOG_FORMAT` default only when `LOG_FORMAT` is unset; an explicit `LOG_FORMAT` always wins. |
+
+> **Note on log levels.** Earlier revisions of this table listed `http`,
+> `verbose` and `silly`. The service has only ever implemented
+> `error | warn | info | debug` — the other values were silently downgraded to
+> `info`. They are now rejected at startup rather than accepted-and-ignored, so
+> a deployment that sets one will fail fast with a message naming the valid
+> values instead of running at unexpected verbosity.
+
+**Secret redaction.** Log records are scanned before emission and any field
+whose name looks like a credential (`password`, `secret`, `token`, `apiKey`,
+`authorization`, `signature`, `cookie`, `privateKey`, and case/underscore
+variants) has its value replaced with `[REDACTED]`. Query-string parameters in
+logged request URLs are redacted the same way. The field itself is kept so
+record shape stays stable for aggregator indexing.
 
 ### 2.2 Stellar / chain connectivity
 
@@ -71,8 +86,10 @@ Use `"*"` as the sole event entry to subscribe to all events from a contract.
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
-| `EVENTS_API_PORT` | `8787` | No | Port the listener HTTP server binds to. |
-| `EVENTS_API_CORS_ORIGIN` | `http://localhost:5173` | No | Allowed CORS origin. Set to your dashboard URL in production. Avoid `*`. |
+| `EVENTS_API_PORT` | `8787` | No | Port the listener HTTP server binds to (1–65535). |
+| `EVENTS_API_CORS_ORIGIN` | `http://localhost:5173` | No | Allowed CORS origin(s). Explicit URI or comma-separated list in Production/Staging (e.g. `https://dashboard.notifychain.io`). Wildcard `*` is only allowed in local Development/Test environments. |
+
+For a complete reference table across all environments, see [docs/ENVIRONMENT_MATRIX.md](docs/ENVIRONMENT_MATRIX.md).
 
 ### 2.5 Database
 
@@ -126,8 +143,10 @@ Both variables must be provided together or neither.
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `POLL_INTERVAL_MS` | `30000` | No | How often the listener polls Stellar for new contract events (ms). |
+| `EVENT_BATCH_SIZE` | `100` | No | Maximum number of blockchain events fetched in each polling cycle. Must be at least `1`. |
 | `MAX_RECONNECT_ATTEMPTS` | `5` | No | Maximum number of reconnect attempts when the RPC endpoint fails. |
 | `RECONNECT_DELAY_MS` | `5000` | No | Delay between reconnect attempts (ms). |
+| `PROCESSED_EVENT_RETENTION_MS` | `2592000000` (30 days) | No | How long processed event metadata is retained for persistent deduplication and operations. Expired records are removed during database cleanup; minimum `60000` ms. |
 
 ### 2.10 Retry queue (in-memory)
 
@@ -154,7 +173,34 @@ The DB-backed retry scheduler persists retry state across process restarts.
 | `RETRY_SCHEDULER_PROCESSOR_ID` | *(unset)* | No | Unique identifier for this worker instance. Useful for multi-instance deployability and observability. |
 | `RETRY_SCHEDULER_BATCH_SIZE` | `10` | No | Number of retry jobs to process per tick. |
 
-### 2.12 Scheduled notification scheduler
+### 2.12 Retry policy
+
+Controls retry behaviour independently of the delay curve, which continues to be
+governed by the shared variables in section 2.10 (`RETRY_BASE_DELAY_MS`,
+`RETRY_MULTIPLIER`, `RETRY_MAX_DELAY_MS`, `RETRY_JITTER`).
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `RETRY_POLICY_MAX_ATTEMPTS` | *(unset)* | No | Hard ceiling on total delivery attempts, including the first. Unset leaves each notification's own `max_retries` in control; `1` disables retries process-wide. Must be >= 1. |
+| `RETRY_POLICY_RETRYABLE_FAILURE_TYPES` | `network_error,timeout,rate_limited,server_error,unknown` | No | Comma-separated list of failure types eligible for retry. Anything not listed fails on its first attempt. Must list at least one type. |
+
+Supported failure types: `network_error`, `timeout`, `rate_limited`,
+`server_error`, `client_error`, `not_found`, `auth_error`,
+`configuration_error`, `unknown`.
+
+The default set deliberately excludes every unambiguously permanent failure
+(`auth_error`, `not_found`, `client_error`, `configuration_error`) so an expired
+credential or a misconfigured webhook URL is retired on its first attempt instead
+of burning the remaining retry budget. `unknown` is included so that unclassified
+failures keep their previous retry behaviour rather than being silently dropped.
+To trade retries for throughput on a known-good endpoint, opt a permanent type
+back in:
+
+```bash
+RETRY_POLICY_RETRYABLE_FAILURE_TYPES=network_error,timeout,rate_limited,server_error,client_error,unknown
+```
+
+### 2.13 Scheduled notification scheduler
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
@@ -165,7 +211,7 @@ The DB-backed retry scheduler persists retry state across process restarts.
 | `SCHEDULER_BATCH_SIZE` | `10` | No | Due notifications to dispatch per tick. |
 | `SCHEDULER_TIMING_BUFFER_MS` | `60000` | No | Timing buffer (ms) applied around scheduled times to prevent edge-case early or late dispatch. |
 
-### 2.13 Event processing queue
+### 2.14 Event processing queue
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
@@ -174,7 +220,7 @@ The DB-backed retry scheduler persists retry state across process restarts.
 | `EVENT_QUEUE_BASE_DELAY_MS` | `2000` | No | Base delay for event queue retry backoff (ms). |
 | `EVENT_QUEUE_POLL_INTERVAL_MS` | `1000` | No | How often the event queue checks for events ready to process (ms). |
 
-### 2.14 Rate limiting
+### 2.15 Rate limiting
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
@@ -182,6 +228,7 @@ The DB-backed retry scheduler persists retry state across process restarts.
 | `RATE_LIMIT_WINDOW_MS` | `60000` | No | Rate limit sliding window size (ms). |
 | `RATE_LIMIT_MAX_REQUESTS` | `60` | No | Maximum requests allowed per window (applies to all clients unless overridden). |
 | `RATE_LIMIT_CLIENT_OVERRIDES` | `{}` | No | Per-client rate limit overrides. JSON object. See shape below. |
+| `API_MAX_BODY_BYTES` | `1048576` | No | Largest request body the events API accepts, in bytes (default 1 MiB). Oversized `POST`/`PUT`/`PATCH` requests get `413 Payload Too Large` with code `PAYLOAD_TOO_LARGE`, and the payload is never parsed. Must be a positive integer. |
 
 **`RATE_LIMIT_CLIENT_OVERRIDES` shape:**
 ```json
@@ -191,7 +238,7 @@ The DB-backed retry scheduler persists retry state across process restarts.
 }
 ```
 
-### 2.15 Cleanup / retention policies
+### 2.16 Cleanup / retention policies
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
@@ -201,7 +248,7 @@ The DB-backed retry scheduler persists retry state across process restarts.
 | `EVENT_RETENTION_MS` | `86400000` | No | How long raw contract events are retained (ms). Default: 24 hours. |
 | `EXECUTION_LOG_RETENTION_MS` | `7776000000` | No | How long execution log entries are retained (ms). Default: 90 days. |
 
-### 2.16 Notification archive
+### 2.17 Notification archive
 
 The archiver moves old completed/failed/cancelled notifications to a separate archive table, then permanently deletes them after a further retention period.
 
@@ -213,7 +260,7 @@ The archiver moves old completed/failed/cancelled notifications to a separate ar
 | `ARCHIVE_DELETE_AFTER_MS` | `7776000000` | No | Permanently delete archived records older than this many ms since archiving. Set to `0` to never delete. Default: 90 days. |
 | `ARCHIVE_BATCH_SIZE` | `500` | No | Maximum rows moved per archive cycle. Prevents long-running transactions. |
 
-### 2.17 Analytics
+### 2.18 Analytics
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
@@ -330,6 +377,10 @@ RETRY_MAX_RETRIES=5
 RETRY_MULTIPLIER=2
 RETRY_MAX_DELAY_MS=3600000
 RETRY_JITTER=true
+
+# Retry policy (optional)
+# RETRY_POLICY_MAX_ATTEMPTS=5
+# RETRY_POLICY_RETRYABLE_FAILURE_TYPES=network_error,timeout,rate_limited,server_error,unknown
 
 # Retry scheduler
 RETRY_SCHEDULER_ENABLED=true

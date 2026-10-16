@@ -313,7 +313,7 @@ Use this checklist against the **actual** observability surfaces:
 3. **Check delivery attempts**  
    - Listener logs around `DiscordNotificationService` / webhook status  
    - Real-time: retry queue metrics / exhaustion logs  
-   - Scheduled: `notification_execution_log`, `GET /api/schedule/:id`, schedule stats endpoints
+   - Scheduled: `notification_execution_log`, `GET /api/schedule/:id`, schedule stats and queue operational metrics (`GET /api/schedule/queue/metrics`, `GET /api/schedule/stats`)
 
 4. **Scheduled path specifically**  
    - Row still `PENDING` with future `execute_at`?  
@@ -323,7 +323,7 @@ Use this checklist against the **actual** observability surfaces:
 
 5. **Health endpoints**  
    - `GET /health`, `GET /api/status`  
-   - `GET /api/notifications/health` (includes DLQ depth when repository is wired)  
+   - `GET /api/notifications/health` (includes DLQ depth and `queue.operationalMetrics` when repository is wired)  
    - `GET /api/indexing/health` for registry vs network tip lag
 
 6. **Config mistakes**  

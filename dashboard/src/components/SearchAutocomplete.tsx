@@ -7,20 +7,23 @@ import type { BlockchainEvent } from '../types/event';
 // Highlight matches
 function HighlightMatch({ text, query }: { text: string; query: string }) {
   if (!query) return <>{text}</>;
-  
+
   const regex = new RegExp(`(${query})`, 'gi');
   const parts = text.split(regex);
-  
+
   return (
     <>
       {parts.map((part, index) =>
         part.toLowerCase() === query.toLowerCase() ? (
-          <strong key={index} style={{ color: '#34d399', backgroundColor: 'rgba(52, 211, 153, 0.15)' }}>
+          <strong
+            key={index}
+            style={{ color: '#34d399', backgroundColor: 'rgba(52, 211, 153, 0.15)' }}
+          >
             {part}
           </strong>
         ) : (
           <span key={index}>{part}</span>
-        )
+        ),
       )}
     </>
   );
@@ -57,13 +60,13 @@ export const SearchAutocomplete = memo(function SearchAutocomplete({
     const fetchSuggestions = async () => {
       setIsLoading(true);
       setIsOpen(true);
-      
+
       // Simulate async fetching
       await new Promise((resolve) => setTimeout(resolve, 300));
-      
+
       if (isMounted) {
         const allEvents = useEventStore.getState().events;
-        // Get up to 5 matching suggestions based on query, disregarding other filters generally, 
+        // Get up to 5 matching suggestions based on query, disregarding other filters generally,
         // or passing "all" for them.
         const matches = filterEvents(allEvents, debouncedSearchTerm, 'all', 'all').slice(0, 5);
         setSuggestions(matches);
@@ -122,10 +125,10 @@ export const SearchAutocomplete = memo(function SearchAutocomplete({
         autoComplete="off"
         style={{ width: '100%' }}
       />
-      
+
       {isOpen && (
-        <div 
-          className="search-autocomplete__dropdown" 
+        <div
+          className="search-autocomplete__dropdown"
           style={{
             position: 'absolute',
             top: '100%',
@@ -148,14 +151,14 @@ export const SearchAutocomplete = memo(function SearchAutocomplete({
           ) : suggestions.length > 0 ? (
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {suggestions.map((event) => (
-                <li 
+                <li
                   key={event.eventId}
                   onClick={() => handleSelect(event)}
                   style={{
                     padding: '8px 12px',
                     cursor: 'pointer',
                     borderBottom: '1px solid rgba(255,255,255,0.06)',
-                    fontSize: '0.85rem'
+                    fontSize: '0.85rem',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
@@ -164,14 +167,28 @@ export const SearchAutocomplete = memo(function SearchAutocomplete({
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <strong><HighlightMatch text={event.eventName || 'Unknown'} query={debouncedSearchTerm} /></strong>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '4px',
+                    }}
+                  >
+                    <strong>
+                      <HighlightMatch
+                        text={event.eventName || 'Unknown'}
+                        query={debouncedSearchTerm}
+                      />
+                    </strong>
                     <span style={{ fontSize: '0.75rem', color: '#9aa0a6' }}>
                       <HighlightMatch text={event.eventId} query={debouncedSearchTerm} />
                     </span>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#9aa0a6', fontFamily: 'monospace' }}>
-                    <HighlightMatch text={event.contractAddress.slice(0, 16) + '...'} query={debouncedSearchTerm} />
+                    <HighlightMatch
+                      text={event.contractAddress.slice(0, 16) + '...'}
+                      query={debouncedSearchTerm}
+                    />
                   </div>
                 </li>
               ))}

@@ -18,11 +18,12 @@ Every error response is JSON. Use this document to map a status code and body to
 6. [404 — Not Found](#6-404--not-found)
 7. [409 — Conflict](#7-409--conflict)
 8. [413 — Payload Too Large](#8-413--payload-too-large)
-9. [429 — Too Many Requests](#9-429--too-many-requests)
-10. [500 — Internal Server Error](#10-500--internal-server-error)
-11. [503 — Service Unavailable](#11-503--service-unavailable)
-12. [Batch Validation Error Codes](#12-batch-validation-error-codes)
-13. [Quick Reference Table](#13-quick-reference-table)
+9. [415 — Unsupported Media Type](#9-415--unsupported-media-type)
+10. [429 — Too Many Requests](#10-429--too-many-requests)
+11. [500 — Internal Server Error](#11-500--internal-server-error)
+12. [503 — Service Unavailable](#12-503--service-unavailable)
+13. [Batch Validation Error Codes](#13-batch-validation-error-codes)
+14. [Quick Reference Table](#14-quick-reference-table)
 
 ---
 
@@ -45,7 +46,7 @@ Rate-limit responses add a human-readable `message`:
 }
 ```
 
-Batch validation returns a structured, per-item error array instead of a flat `error` string — see [Section 12](#12-batch-validation-error-codes):
+Batch validation returns a structured, per-item error array instead of a flat `error` string — see [Section 13](#13-batch-validation-error-codes):
 
 ```json
 {
@@ -57,7 +58,7 @@ Batch validation returns a structured, per-item error array instead of a flat `e
 }
 ```
 
-> **Note:** the API does not currently emit a stable machine-readable error code at the top level for non-batch errors. Match on the HTTP status code first, and treat the `error` string as human-readable. Only the batch validation `code` values in Section 12 are stable identifiers safe to branch on.
+> **Note:** the API does not currently emit a stable machine-readable error code at the top level for non-batch errors. Match on the HTTP status code first, and treat the `error` string as human-readable. Only the batch validation `code` values in Section 13 are stable identifiers safe to branch on.
 
 ---
 
@@ -94,6 +95,7 @@ curl -i -H "X-Correlation-Id: debug-run-001" http://localhost:8787/api/events
 | `404` | Not Found — unknown route or missing resource | No |
 | `409` | Conflict — resource already exists | No — use a different key |
 | `413` | Payload Too Large — body exceeds the size limit | No — shrink the payload |
+| `415` | Unsupported Media Type — request Content-Type is not supported | No — send supported Content-Type (e.g. application/json) |
 | `429` | Too Many Requests — rate limit exceeded | Yes — after `Retry-After` |
 | `500` | Internal Server Error — unhandled server failure | Yes — with backoff |
 | `503` | Service Unavailable — an optional subsystem is not enabled | No — enable the subsystem |
@@ -257,7 +259,28 @@ Retrying unchanged will fail identically. See [`listener/src/utils/payload-size-
 
 ---
 
-## 9. 429 — Too Many Requests
+## 9. 415 — Unsupported Media Type
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNSUPPORTED_MEDIA_TYPE",
+    "message": "Unsupported Content-Type. Supported types: application/json"
+  }
+}
+```
+
+**Cause:** The request supplied a `Content-Type` header specifying a media type that the endpoint does not support (e.g. sending `text/plain` or `application/xml` to a JSON API endpoint).
+
+**Resolution:**
+- Set `Content-Type: application/json` (or `application/json; charset=utf-8`) for JSON endpoints (e.g. `POST /api/schedule`, `POST /api/webhooks`, `POST /api/templates`, `PUT /api/preferences/:userId`).
+- For bulk import (`POST /api/notifications/import`), both `application/json` and `text/csv` (or `application/csv`) are supported.
+- Ensure the header value matches the payload format.
+
+---
+
+## 10. 429 — Too Many Requests
 
 ```json
 {
@@ -287,7 +310,7 @@ curl http://localhost:8787/api/rate-limit/metrics
 
 ---
 
-## 10. 500 — Internal Server Error
+## 11. 500 — Internal Server Error
 
 ```json
 { "error": "Internal server error" }
@@ -312,7 +335,7 @@ If reproducible, open an issue including the request ID, the request, and the su
 
 ---
 
-## 11. 503 — Service Unavailable
+## 12. 503 — Service Unavailable
 
 A 503 from this API almost always means **an optional subsystem is not enabled**, not that the server is overloaded. Retrying will not help — enable the subsystem.
 
@@ -328,7 +351,7 @@ See [`ENVIRONMENT_VARIABLES_AND_SECRETS.md`](../ENVIRONMENT_VARIABLES_AND_SECRET
 
 ---
 
-## 12. Batch Validation Error Codes
+## 13. Batch Validation Error Codes
 
 `POST /api/notifications/validate-batch` returns a structured error array. These `code` values are stable and safe to branch on.
 
@@ -374,7 +397,7 @@ npm run validate:batch
 
 ---
 
-## 13. Quick Reference Table
+## 14. Quick Reference Table
 
 | Status | Response `error` | Endpoint(s) | Fix |
 |--------|------------------|-------------|-----|
@@ -394,6 +417,7 @@ npm run validate:batch
 | 404 | `Template not found` | `/api/templates/*` | Verify the identifier |
 | 409 | `Template with this unique key already exists` | `POST /api/templates` | Use a different key |
 | 413 | `…exceeds the 65536-byte limit…` | notification endpoints | Shrink the payload |
+| 415 | `Unsupported Content-Type. Supported types: …` | mutating endpoints (`POST`/`PUT`) | Send `Content-Type: application/json` (or `text/csv` for import) |
 | 429 | `Too Many Requests` | rate-limited routes | Wait `Retry-After` seconds |
 | 500 | `Internal server error` | any | Trace `X-Request-Id` in logs |
 | 503 | `Scheduler not enabled` | `/api/schedule*` | Enable the scheduler |

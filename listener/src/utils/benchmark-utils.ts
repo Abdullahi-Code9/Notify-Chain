@@ -235,7 +235,7 @@ export function exportMetricsToJSON(metrics: BenchmarkMetrics[], outputPath: str
 }
 
 export class ResourceMonitor {
-  private intervalId?: NodeJS.Timer;
+  private intervalId?: ReturnType<typeof setInterval>;
   private samples: Array<{ timestamp: number; memory: NodeJS.MemoryUsage; cpu: NodeJS.CpuUsage }> = [];
 
   start(intervalMs: number = 1000): void {

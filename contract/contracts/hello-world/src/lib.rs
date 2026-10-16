@@ -9,6 +9,7 @@ pub mod base {
     pub mod metadata_validation;
     pub mod preferences;
     pub mod reputation;
+    pub mod idempotency;
     pub mod types;
 }
 
@@ -22,6 +23,7 @@ mod channel_logic;
 mod preferences_logic;
 mod reputation_logic;
 mod template_registry_logic;
+mod idempotency_logic;
 
 #[cfg(test)]
 pub mod mock_token;
@@ -778,6 +780,48 @@ impl AutoShareContract {
     ) -> base::types::ArchivedNotification {
         autoshare_logic::get_archived_notification(env, notification_id).unwrap()
     }
+
+    // ============================================================================
+    // Notification Delivery Idempotency
+    // ============================================================================
+
+    /// Records a notification delivery attempt idempotently.
+    ///
+    /// If the same `idempotency_key` has already been used for a delivery
+    /// operation, the previously stored result is returned and no new delivery
+    /// is created. Otherwise a new delivery record is persisted and its
+    /// identifier is returned.
+    ///
+    /// Concurrent duplicate requests are handled safely: the first caller to
+    /// commit the idempotency record wins, and subsequent callers observe the
+    /// stored result.
+    pub fn deliver_notification_idempotent(
+        env: Env,
+        idempotency_key: BytesN<32>,
+        notification_id: BytesN<32>,
+        recipient: Address,
+    ) -> BytesN<32> {
+        idempotency_logic::deliver_notification_idempotent(
+            env,
+            idempotency_key,
+            notification_id,
+            recipient,
+        )
+        .unwrap()
+    }
+
+    /// Returns the stored idempotency record for `idempotency_key`, if any.
+    pub fn get_idempotency_record(
+        env: Env,
+        idempotency_key: BytesN<32>,
+    ) -> Option<base::idempotency::IdempotencyRecord> {
+        idempotency_logic::get_idempotency_record(env, idempotency_key)
+    }
+
+    /// Returns whether an idempotency key has already been used.
+    pub fn is_idempotency_key_used(env: Env, idempotency_key: BytesN<32>) -> bool {
+        idempotency_logic::is_idempotency_key_used(env, idempotency_key)
+    }
 }
 
 #[cfg(test)]
@@ -812,6 +856,7 @@ mod tests {
     mod notification_version_test;
     mod metadata_validation_test;
     mod archive_notification_test;
+    mod idempotency_test;
 
     // ============================================================================
     // Notification Channel Subscriptions

@@ -11,6 +11,7 @@ import {
   verifyWebhookRequest,
 } from './webhook-verifier';
 import logger from '../utils/logger';
+import { WebhookReplayCache } from './webhook-replay-cache';
 
 jest.mock('../utils/logger', () => ({
   __esModule: true,
@@ -362,13 +363,13 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     { id: 'key-beta', secret: 'whsec_beta_def456' },
   ];
 
-  it('AUTHENTICATES a valid timestamp-bound request and logs success', () => {
+  it('AUTHENTICATES a valid timestamp-bound request and logs success', async () => {
     const payload = '{"event":"delivery","id":"evt-1"}';
     const key = SECRETS[0];
     const ts = Math.floor(Date.now() / 1000).toString();
     const sig = computeWebhookSignature(payload, key.secret, ts);
 
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': sig,
         'x-webhook-key-id': key.id,
@@ -389,8 +390,8 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     );
   });
 
-  it('REJECTS with 401 when signature header is entirely missing', () => {
-    const outcome = verifyWebhookRequest({
+  it('REJECTS with 401 when signature header is entirely missing', async () => {
+    const outcome = await verifyWebhookRequest({
       headers: { 'x-webhook-key-id': 'key-alpha' },
       rawBody: '{}',
       secrets: SECRETS,
@@ -402,10 +403,10 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(mockLogger.warn).toHaveBeenCalled();
   });
 
-  it('REJECTS with 401 when key-id header is missing', () => {
+  it('REJECTS with 401 when key-id header is missing', async () => {
     const payload = '{}';
     const sig = computeWebhookSignature(payload, SECRETS[0].secret);
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: { 'x-webhook-signature': sig },
       rawBody: payload,
       secrets: SECRETS,
@@ -417,10 +418,10 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(mockLogger.warn).toHaveBeenCalled();
   });
 
-  it('REJECTS with 401 AUTH_UNKNOWN_KEY_ID for a key-id not in the secrets array', () => {
+  it('REJECTS with 401 AUTH_UNKNOWN_KEY_ID for a key-id not in the secrets array', async () => {
     const payload = '{}';
     const sig = computeWebhookSignature(payload, 'rogue-secret');
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': sig,
         'x-webhook-key-id': 'key-does-not-exist',
@@ -434,11 +435,11 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(outcome.errorCode).toBe('AUTH_UNKNOWN_KEY_ID');
   });
 
-  it('REJECTS with 401 AUTH_INVALID_SIGNATURE when HMAC does not match (wrong secret)', () => {
+  it('REJECTS with 401 AUTH_INVALID_SIGNATURE when HMAC does not match (wrong secret)', async () => {
     const payload = '{"malicious":true}';
     const forgedSig = computeWebhookSignature(payload, 'wrong-secret');
     const ts = Math.floor(Date.now() / 1000).toString();
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': forgedSig,
         'x-webhook-key-id': SECRETS[0].id,
@@ -453,11 +454,11 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(outcome.errorCode).toBe('AUTH_INVALID_SIGNATURE');
   });
 
-  it('REJECTS with 401 AUTH_TIMESTAMP_EXPIRED for a stale timestamp bound to a valid HMAC', () => {
+  it('REJECTS with 401 AUTH_TIMESTAMP_EXPIRED for a stale timestamp bound to a valid HMAC', async () => {
     const payload = '{"event":"old"}';
     const oldTs = (Math.floor(Date.now() / 1000) - 1000).toString();
     const sig = computeWebhookSignature(payload, SECRETS[1].secret, oldTs);
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': sig,
         'x-webhook-key-id': SECRETS[1].id,
@@ -473,8 +474,8 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
   });
 
-  it('REJECTS with 401 AUTH_INVALID_SIGNATURE_FORMAT when prefix is wrong', () => {
-    const outcome = verifyWebhookRequest({
+  it('REJECTS with 401 AUTH_INVALID_SIGNATURE_FORMAT when prefix is wrong', async () => {
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': 'md5=deadbeef',
         'x-webhook-key-id': SECRETS[0].id,
@@ -488,8 +489,8 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(outcome.errorCode).toBe('AUTH_INVALID_SIGNATURE_FORMAT');
   });
 
-  it('logs source IP and correlation ID on auth failure for audit trail', () => {
-    verifyWebhookRequest({
+  it('logs source IP and correlation ID on auth failure for audit trail', async () => {
+    await verifyWebhookRequest({
       headers: { 'x-webhook-key-id': SECRETS[0].id },
       rawBody: '{}',
       secrets: SECRETS,
@@ -507,12 +508,12 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     );
   });
 
-  it('REJECTS payload tampering — attacker modifies body after valid signature computed', () => {
+  it('REJECTS payload tampering — attacker modifies body after valid signature computed', async () => {
     const originalBody = '{"action":"transfer","amount":10}';
     const tamperedBody = '{"action":"transfer","amount":1000000}';
     const ts = Math.floor(Date.now() / 1000).toString();
     const sig = computeWebhookSignature(originalBody, SECRETS[0].secret, ts);
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': sig,
         'x-webhook-key-id': SECRETS[0].id,
@@ -526,14 +527,21 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(outcome.errorCode).toBe('AUTH_INVALID_SIGNATURE');
   });
 
-  it('REJECTS signature forged for a different key-id (even if HMAC is valid for another secret)', () => {
+  it('REJECTS signature forged for a different key-id (even if HMAC is valid for another secret)', async () => {
     const payload = '{}';
+    // Signed with key-beta's secret but presented as key-alpha.
+    // A timestamp is included so the request reaches the HMAC comparison and
+    // this test keeps exercising the key-swap path specifically.
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const sig = computeWebhookSignature(payload, SECRETS[1].secret, ts);
+    const outcome = verifyWebhookRequest({
     // Signed with key-beta's secret but presented as key-alpha
     const sig = computeWebhookSignature(payload, SECRETS[1].secret);
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': sig,
         'x-webhook-key-id': SECRETS[0].id,
+        'x-webhook-timestamp': ts,
       },
       rawBody: payload,
       secrets: SECRETS,
@@ -543,8 +551,8 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(outcome.errorCode).toBe('AUTH_INVALID_SIGNATURE');
   });
 
-  it('rejects empty-string signature with missing_signature_header flow', () => {
-    const outcome = verifyWebhookRequest({
+  it('rejects empty-string signature with missing_signature_header flow', async () => {
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': '',
         'x-webhook-key-id': SECRETS[0].id,
@@ -557,11 +565,11 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     expect(outcome.statusCode).toBe(401);
   });
 
-  it('uses default maxAgeSeconds=300 when not explicitly provided', () => {
+  it('uses default maxAgeSeconds=300 when not explicitly provided', async () => {
     const payload = '{}';
     const ts = Math.floor(Date.now() / 1000).toString();
     const sig = computeWebhookSignature(payload, SECRETS[0].secret, ts);
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': sig,
         'x-webhook-key-id': SECRETS[0].id,
@@ -571,5 +579,197 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
       secrets: SECRETS,
     });
     expect(outcome.authenticated).toBe(true);
+  });
+});
+
+describe('Issue #853 — replay protection at the request boundary', () => {
+  const SECRETS = [{ id: 'key-alpha', secret: 'whsec_alpha_abc123' }];
+  const BODY = '{"action":"transfer","amount":10}';
+
+  function signedHeaders(body: string, timestamp: string | null, secret = 'whsec_alpha_abc123') {
+    return {
+      'x-webhook-signature': computeWebhookSignature(body, secret, timestamp ?? undefined),
+      'x-webhook-key-id': 'key-alpha',
+      ...(timestamp === null ? {} : { 'x-webhook-timestamp': timestamp }),
+    };
+  }
+
+  it('REJECTS a request that carries no timestamp (would otherwise replay forever)', () => {
+    const outcome = verifyWebhookRequest({
+      headers: signedHeaders(BODY, null),
+      rawBody: BODY,
+      secrets: SECRETS,
+    });
+
+    expect(outcome.authenticated).toBe(false);
+    expect(outcome.statusCode).toBe(401);
+    expect(outcome.errorCode).toBe('AUTH_MISSING_TIMESTAMP');
+  });
+
+  it('ACCEPTS the same timestamp-less request when legacy mode is opted into', () => {
+    const outcome = verifyWebhookRequest({
+      headers: signedHeaders(BODY, null),
+      rawBody: BODY,
+      secrets: SECRETS,
+      requireTimestamp: false,
+    });
+    expect(outcome.authenticated).toBe(true);
+  });
+
+  it('REJECTS a captured request replayed after the freshness window has passed', () => {
+    const realNow = Date.now;
+    try {
+      const ts = String(Math.floor(Date.now() / 1000));
+      const headers = signedHeaders(BODY, ts);
+
+      const first = verifyWebhookRequest({
+        headers,
+        rawBody: BODY,
+        secrets: SECRETS,
+        maxAgeSeconds: 300,
+      });
+      expect(first.authenticated).toBe(true);
+
+      // Replay one hour later with the exact same captured headers.
+      Date.now = () => realNow() + 60 * 60 * 1000;
+      const replay = verifyWebhookRequest({
+        headers,
+        rawBody: BODY,
+        secrets: SECRETS,
+        maxAgeSeconds: 300,
+      });
+
+      expect(replay.authenticated).toBe(false);
+      expect(replay.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('REJECTS a verbatim replay inside the freshness window via the replay cache', () => {
+    const replayCache = new WebhookReplayCache();
+    const ts = String(Math.floor(Date.now() / 1000));
+    const headers = signedHeaders(BODY, ts);
+
+    const first = verifyWebhookRequest({
+      headers,
+      rawBody: BODY,
+      secrets: SECRETS,
+      replayCache,
+    });
+    expect(first.authenticated).toBe(true);
+
+    // Same signature, no Idempotency-Key header — the pre-existing replay
+    // defence the attacker would trivially bypass.
+    const second = verifyWebhookRequest({
+      headers,
+      rawBody: BODY,
+      secrets: SECRETS,
+      replayCache,
+    });
+
+    expect(second.authenticated).toBe(false);
+    expect(second.statusCode).toBe(409);
+    expect(second.errorCode).toBe('AUTH_REPLAY_DETECTED');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('replayed request'),
+      expect.objectContaining({ keyId: 'key-alpha' })
+    );
+  });
+
+  it('replay cache does not reject a genuinely new request from the same key', () => {
+    const replayCache = new WebhookReplayCache();
+    const ts = String(Math.floor(Date.now() / 1000));
+
+    const a = verifyWebhookRequest({
+      headers: signedHeaders(BODY, ts),
+      rawBody: BODY,
+      secrets: SECRETS,
+      replayCache,
+    });
+    const other = '{"action":"transfer","amount":20}';
+    const b = verifyWebhookRequest({
+      headers: signedHeaders(other, ts),
+      rawBody: other,
+      secrets: SECRETS,
+      replayCache,
+    });
+
+    expect(a.authenticated).toBe(true);
+    expect(b.authenticated).toBe(true);
+  });
+
+  it('does not record invalid signatures in the replay cache', () => {
+    const replayCache = new WebhookReplayCache();
+    const ts = String(Math.floor(Date.now() / 1000));
+
+    const bad = verifyWebhookRequest({
+      headers: signedHeaders(BODY, ts, 'some_other_secret'),
+      rawBody: BODY,
+      secrets: SECRETS,
+      replayCache,
+    });
+    expect(bad.authenticated).toBe(false);
+
+    // The genuine request must still be accepted afterwards.
+    const good = verifyWebhookRequest({
+      headers: signedHeaders(BODY, ts),
+      rawBody: BODY,
+      secrets: SECRETS,
+      replayCache,
+    });
+    expect(good.authenticated).toBe(true);
+  });
+
+  it('REJECTS a non-integer timestamp instead of silently truncating it', () => {
+    const ts = `${Math.floor(Date.now() / 1000)}garbage`;
+    const outcome = verifyWebhookRequest({
+      headers: signedHeaders(BODY, ts),
+      rawBody: BODY,
+      secrets: SECRETS,
+    });
+
+    expect(outcome.authenticated).toBe(false);
+    expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+  });
+
+  it('REJECTS a fractional timestamp', () => {
+    const ts = `${Math.floor(Date.now() / 1000)}.9`;
+    const outcome = verifyWebhookRequest({
+      headers: signedHeaders(BODY, ts),
+      rawBody: BODY,
+      secrets: SECRETS,
+    });
+    expect(outcome.authenticated).toBe(false);
+    expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+  });
+
+  it('accepts an uppercase hex signature (hex is case-insensitive)', () => {
+    const ts = String(Math.floor(Date.now() / 1000));
+    const headers = signedHeaders(BODY, ts);
+    const outcome = verifyWebhookRequest({
+      headers: {
+        ...headers,
+        'x-webhook-signature': headers['x-webhook-signature'].toUpperCase(),
+      },
+      rawBody: BODY,
+      secrets: SECRETS,
+    });
+
+    expect(outcome.authenticated).toBe(true);
+  });
+
+  it('still rejects a genuine signature whose hex case was altered', () => {
+    const ts = String(Math.floor(Date.now() / 1000));
+    const headers = signedHeaders(BODY, ts);
+    const tampered = headers['x-webhook-signature'].replace(/.$/, (c) =>
+      c === 'a' ? 'b' : 'a'
+    );
+    const outcome = verifyWebhookRequest({
+      headers: { ...headers, 'x-webhook-signature': tampered },
+      rawBody: BODY,
+      secrets: SECRETS,
+    });
+    expect(outcome.authenticated).toBe(false);
   });
 });

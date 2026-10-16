@@ -377,6 +377,19 @@ curl http://localhost:8787/api/events
 curl http://localhost:8787/api/schedule/stats
 ```
 
+#### HTTP Response Security Headers
+
+The listener API and dashboard's Vite development and preview servers set `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `Referrer-Policy: strict-origin-when-cross-origin`. The listener sends `Strict-Transport-Security` only when `NODE_ENV=production`; it is omitted during local HTTP development. The listener does not set a Content Security Policy because its policy must account for the dashboard's API and SSE deployment origins.
+
+Check local responses with:
+
+```bash
+curl -sSI http://localhost:8787/health
+curl -sSI http://localhost:5173/
+```
+
+Both should include the three baseline headers above and omit `Strict-Transport-Security`.
+
 ---
 
 ### Dashboard (React/TypeScript)
@@ -426,6 +439,8 @@ npm run build
 ```bash
 npm run preview
 ```
+
+Vite preview applies the same baseline response headers as the development server. These settings do not configure a production static host; configure the equivalent headers with the selected CDN or web server.
 
 ---
 

@@ -7,7 +7,7 @@ const DEFAULT_MAX_EVENTS = 10000;
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export class EventRegistry {
-  private events: DisplayEvent[] = [];
+  private readonly events = new Map<string, DisplayEvent>();
   private readonly maxEvents: number;
   private ttlMs: number;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -16,17 +16,26 @@ export class EventRegistry {
   private maxLedgerSeen: number | null = null;
 
   constructor(maxEvents = DEFAULT_MAX_EVENTS, ttlMs = DEFAULT_TTL_MS) {
+    if (!Number.isInteger(maxEvents) || maxEvents < 1) {
+      throw new Error('maxEvents must be a positive integer');
+    }
+    if (!Number.isFinite(ttlMs) || ttlMs < 1) {
+      throw new Error('ttlMs must be a positive number');
+    }
     this.maxEvents = maxEvents;
-    this.ttlMs = ttlMs;
-  }
-
-  setTtlMs(ttlMs: number): void {
     this.ttlMs = ttlMs;
   }
 
   startCleanup(intervalMs = 60_000): void {
     if (this.cleanupTimer) return;
     this.cleanupTimer = setInterval(() => this.pruneExpired(), intervalMs);
+  }
+
+  setTtlMs(ttlMs: number): void {
+    if (!Number.isFinite(ttlMs) || ttlMs < 1) {
+      throw new Error('ttlMs must be a positive number');
+    }
+    this.ttlMs = ttlMs;
   }
 
   stopCleanup(): void {
@@ -38,16 +47,26 @@ export class EventRegistry {
 
   pruneExpired(): number {
     const cutoff = Date.now() - this.ttlMs;
-    const before = this.events.length;
-    this.events = this.events.filter((e) => e.receivedAt >= cutoff);
-    const removed = before - this.events.length;
+    let removed = 0;
+    for (const [key, event] of this.events) {
+      if (event.receivedAt < cutoff) {
+        this.events.delete(key);
+        removed++;
+      }
+    }
     if (removed > 0) {
-      logger.info('Pruned expired events from registry', { removed, remaining: this.events.length });
+      logger.info('Pruned expired events from registry', { removed, remaining: this.events.size });
     }
     return removed;
   }
 
   addFromInput(input: RegistryEventInput): DisplayEvent {
+    const eventKey = this.getEventKey(input.eventId, input.contractAddress);
+    const existing = this.events.get(eventKey);
+    if (existing) {
+      return existing;
+    }
+
     const topic = formatScValArray(input.topic);
     const displayEvent: DisplayEvent = {
       eventId: input.eventId,
@@ -61,15 +80,18 @@ export class EventRegistry {
       receivedAt: Date.now(),
     };
 
-    this.events.push(displayEvent);
+    this.events.set(eventKey, displayEvent);
     this.lastIngestedLedger = displayEvent.ledger;
     this.lastIngestedAt = displayEvent.receivedAt;
     this.maxLedgerSeen =
-      this.maxLedgerSeen === null ? displayEvent.ledger : Math.max(this.maxLedgerSeen, displayEvent.ledger);
+      this.maxLedgerSeen === null
+        ? displayEvent.ledger
+        : Math.max(this.maxLedgerSeen, displayEvent.ledger);
 
-    if (this.events.length > this.maxEvents) {
-      const evicted = this.events.length - this.maxEvents;
-      this.events = this.events.slice(this.events.length - this.maxEvents);
+    if (this.events.size > this.maxEvents) {
+      const evicted = this.events.size - this.maxEvents;
+      const oldestKeys = Array.from(this.events.keys()).slice(0, evicted);
+      oldestKeys.forEach((key) => this.events.delete(key));
       logger.warn('Event registry at capacity, evicting oldest events', {
         maxEvents: this.maxEvents,
         evicted,
@@ -80,14 +102,29 @@ export class EventRegistry {
   }
 
   getEvents(limit?: number): DisplayEvent[] {
-    if (limit === undefined || limit >= this.events.length) {
-      return [...this.events];
+    const events = Array.from(this.events.values());
+    if (limit === undefined || limit >= events.length) {
+      return events;
     }
-    return this.events.slice(this.events.length - limit);
+    return events.slice(events.length - limit);
+  }
+
+  /**
+   * Returns all events whose ledger number falls within [startLedger, endLedger] (inclusive).
+   * The caller is responsible for validating the range before calling this method.
+   */
+  getEventsByLedgerRange(startLedger: number, endLedger: number): DisplayEvent[] {
+    return Array.from(this.events.values()).filter(
+      (event) => event.ledger >= startLedger && event.ledger <= endLedger,
+    );
   }
 
   count(): number {
-    return this.events.length;
+    return this.events.size;
+  }
+
+  has(eventId: string, contractAddress: string): boolean {
+    return this.events.has(this.getEventKey(eventId, contractAddress));
   }
 
   /**
@@ -107,13 +144,15 @@ export class EventRegistry {
   }
 
   clear(): void {
-    this.events = [];
+    this.events.clear();
     this.lastIngestedLedger = null;
     this.lastIngestedAt = null;
     this.maxLedgerSeen = null;
   }
+
+  private getEventKey(eventId: string, contractAddress: string): string {
+    return `${contractAddress}:${eventId}`;
+  }
 }
 
 export const eventRegistry = new EventRegistry();
-
-

@@ -8,6 +8,9 @@ import { axe, toHaveNoViolations } from 'jest-axe';
 import { Modal } from '../components/Modal';
 import { ToastProvider } from '../context/ToastContext';
 import { MobileNavDrawer } from '../components/MobileNavDrawer';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { DashboardLayout } from '../layouts/DashboardLayout';
+import { useRef } from 'react';
 
 expect.extend(toHaveNoViolations);
 
@@ -71,5 +74,49 @@ describe('MobileNavDrawer accessibility (#394, #396)', () => {
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
+  });
+});
+
+describe('ThemeToggle accessibility (#674)', () => {
+  it('icon-only toggle has an accessible name', () => {
+    const { getByRole } = render(<ThemeToggle theme="dark" onToggle={() => {}} />);
+    expect(getByRole('button', { name: /switch to light theme/i })).toBeInTheDocument();
+  });
+
+  it('has no axe violations', async () => {
+    const { container } = render(<ThemeToggle theme="light" onToggle={() => {}} />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+});
+
+describe('DashboardLayout landmarks (#676)', () => {
+  function LayoutHarness() {
+    const tabListRef = useRef<HTMLDivElement>(null);
+    const hamburgerRef = useRef<HTMLButtonElement>(null);
+    return (
+      <DashboardLayout
+        activeTab="explorer"
+        onSelectTab={() => {}}
+        drawerOpen={false}
+        onDrawerOpen={() => {}}
+        onDrawerClose={() => {}}
+        tabListRef={tabListRef}
+        hamburgerRef={hamburgerRef}
+        onTabKeyDown={() => {}}
+        themeBar={<span>tools</span>}
+      >
+        <p>Panel content</p>
+      </DashboardLayout>
+    );
+  }
+
+  it('exposes header, nav, main, aside, and footer landmarks', () => {
+    const { getByRole } = render(<LayoutHarness />);
+    expect(getByRole('banner')).toBeInTheDocument();
+    expect(getByRole('navigation', { name: /primary dashboard navigation/i })).toBeInTheDocument();
+    expect(getByRole('complementary', { name: /sidebar navigation/i })).toBeInTheDocument();
+    expect(getByRole('main')).toBeInTheDocument();
+    expect(getByRole('contentinfo')).toBeInTheDocument();
   });
 });

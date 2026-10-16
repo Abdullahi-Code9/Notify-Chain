@@ -280,6 +280,22 @@ describe('1. Notification creation', () => {
     const row = await repository.getById(id);
     expect(row!.status).toBe(NotificationStatus.CANCELLED);
   });
+
+  it('cancels a scheduled notification with a reason', async () => {
+    const id = await api.scheduleNotification({
+      payload: { message: 'cancel me with reason' },
+      notificationType: NotificationType.DISCORD,
+      targetRecipient: NotificationFixtureBuilder.constants.webhookUrl,
+      executeAt: new Date('2026-06-24T13:00:00.000Z'),
+    });
+
+    const cancelled = await api.cancelNotification(id, 'Admin override');
+    expect(cancelled).toBe(true);
+
+    const row = await repository.getById(id);
+    expect(row!.status).toBe(NotificationStatus.CANCELLED);
+    expect(row!.cancellationReason).toBe('Admin override');
+  });
 });
 
 // ===========================================================================

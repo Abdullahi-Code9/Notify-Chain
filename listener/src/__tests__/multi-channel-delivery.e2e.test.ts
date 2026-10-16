@@ -242,11 +242,11 @@ describe('Multi-channel notification delivery (e2e)', () => {
 
       // The service logs the underlying webhook failure with status detail...
       expect(logger.error).toHaveBeenCalledWith(
-        'Discord webhook failed',
+        'Discord webhook delivery failed',
         expect.objectContaining({
           webhookId: 'ops',
-          status: 429,
-          statusText: 'Too Many Requests',
+          httpStatus: 429,
+          httpCategory: 'rate_limited',
           requestId: 'req-logged',
           eventId: 'event-logged',
         })
@@ -267,7 +267,7 @@ describe('Multi-channel notification delivery (e2e)', () => {
 
       expect(results.audit).toBe(false);
       expect(logger.error).toHaveBeenCalledWith(
-        'Error sending Discord notification',
+        'Discord webhook request error',
         expect.objectContaining({ webhookId: 'audit', eventId: 'event-network' })
       );
     });

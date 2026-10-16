@@ -150,7 +150,10 @@ export class NotificationTemplateCache {
    * @notice Check if a template is currently cached
    */
   has(templateId: string): boolean {
-    return this.cache.has(templateId);
+    // @types/node-cache (stub, v4.1) predates the real library's `.has()`
+    // method, so the cast is required even though it exists at runtime
+    // (see src/__mocks__/node-cache.ts, used in tests via moduleNameMapper).
+    return (this.cache as unknown as { has(key: string): boolean }).has(templateId);
   }
 }
 

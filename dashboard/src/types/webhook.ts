@@ -3,9 +3,21 @@
  */
 
 export type WebhookStatusCode =
-  | 200 | 201 | 204
-  | 400 | 401 | 403 | 404 | 408 | 409 | 422 | 429
-  | 500 | 502 | 503 | 504;
+  | 200
+  | 201
+  | 204
+  | 400
+  | 401
+  | 403
+  | 404
+  | 408
+  | 409
+  | 422
+  | 429
+  | 500
+  | 502
+  | 503
+  | 504;
 
 export type WebhookDeliveryStatus = 'success' | 'failed' | 'pending' | 'retrying';
 

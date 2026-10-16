@@ -63,10 +63,7 @@ export function UserActivityTimeline() {
     void load();
   }, [load]);
 
-  const chronological = useMemo(
-    () => sortUserActivityChronologically(events),
-    [events]
-  );
+  const chronological = useMemo(() => sortUserActivityChronologically(events), [events]);
 
   return (
     <section className="user-activity" aria-labelledby="user-activity-title">

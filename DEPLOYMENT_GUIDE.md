@@ -7,6 +7,7 @@ This guide covers deploying NotifyChain across three environments: **local**, **
 > - Smart contract deploy steps → [`DEPLOYMENT_PLAYBOOK.md`](DEPLOYMENT_PLAYBOOK.md)
 > - Contract upgrade procedure → [`CONTRACT_UPGRADE_GUIDE.md`](CONTRACT_UPGRADE_GUIDE.md)
 > - Troubleshooting → [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
+> - Database backup and restore → [`docs/DATABASE_BACKUP_RESTORE.md`](docs/DATABASE_BACKUP_RESTORE.md)
 
 ---
 
@@ -256,7 +257,7 @@ npm run build
 #### 4. Run the health check
 
 ```bash
-bash scripts/health-check.sh https://staging-api.your-domain.com/health
+curl https://staging-api.your-domain.com/health
 ```
 
 ---
@@ -355,6 +356,12 @@ RATE_LIMIT_MAX_REQUESTS=60
 SCHEDULER_ENABLED=true
 RETRY_SCHEDULER_ENABLED=true
 ```
+
+### Production HTTP response headers
+
+With `NODE_ENV=production`, the listener includes `Strict-Transport-Security: max-age=31536000` along with its baseline security headers. Serve the API through HTTPS and configure the TLS-terminating proxy or platform to redirect HTTP to HTTPS; browsers ignore HSTS received over plain HTTP. HSTS is not enabled in local development, and the listener does not add `includeSubDomains` or `preload` because those settings require a separate domain-wide commitment.
+
+The dashboard's Vite development and preview servers set baseline headers, but those settings do not carry over to static production hosting. Configure `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, and HSTS at the production CDN or web server. Set the dashboard's `VITE_EVENTS_API_URL` to the HTTPS API endpoint; `EVENTS_API_CORS_ORIGIN` controls CORS and is not used to determine HSTS.
 
 ### 3. Run database migrations
 

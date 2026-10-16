@@ -30,9 +30,7 @@ function formatDate(timestamp: number): string {
 // ──────────────────────────────────────────────────────────────────
 
 function FormatBadge({ format }: { format: NotificationExport['format'] }) {
-  return (
-    <span className={`format-badge format-badge--${format.toLowerCase()}`}>{format}</span>
-  );
+  return <span className={`format-badge format-badge--${format.toLowerCase()}`}>{format}</span>;
 }
 
 function StatusBadge({ status }: { status: NotificationExport['status'] }) {
@@ -50,9 +48,7 @@ function StatusBadge({ status }: { status: NotificationExport['status'] }) {
       </>
     );
 
-  return (
-    <span className={`status-badge status-badge--${status.toLowerCase()}`}>{label}</span>
-  );
+  return <span className={`status-badge status-badge--${status.toLowerCase()}`}>{label}</span>;
 }
 
 function DownloadButton({

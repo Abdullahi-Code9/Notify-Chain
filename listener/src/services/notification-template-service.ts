@@ -1,10 +1,8 @@
 import {
   CreateNotificationTemplateInput,
   AuditedNotificationTemplate,
-  CreateNotificationTemplateInputOld,
-  NotificationTemplateOld,
   TemplateAuditRecord,
-  UpdateNotificationTemplateInputOld,
+  UpdateNotificationTemplateInput,
 } from '../types/notification-template';
 import { NotificationTemplateRepository } from './notification-template-repository';
 import { getTemplateCache, NotificationTemplateCache } from './notification-template-cache';
@@ -27,14 +25,12 @@ export class NotificationTemplateService {
   ) {}
 
   async create(input: CreateNotificationTemplateInput): Promise<AuditedNotificationTemplate> {
-  async create(input: CreateNotificationTemplateInputOld): Promise<NotificationTemplateOld> {
     const template = await this.repository.create(input);
     this.cache.set(String(template.id ?? ''), template);
     return template;
   }
 
   async listAll(): Promise<AuditedNotificationTemplate[]> {
-  async listAll(): Promise<NotificationTemplateOld[]> {
     return this.repository.listAll();
   }
 
@@ -49,7 +45,6 @@ export class NotificationTemplateService {
    */
   renderTemplate(
     template: AuditedNotificationTemplate,
-    template: NotificationTemplateOld,
     variables: Record<string, string>,
   ): { subject?: string; body: string } {
     const declared = template.variables ?? [];
@@ -71,24 +66,18 @@ export class NotificationTemplateService {
   }
 
   async getById(templateId: string): Promise<AuditedNotificationTemplate | undefined> {
-  async getById(templateId: string): Promise<NotificationTemplateOld | undefined> {
     return this.cache.getOrLoad(templateId, () => this.repository.getById(templateId));
   }
 
   async update(
     templateId: string,
-    input: UpdateNotificationTemplateInputOld,
+    input: UpdateNotificationTemplateInput,
     actor: string,
   ): Promise<AuditedNotificationTemplate> {
     return this.repository.update(templateId, input, actor);
   }
 
   async getAll(): Promise<AuditedNotificationTemplate[]> {
-  ): Promise<NotificationTemplateOld> {
-    return this.repository.update(templateId, input, actor);
-  }
-
-  async getAll(): Promise<NotificationTemplateOld[]> {
     return this.repository.getAll();
   }
 

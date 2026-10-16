@@ -1,4 +1,4 @@
-cliinterface ExportHistorySkeletonProps {
+interface ExportHistorySkeletonProps {
   rows?: number;
 }
 
@@ -22,10 +22,16 @@ export function ExportHistorySkeleton({ rows = 5 }: ExportHistorySkeletonProps) 
             <th scope="col">Name</th>
             <th scope="col">Format</th>
             <th scope="col">Created At</th>
-            <th scope="col" style={{ textAlign: 'right' }}>Records</th>
-            <th scope="col" style={{ textAlign: 'right' }}>Size</th>
+            <th scope="col" style={{ textAlign: 'right' }}>
+              Records
+            </th>
+            <th scope="col" style={{ textAlign: 'right' }}>
+              Size
+            </th>
             <th scope="col">Status</th>
-            <th scope="col" style={{ textAlign: 'center' }}>Actions</th>
+            <th scope="col" style={{ textAlign: 'center' }}>
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -62,4 +68,3 @@ export function ExportHistorySkeleton({ rows = 5 }: ExportHistorySkeletonProps) 
     </div>
   );
 }
-

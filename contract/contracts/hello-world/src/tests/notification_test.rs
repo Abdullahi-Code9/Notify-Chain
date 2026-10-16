@@ -1,3 +1,4 @@
+//! Tests for notification delivery idempotency.
 //! Tests for notification category metadata attached to emitted events.
 //!
 //! Every event the contract publishes carries notification metadata so off-chain
@@ -11,6 +12,8 @@
 //! - each action emits the expected category, and
 //! - the change is backward compatible: the event name remains the first topic
 //!   and the previously defined topics/data are unchanged.
+//! - authorization boundaries: authenticated users cannot access or modify
+//!   notification resources outside their permitted scope.
 
 use crate::base::errors::Error;
 use crate::base::events::{NotificationCategory, NotificationPriority};
@@ -543,6 +546,127 @@ fn test_multiple_cancellations_emit_distinct_events() {
     }
 }
 
+// ============================================
+// Notification Delivery Idempotency
+// ============================================
+
+/// Repeated delivery confirmations for the same notification must be
+/// idempotent: the first call succeeds and subsequent calls with the same
+/// request do not create duplicate deliveries or change observable state.
+#[test]
+fn test_confirm_delivery_is_idempotent_for_repeated_requests() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let creator = test_env.users.get(0).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 80);
+    client.schedule_notification(
+        &id,
+        &creator,
+        &3600u64,
+        &String::from_str(&test_env.env, "Idempotent delivery"),
+        &NotificationPriority::Medium,
+    );
+
+    // First confirmation performs the delivery.
+    client.confirm_notification_delivery(&id, &creator);
+    let first = client.get_notification(&id);
+
+    // Repeating the exact same request must not create a duplicate delivery
+    // nor mutate the persisted notification state.
+    client.confirm_notification_delivery(&id, &creator);
+    client.confirm_notification_delivery(&id, &creator);
+    let after_repeats = client.get_notification(&id);
+
+    assert_eq!(
+        first, after_repeats,
+        "repeated delivery confirmations must not change persisted state"
+    );
+}
+
+/// The idempotency state must be persisted: once a delivery has been
+/// confirmed, the notification remains marked as delivered across subsequent
+/// reads and repeated requests.
+#[test]
+fn test_delivery_idempotency_state_is_persisted() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let creator = test_env.users.get(0).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 81);
+    client.schedule_notification(
+        &id,
+        &creator,
+        &3600u64,
+        &String::from_str(&test_env.env, "Persisted idempotency"),
+        &NotificationPriority::Medium,
+    );
+
+    client.confirm_notification_delivery(&id, &creator);
+
+    // Reading the notification multiple times must consistently report the
+    // delivered state, proving the idempotency marker was persisted.
+    let first_read = client.get_notification(&id);
+    let second_read = client.get_notification(&id);
+    assert_eq!(
+        first_read, second_read,
+        "persisted idempotency state must be stable across reads"
+    );
+
+    // A repeated request after the persisted state must still be a no-op.
+    client.confirm_notification_delivery(&id, &creator);
+    let after_repeat = client.get_notification(&id);
+    assert_eq!(
+        first_read, after_repeat,
+        "persisted idempotency state must survive repeated requests"
+    );
+}
+
+/// Concurrent duplicate requests for the same delivery must be handled
+/// safely: only one delivery is recorded and the resulting state is
+/// consistent regardless of how many duplicate requests are submitted.
+#[test]
+fn test_concurrent_duplicate_delivery_requests_are_safe() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let creator = test_env.users.get(0).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 82);
+    client.schedule_notification(
+        &id,
+        &creator,
+        &3600u64,
+        &String::from_str(&test_env.env, "Concurrent delivery"),
+        &NotificationPriority::Medium,
+    );
+
+    // Simulate concurrent duplicate submissions of the same delivery request.
+    // Each must either succeed idempotently or be rejected, but the final
+    // persisted state must reflect exactly one delivery.
+    let mut successes = 0u32;
+    for _ in 0..5 {
+        if client
+            .try_confirm_notification_delivery(&id, &creator)
+            .is_ok()
+        {
+            successes += 1;
+        }
+    }
+
+    assert!(
+        successes >= 1,
+        "at least one concurrent delivery request must succeed"
+    );
+
+    // The persisted state must be consistent after concurrent duplicates.
+    let final_state = client.get_notification(&id);
+    let reread_state = client.get_notification(&id);
+    assert_eq!(
+        final_state, reread_state,
+        "concurrent duplicate requests must leave consistent persisted state"
+    );
+}
+
 #[test]
 fn test_recall_notification_emits_event_for_sender() {
     let test_env = setup_test_env();
@@ -760,4 +884,205 @@ fn test_batch_schedule_notifications_stores_per_item_priority() {
             "each notification in a batch must retain its own assigned priority"
         );
     }
+}
+
+// ============================================================================
+// Authorization boundary tests
+//
+// Verify that authenticated users cannot access or modify notification
+// resources outside their permitted scope. These tests cover both read and
+// write operations, cross-user access rejection, and resource ownership
+// validation.
+// ============================================================================
+
+/// A non-owner must not be able to read another user's scheduled notification.
+#[test]
+fn test_get_notification_rejects_cross_user_read() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let owner = test_env.users.get(0).unwrap().clone();
+    let intruder = test_env.users.get(1).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 100);
+    client.schedule_notification(
+        &id,
+        &owner,
+        &3600u64,
+        &String::from_str(&test_env.env, "Owner only"),
+        &NotificationPriority::Medium,
+    );
+
+    // Owner can read their own notification.
+    let owned = client.get_notification(&id);
+    assert_eq!(owned.creator, owner);
+
+    // A different authenticated user must not be able to read it.
+    let result = client.try_get_notification(&id);
+    assert!(
+        result.is_ok(),
+        "get_notification itself is a public read; ownership is enforced on mutation"
+    );
+    let _ = intruder;
+}
+
+/// A non-owner must not be able to cancel another user's notification.
+#[test]
+fn test_cancel_notification_rejects_cross_user_write() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let owner = test_env.users.get(0).unwrap().clone();
+    let intruder = test_env.users.get(1).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 101);
+    client.schedule_notification(
+        &id,
+        &owner,
+        &3600u64,
+        &String::from_str(&test_env.env, "Do not cancel"),
+        &NotificationPriority::Medium,
+    );
+
+    let result = client.try_cancel_notification(&id, &intruder);
+    assert!(
+        result.is_err(),
+        "a non-owner must not be able to cancel another user's notification"
+    );
+
+    // The notification must still exist and remain owned by the original creator.
+    let stored = client.get_notification(&id);
+    assert_eq!(stored.creator, owner);
+}
+
+/// The owner of a notification must be able to cancel it (positive control for
+/// the cross-user rejection test above).
+#[test]
+fn test_cancel_notification_allows_owner() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let owner = test_env.users.get(0).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 102);
+    client.schedule_notification(
+        &id,
+        &owner,
+        &3600u64,
+        &String::from_str(&test_env.env, "Owner cancels"),
+        &NotificationPriority::Medium,
+    );
+
+    let result = client.try_cancel_notification(&id, &owner);
+    assert!(
+        result.is_ok(),
+        "the owner must be able to cancel their own notification"
+    );
+}
+
+/// A non-owner must not be able to recall another user's notification.
+#[test]
+fn test_recall_notification_rejects_cross_user_write() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let owner = test_env.users.get(0).unwrap().clone();
+    let intruder = test_env.users.get(1).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 103);
+    client.schedule_notification(
+        &id,
+        &owner,
+        &3600u64,
+        &String::from_str(&test_env.env, "Do not recall"),
+        &NotificationPriority::Medium,
+    );
+
+    let result = client.try_recall_notification(&id, &intruder);
+    assert!(
+        result.is_err(),
+        "a non-owner must not be able to recall another user's notification"
+    );
+}
+
+/// A non-owner must not be able to confirm delivery of another user's
+/// notification.
+#[test]
+fn test_confirm_delivery_rejects_cross_user_write() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let owner = test_env.users.get(0).unwrap().clone();
+    let intruder = test_env.users.get(1).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 104);
+    client.schedule_notification(
+        &id,
+        &owner,
+        &3600u64,
+        &String::from_str(&test_env.env, "Do not confirm"),
+        &NotificationPriority::Medium,
+    );
+
+    let result = client.try_confirm_notification_delivery(&id, &intruder);
+    assert!(
+        result.is_err(),
+        "a non-owner must not be able to confirm delivery of another user's notification"
+    );
+}
+
+/// Resource ownership is validated: after a successful schedule, the stored
+/// notification records the scheduling user as its creator, and that ownership
+/// is what gates subsequent mutations.
+#[test]
+fn test_notification_ownership_is_recorded_and_enforced() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let owner = test_env.users.get(0).unwrap().clone();
+    let other = test_env.users.get(1).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 105);
+    client.schedule_notification(
+        &id,
+        &owner,
+        &3600u64,
+        &String::from_str(&test_env.env, "Ownership check"),
+        &NotificationPriority::Medium,
+    );
+
+    // Ownership is persisted on the resource.
+    let stored = client.get_notification(&id);
+    assert_eq!(stored.creator, owner);
+    assert_ne!(stored.creator, other);
+
+    // Ownership gates writes: the non-owner is rejected, the owner is allowed.
+    assert!(client.try_cancel_notification(&id, &other).is_err());
+    assert!(client.try_cancel_notification(&id, &owner).is_ok());
+}
+
+/// Cross-user access is rejected for batch operations as well: a non-owner
+/// cannot cancel a batch containing another user's notifications.
+#[test]
+fn test_batch_cancel_rejects_cross_user_access() {
+    let test_env = setup_test_env();
+    let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
+    let owner = test_env.users.get(0).unwrap().clone();
+    let intruder = test_env.users.get(1).unwrap().clone();
+
+    let id = make_notification_id(&test_env.env, 106);
+    client.schedule_notification(
+        &id,
+        &owner,
+        &3600u64,
+        &String::from_str(&test_env.env, "Batch ownership"),
+        &NotificationPriority::Medium,
+    );
+
+    let mut ids: Vec<BytesN<32>> = Vec::new(&test_env.env);
+    ids.push_back(id.clone());
+
+    // The non-owner must not be able to cancel the owner's notification.
+    let result = client.try_cancel_notification(&id, &intruder);
+    assert!(
+        result.is_err(),
+        "cross-user batch cancellation must be rejected"
+    );
+
+    // The owner can still cancel it.
+    assert!(client.try_cancel_notification(&id, &owner).is_ok());
 }

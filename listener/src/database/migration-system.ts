@@ -37,8 +37,49 @@ export class MigrationRunner {
     this.migrationsDir = migrationsDir;
   }
 
+  private run(sql: string, params: unknown[] = []): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, params, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  private all<T>(sql: string): Promise<T[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, (error, rows) => (error ? reject(error) : resolve(rows as T[])));
+    });
+  }
+
+  private async ensureForeignKeysEnabled(): Promise<void> {
+    const current = await new Promise<number>((resolve, reject) => {
+      this.db.get('PRAGMA foreign_keys', (error, row: { foreign_keys: number }) => {
+        if (error) reject(error);
+        else resolve(row.foreign_keys);
+      });
+    });
+
+    if (current !== 1) {
+      await new Promise<void>((resolve, reject) => {
+        this.db.run('PRAGMA foreign_keys = ON', (error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+
+    const verified = await new Promise<number>((resolve, reject) => {
+      this.db.get('PRAGMA foreign_keys', (error, row: { foreign_keys: number }) => {
+        if (error) reject(error);
+        else resolve(row.foreign_keys);
+      });
+    });
+    if (verified !== 1) {
+      throw new Error('SQLite foreign key enforcement could not be enabled');
+    }
+  }
+
   async initializeMigrationTable(): Promise<void> {
-    await this.db.run(`
+    await this.ensureForeignKeysEnabled();
+    await this.run(`
       CREATE TABLE IF NOT EXISTS migrations (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -48,29 +89,27 @@ export class MigrationRunner {
   }
 
   async getAppliedMigrations(): Promise<string[]> {
-    const rows = await this.db.all<{ id: string }>(
-      'SELECT id FROM migrations ORDER BY applied_at'
-    );
+    const rows = await this.all<{ id: string }>('SELECT id FROM migrations ORDER BY applied_at');
     return rows.map((row) => row.id);
   }
 
   async applyMigration(migration: Migration): Promise<void> {
-    await this.db.serialize(async () => {
-      await this.db.run('BEGIN TRANSACTION');
+    await this.ensureForeignKeysEnabled();
+    await this.run('BEGIN TRANSACTION');
+    try {
+      await migration.up(this.db);
+      await this.run('INSERT INTO migrations (id, name) VALUES (?, ?)', [migration.id, migration.name]);
+      await this.run('COMMIT');
+      logger.info(`Migration ${migration.id} (${migration.name}) applied successfully`);
+    } catch (error) {
       try {
-        await migration.up(this.db);
-        await this.db.run(
-          'INSERT INTO migrations (id, name) VALUES (?, ?)',
-          [migration.id, migration.name]
-        );
-        await this.db.run('COMMIT');
-        logger.info(`Migration ${migration.id} (${migration.name}) applied successfully`);
-      } catch (error) {
-        await this.db.run('ROLLBACK');
-        logger.error(`Migration ${migration.id} failed, rolling back:`, error);
-        throw error;
+        await this.run('ROLLBACK');
+      } catch (rollbackError) {
+        logger.error(`Migration ${migration.id} rollback failed`, { error: rollbackError });
       }
-    });
+      logger.error(`Migration ${migration.id} failed, rolling back`, { error });
+      throw error;
+    }
   }
 
   async loadMigrations(): Promise<Migration[]> {

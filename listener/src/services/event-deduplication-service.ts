@@ -44,11 +44,172 @@ export interface DeduplicationMetrics {
  * This service complements the in-memory NotificationDeduplicator by adding
  * long-term, permanent deduplication across service instances and restarts.
  */
+export interface EventClaimResult {
+  /** True when this caller now exclusively owns processing of the event. */
+  claimed: boolean;
+  /** True when the event had already been seen before (processed or in flight). */
+  alreadySeen: boolean;
+}
+
+/**
+ * How long an in-flight claim is honoured before another worker may take it
+ * over. Protects against a worker crashing between claim and completion,
+ * which would otherwise leave the event un-notified forever.
+ */
+export const DEFAULT_CLAIM_LEASE_SECONDS = 300;
+
 export class EventDeduplicationService {
   private db: Database;
+  private readonly claimLeaseSeconds: number;
 
-  constructor(database: Database) {
+  constructor(database: Database, options: { claimLeaseSeconds?: number } = {}) {
     this.db = database;
+    this.claimLeaseSeconds = options.claimLeaseSeconds ?? DEFAULT_CLAIM_LEASE_SECONDS;
+  }
+
+  /**
+   * Atomically claim an event for processing.
+   *
+   * Exactly one concurrent caller — across async tasks, poll cycles, retry
+   * paths and listener instances sharing the database — receives
+   * `claimed: true`. The claim is a single `INSERT … ON CONFLICT` statement
+   * keyed on the UNIQUE `fingerprint`, so there is no check-then-act window.
+   *
+   * A row left in `PROCESSING` longer than the claim lease (crashed worker) can
+   * be re-claimed; completed rows (`PROCESSED` / `SKIPPED` / `ERROR`) never can.
+   *
+   * On database error this fails open (`claimed: true`), matching
+   * `isDuplicate`'s availability-over-strictness policy.
+   */
+  async claimEvent(
+    eventId: string,
+    contractAddress: string,
+    ledgerNumber: number,
+    txHash: string | undefined,
+    eventType: string,
+  ): Promise<EventClaimResult> {
+    const fingerprint = generateFingerprint(eventId, contractAddress);
+    try {
+      const result = await this.db.run(
+        `
+        INSERT INTO processed_events (
+          event_id, contract_address, fingerprint, ledger_number, tx_hash,
+          event_type, notification_sent, status, is_reorg_duplicate, processed_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 0, 'PROCESSING', 0, CURRENT_TIMESTAMP)
+        ON CONFLICT(fingerprint) DO UPDATE SET
+          processed_at = CURRENT_TIMESTAMP,
+          ledger_number = excluded.ledger_number
+        WHERE processed_events.status = 'PROCESSING'
+          AND processed_events.processed_at < datetime('now', ?)
+        `,
+        [
+          eventId,
+          contractAddress,
+          fingerprint,
+          ledgerNumber,
+          txHash ?? null,
+          eventType,
+          `-${this.claimLeaseSeconds} seconds`,
+        ],
+      );
+
+      if (result.changes === 1) {
+        return { claimed: true, alreadySeen: false };
+      }
+      return { claimed: false, alreadySeen: true };
+    } catch (error) {
+      logger.error('Error claiming event for processing', {
+        eventId,
+        contractAddress,
+        error,
+      });
+      return { claimed: true, alreadySeen: false };
+    }
+  }
+
+  /**
+   * Finalise a claimed event. A single UPDATE, so the outcome written by the
+   * claiming worker cannot interleave with another writer's read-modify-write.
+   * Falls back to an insert when no claim row exists (claim failed open).
+   */
+  async completeEvent(
+    eventId: string,
+    contractAddress: string,
+    ledgerNumber: number,
+    txHash: string | undefined,
+    eventType: string,
+    notificationSent: boolean,
+    status: 'PROCESSED' | 'ERROR',
+    errorReason?: string,
+  ): Promise<void> {
+    const fingerprint = generateFingerprint(eventId, contractAddress);
+    try {
+      const result = await this.db.run(
+        `
+        UPDATE processed_events
+        SET status = ?, notification_sent = ?, error_reason = ?, processed_at = CURRENT_TIMESTAMP
+        WHERE fingerprint = ?
+        `,
+        [status, notificationSent ? 1 : 0, errorReason ?? null, fingerprint],
+      );
+
+      if (result.changes === 0) {
+        await this.db.run(
+          `
+          INSERT INTO processed_events (
+            event_id, contract_address, fingerprint, ledger_number, tx_hash,
+            event_type, notification_sent, status, error_reason, is_reorg_duplicate
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+          ON CONFLICT(fingerprint) DO NOTHING
+          `,
+          [eventId, contractAddress, fingerprint, ledgerNumber, txHash ?? null, eventType,
+            notificationSent ? 1 : 0, status, errorReason ?? null],
+        );
+      }
+
+      logger.info('Event processed and recorded', {
+        eventId,
+        contractAddress,
+        fingerprint,
+        ledgerNumber,
+        notificationSent,
+        status,
+      });
+    } catch (error) {
+      logger.error('Error completing processed event', { eventId, contractAddress, error });
+    }
+  }
+
+  /**
+   * Record that an already-seen event was detected again (reorg / overlapping
+   * poll / concurrent delivery). Increments the counter atomically in SQL and
+   * never overwrites the original processing outcome (`status`,
+   * `notification_sent`). In-flight claims are left untouched.
+   */
+  async recordRedetection(
+    eventId: string,
+    contractAddress: string,
+    ledgerNumber: number,
+  ): Promise<void> {
+    const fingerprint = generateFingerprint(eventId, contractAddress);
+    try {
+      await this.db.run(
+        `
+        UPDATE processed_events
+        SET
+          is_reorg_duplicate = 1,
+          reorg_detection_count = reorg_detection_count + 1,
+          last_redetected_at = CURRENT_TIMESTAMP,
+          ledger_number = ?
+        WHERE fingerprint = ? AND status != 'PROCESSING'
+        `,
+        [ledgerNumber, fingerprint],
+      );
+    } catch (error) {
+      logger.error('Error recording event redetection', { eventId, contractAddress, error });
+    }
   }
 
   /**
@@ -107,57 +268,39 @@ export class EventDeduplicationService {
     try {
       const fingerprint = generateFingerprint(eventId, contractAddress);
 
-      // Check if this event already exists (reorg duplicate detection)
-      const existingRows = await this.db.all(
+      // Single atomic upsert: insert a new record, or — if the fingerprint
+      // already exists (reorg duplicate) — bump the counter in SQL. The old
+      // SELECT-then-INSERT/UPDATE let concurrent callers lose increments or
+      // hit the UNIQUE constraint.
+      const rows = await this.db.all<{ reorg_detection_count: number }>(
         `
-        SELECT id, is_reorg_duplicate, reorg_detection_count 
-        FROM processed_events 
-        WHERE fingerprint = ?
-        LIMIT 1
+        INSERT INTO processed_events (
+          event_id, contract_address, fingerprint, ledger_number, tx_hash,
+          event_type, notification_sent, status, error_reason, is_reorg_duplicate
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        ON CONFLICT(fingerprint) DO UPDATE SET
+          is_reorg_duplicate = 1,
+          reorg_detection_count = processed_events.reorg_detection_count + 1,
+          last_redetected_at = CURRENT_TIMESTAMP,
+          status = excluded.status,
+          ledger_number = excluded.ledger_number
+        RETURNING reorg_detection_count
         `,
-        [fingerprint]
+        [eventId, contractAddress, fingerprint, ledgerNumber, txHash, eventType, notificationSent ? 1 : 0, status, errorReason]
       );
 
-      if (existingRows.length > 0) {
-        // This is a reorg duplicate - update the record instead of inserting
-        const existing = existingRows[0] as any;
-        const newCount = (existing.reorg_detection_count || 0) + 1;
-
-        await this.db.run(
-          `
-          UPDATE processed_events 
-          SET 
-            is_reorg_duplicate = 1,
-            reorg_detection_count = ?,
-            last_redetected_at = CURRENT_TIMESTAMP,
-            status = ?,
-            ledger_number = ?
-          WHERE fingerprint = ?
-          `,
-          [newCount, status, ledgerNumber, fingerprint]
-        );
-
+      const reorgDetectionCount = rows[0]?.reorg_detection_count ?? 0;
+      if (reorgDetectionCount > 0) {
         logger.warn('Reorg duplicate detected', {
           eventId,
           contractAddress,
           fingerprint,
-          reorgDetectionCount: newCount,
+          reorgDetectionCount,
           ledgerNumber,
         });
         return;
       }
-
-      // Insert new processed event record
-      await this.db.run(
-        `
-        INSERT INTO processed_events (
-          event_id, contract_address, fingerprint, ledger_number, tx_hash, 
-          event_type, notification_sent, status, error_reason, is_reorg_duplicate
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-        `,
-        [eventId, contractAddress, fingerprint, ledgerNumber, txHash, eventType, notificationSent ? 1 : 0, status, errorReason]
-      );
 
       logger.info('Event processed and recorded', {
         eventId,
@@ -187,44 +330,24 @@ export class EventDeduplicationService {
     reorgDetected: boolean = false
   ): Promise<void> {
     try {
-      const rows = await this.db.all(
+      // Atomic upsert keyed on the UNIQUE contract_address. The reorg counter
+      // is incremented in SQL so concurrent poll cycles cannot lose updates
+      // or collide on the first insert.
+      await this.db.run(
         `
-        SELECT id, reorg_detection_count 
-        FROM polling_cursors 
-        WHERE contract_address = ?
-        LIMIT 1
+        INSERT INTO polling_cursors (
+          contract_address, cursor, ledger_number, reorg_detected, reorg_detection_count
+        )
+        VALUES (?, ?, ?, ?, 0)
+        ON CONFLICT(contract_address) DO UPDATE SET
+          cursor = excluded.cursor,
+          ledger_number = excluded.ledger_number,
+          reorg_detected = excluded.reorg_detected,
+          reorg_detection_count = polling_cursors.reorg_detection_count + excluded.reorg_detected,
+          updated_at = CURRENT_TIMESTAMP
         `,
-        [contractAddress]
+        [contractAddress, cursor, ledgerNumber, reorgDetected ? 1 : 0]
       );
-
-      if (rows.length > 0) {
-        const existing = rows[0] as any;
-        const reorgCount = reorgDetected ? (existing.reorg_detection_count || 0) + 1 : existing.reorg_detection_count;
-
-        await this.db.run(
-          `
-          UPDATE polling_cursors 
-          SET 
-            cursor = ?,
-            ledger_number = ?,
-            reorg_detected = ?,
-            reorg_detection_count = ?,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE contract_address = ?
-          `,
-          [cursor, ledgerNumber, reorgDetected ? 1 : 0, reorgCount, contractAddress]
-        );
-      } else {
-        await this.db.run(
-          `
-          INSERT INTO polling_cursors (
-            contract_address, cursor, ledger_number, reorg_detected, reorg_detection_count
-          )
-          VALUES (?, ?, ?, ?, 0)
-          `,
-          [contractAddress, cursor, ledgerNumber, reorgDetected ? 1 : 0]
-        );
-      }
 
       if (reorgDetected) {
         logger.warn('Reorg detected and recorded', {

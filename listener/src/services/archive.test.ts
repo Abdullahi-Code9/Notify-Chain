@@ -383,16 +383,21 @@ describe('ArchiveService', () => {
     expect(result.archived).toBe(0);
   });
 
-  it('purges archive rows older than deleteAfterMs', async () => {
-    // Manually plant an "old" archive row
-    (db as any).tables.notification_archive.push({
-      id: 1,
-      original_id: 100,
-      archived_at: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString(),
-    });
+  it('purges archive rows by age regardless of status', async () => {
+    const oldArchivedAt = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString();
+    (db as any).tables.notification_archive.push(
+      { id: 1, original_id: 100, status: 'COMPLETED', archived_at: oldArchivedAt },
+      { id: 2, original_id: 101, status: 'EXPIRED', archived_at: oldArchivedAt },
+      {
+        id: 3,
+        original_id: 102,
+        status: 'FAILED',
+        archived_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    );
     const result = await service.runCycle();
-    expect(result.purged).toBe(1);
-    expect(db.archiveCount()).toBe(0);
+    expect(result.purged).toBe(2);
+    expect(db.archiveCount()).toBe(1);
   });
 
   it('skips purge when deleteAfterMs is 0', async () => {

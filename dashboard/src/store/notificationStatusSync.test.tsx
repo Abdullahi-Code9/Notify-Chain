@@ -45,7 +45,14 @@ function makeEvent(overrides: Partial<BlockchainEvent> = {}): BlockchainEvent {
 beforeEach(() => {
   useEventStore.setState({
     events: [],
-    filters: { search: '', contractAddress: 'all', eventType: 'all', status: 'all', dateFrom: '', dateTo: '' },
+    filters: {
+      search: '',
+      contractAddress: 'all',
+      eventType: 'all',
+      status: 'all',
+      dateFrom: '',
+      dateTo: '',
+    },
     isLoading: false,
     error: null,
     lastFetchedAt: 0,
@@ -58,7 +65,11 @@ beforeEach(() => {
 
 describe('updateEventStatus', () => {
   it('patches notificationStatus for the matching eventId without replacing the whole list', () => {
-    const scheduled = makeEvent({ eventId: 'notif-1', eventName: 'notification_scheduled', notificationStatus: 'active' });
+    const scheduled = makeEvent({
+      eventId: 'notif-1',
+      eventName: 'notification_scheduled',
+      notificationStatus: 'active',
+    });
     const unrelated = makeEvent({ eventId: 'notif-2', eventName: 'autoshare_created' });
 
     useEventStore.getState().setEvents([scheduled, unrelated]);
@@ -93,7 +104,9 @@ describe('updateEventStatus', () => {
     useEventStore.getState().setEvents([a, b]);
     useEventStore.getState().updateEventStatus('a', 'revoked');
 
-    expect(useEventStore.getState().events.find((e) => e.eventId === 'b')?.notificationStatus).toBe('active');
+    expect(useEventStore.getState().events.find((e) => e.eventId === 'b')?.notificationStatus).toBe(
+      'active',
+    );
   });
 });
 
@@ -148,7 +161,7 @@ describe('fetchEvents hydration', () => {
       Promise.resolve({
         ok: true,
         json: () => Promise.resolve(payload),
-      } as Response)
+      } as Response),
     );
 
     const events = await fetchEvents('http://test/api/events');
@@ -171,7 +184,7 @@ describe('fetchEvents hydration', () => {
       Promise.resolve({
         ok: true,
         json: () => Promise.resolve(payload),
-      } as Response)
+      } as Response),
     );
 
     const events = await fetchEvents('http://test/api/events');
@@ -218,7 +231,7 @@ describe('desynchronization regression', () => {
       Promise.resolve({
         ok: true,
         json: () => Promise.resolve(payload),
-      } as Response)
+      } as Response),
     );
 
     const events = await fetchEvents('http://test/api/events');

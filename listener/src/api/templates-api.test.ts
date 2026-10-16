@@ -6,7 +6,7 @@ import { NotificationTemplateService } from '../services/notification-template-s
 import { TemplateAuditTrail } from '../services/template-audit-trail';
 import { NotificationTemplateCache } from '../services/notification-template-cache';
 import { parseTemplateUpdateBody } from './template-api';
-import { resolveRequestActor } from '../utils/request-actor';
+import { fingerprintCredential, resolveRequestActor } from '../utils/request-actor';
 
 jest.mock('@stellar/stellar-sdk', () => ({
   rpc: {
@@ -114,7 +114,8 @@ describe('Template API endpoints', () => {
 
     const audit = await service.getAuditHistory('welcome-email');
     expect(audit).toHaveLength(1);
-    expect(audit[0].actor).toBe('api-key:admin-key-123');
+    expect(audit[0].actor).toBe(`api-key:${fingerprintCredential('admin-key-123')}`);
+    expect(audit[0].actor).not.toContain('admin-key-123');
   });
 
   it('GET /api/templates/:id/audit returns update history', async () => {
@@ -130,7 +131,8 @@ describe('Template API endpoints', () => {
     const data = (res.body as any).data as { templateId: string; records: Array<{ actor: string; action: string }> };
     expect(data.templateId).toBe('welcome-email');
     expect(data.records).toHaveLength(1);
-    expect(data.records[0].actor).toBe('bearer:editor-token');
+    expect(data.records[0].actor).toBe(`bearer:${fingerprintCredential('editor-token')}`);
+    expect(JSON.stringify(res.body)).not.toContain('editor-token');
     expect(data.records[0].action).toBe('UPDATE');
   });
 
@@ -266,6 +268,7 @@ describe('template-api helpers', () => {
       headers: { 'x-api-key': 'secret' },
       socket: { remoteAddress: '127.0.0.1' },
     } as unknown as http.IncomingMessage);
-    expect(actor).toBe('api-key:secret');
+    expect(actor).toBe(`api-key:${fingerprintCredential('secret')}`);
+    expect(actor).not.toContain('secret');
   });
 });

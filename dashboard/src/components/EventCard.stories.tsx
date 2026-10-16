@@ -1,10 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { EventCard } from './EventCard';
-import {
-  sampleEvent,
-  sampleSystemEvent,
-  sampleWithdrawalEvent,
-} from '../stories/fixtures/events';
+import { sampleEvent, sampleSystemEvent, sampleWithdrawalEvent } from '../stories/fixtures/events';
 
 const meta: Meta<typeof EventCard> = {
   title: 'Components/EventCard',

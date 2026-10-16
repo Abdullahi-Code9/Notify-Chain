@@ -285,8 +285,7 @@ describe('DiscordNotificationService (Refactored)', () => {
 
       const service = new DiscordNotificationService(mockConfig);
       
-      // ✅ Easy to create long value for truncation test
-      const longValue = 'a'.repeat(600);
+      const longValue = 'a'.repeat(1100);
       const mockEvent = NotificationFixtureBuilder
         .aStellarEvent()
         .withStringValue(longValue)
@@ -302,7 +301,7 @@ describe('DiscordNotificationService (Refactored)', () => {
       const [, options] = mockFetch.mock.calls[0];
       const body = JSON.parse(options.body);
       const valueField = body.embeds[0].fields.find((f: any) => f.name === 'Value');
-      expect(valueField.value.length).toBeLessThan(600);
+      expect(valueField.value.length).toBeLessThan(1100);
       expect(valueField.value).toContain('...');
     });
 
@@ -311,7 +310,6 @@ describe('DiscordNotificationService (Refactored)', () => {
 
       const service = new DiscordNotificationService(mockConfig);
       
-      // ✅ Easy to specify symbol value
       const mockEvent = NotificationFixtureBuilder
         .aStellarEvent()
         .withSymbolValue('my_symbol')
@@ -330,31 +328,102 @@ describe('DiscordNotificationService (Refactored)', () => {
       expect(valueField.value).toContain('my_symbol');
     });
 
-    it('should handle different event topics', async () => {
-      mockFetch.mockResolvedValue({ ok: true });
+    it('should preserve short messages without truncation', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true });
 
       const service = new DiscordNotificationService(mockConfig);
+      
+      const mockEvent = NotificationFixtureBuilder
+        .aStellarEvent()
+        .withStringValue('short')
+        .build();
 
-      // ✅ Test multiple topics easily
-      const topics = ['transfer', 'mint', 'burn', 'approve'];
+      const mockContractConfig = NotificationFixtureBuilder
+        .aContractConfig()
+        .build();
 
-      for (const topic of topics) {
-        const mockEvent = NotificationFixtureBuilder
-          .aStellarEvent()
-          .withId('event-' + topic)
-          .withTopicSymbol(topic)
-          .build();
+      const result = await service.sendEventNotification(mockEvent, mockContractConfig);
+      expect(result).toBe(true);
+      
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      const valueField = body.embeds[0].fields.find((f: any) => f.name === 'Value');
+      expect(valueField.value).toBe('short');
+    });
 
-        const mockContractConfig = NotificationFixtureBuilder
-          .aContractConfig()
-          .withSingleEvent(topic)
-          .build();
+    it('should truncate oversized embed titles', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true });
 
-        const result = await service.sendEventNotification(mockEvent, mockContractConfig);
-        expect(result).toBe(true);
-      }
+      const service = new DiscordNotificationService(mockConfig);
+      
+      const longTopic = 'a'.repeat(300);
+      const mockEvent = NotificationFixtureBuilder
+        .aStellarEvent()
+        .withTopicSymbol(longTopic)
+        .withStringValue('test')
+        .build();
 
-      expect(mockFetch).toHaveBeenCalledTimes(topics.length);
+      const mockContractConfig = NotificationFixtureBuilder
+        .aContractConfig()
+        .build();
+
+      const result = await service.sendEventNotification(mockEvent, mockContractConfig);
+      expect(result).toBe(true);
+      
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      expect(body.embeds[0].title.length).toBeLessThanOrEqual(256);
+      expect(body.embeds[0].title).toContain('...');
+    });
+
+    it('should enforce total embed size limit', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true });
+
+      const service = new DiscordNotificationService(mockConfig);
+      
+      const longTopic = 'a'.repeat(300);
+      const hugeValue = 'b'.repeat(6000);
+      const mockEvent = NotificationFixtureBuilder
+        .aStellarEvent()
+        .withTopicSymbol(longTopic)
+        .withStringValue(hugeValue)
+        .build();
+
+      const mockContractConfig = NotificationFixtureBuilder
+        .aContractConfig()
+        .build();
+
+      const result = await service.sendEventNotification(mockEvent, mockContractConfig);
+      expect(result).toBe(true);
+      
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      const embed = body.embeds[0];
+      expect(service.getEmbedLength(embed)).toBeLessThanOrEqual(6000);
+    });
+
+    it('should handle exact field value length boundary', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true });
+
+      const service = new DiscordNotificationService(mockConfig);
+      
+      const exactValue = 'a'.repeat(1024);
+      const mockEvent = NotificationFixtureBuilder
+        .aStellarEvent()
+        .withStringValue(exactValue)
+        .build();
+
+      const mockContractConfig = NotificationFixtureBuilder
+        .aContractConfig()
+        .build();
+
+      const result = await service.sendEventNotification(mockEvent, mockContractConfig);
+      expect(result).toBe(true);
+      
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      const valueField = body.embeds[0].fields.find((f: any) => f.name === 'Value');
+      expect(valueField.value).toBe(exactValue);
     });
   });
 });

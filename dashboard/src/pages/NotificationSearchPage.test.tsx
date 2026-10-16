@@ -1,25 +1,30 @@
 import '@testing-library/jest-dom';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+} from '@testing-library/react';
 import { NotificationSearchPage } from './NotificationSearchPage';
 import { searchNotifications } from '../services/eventsApi';
 import type { NotificationSearchResponse } from '../services/eventsApi';
 
-jest.mock('../services/eventsApi', () => ({
-  searchNotifications: jest.fn(),
-}));
-
-const mockedSearch = searchNotifications as jest.MockedFunction<typeof searchNotifications>;
-
 jest.mock('../services/eventsApi', () => {
-  const actual = jest.requireActual('../services/eventsApi') as typeof import('../services/eventsApi');
+  const actual = jest.requireActual(
+    '../services/eventsApi',
+  ) as typeof import('../services/eventsApi');
+
   return {
     ...actual,
     searchNotifications: jest.fn(),
   };
 });
 
-const mockedSearch = searchNotifications as jest.MockedFunction<typeof searchNotifications>;
+const mockedSearch =
+  searchNotifications as jest.MockedFunction<
+    typeof searchNotifications
+  >;
 
 function emptyResponse(): NotificationSearchResponse {
   return {
@@ -45,6 +50,7 @@ const mockResult: NotificationSearchResponse = {
       status: 'PENDING',
       createdAt: '2026-01-15T12:00:00.000Z',
       payload: null,
+      failureReason: null,
     },
   ],
   total: 1,
@@ -54,18 +60,6 @@ const mockResult: NotificationSearchResponse = {
   totalPages: 1,
 };
 
-function emptyResponse(): NotificationSearchResponse {
-  return {
-    results: [],
-    total: 0,
-    limit: 20,
-    offset: 0,
-    itemCount: 0,
-    totalPages: 0,
-  };
-}
-
-describe('NotificationSearchPage loading skeletons', () => {
 describe('NotificationSearchPage filters', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -80,12 +74,26 @@ describe('NotificationSearchPage filters', () => {
   it('renders type, delivery status, and date filter controls', () => {
     render(<NotificationSearchPage />);
 
-    expect(screen.getByLabelText(/filter by notification type/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/filter by delivery status/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/filter from date/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/filter to date/i)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/filter by notification type/i),
+    ).toBeInTheDocument();
 
-    const typeSelect = screen.getByLabelText(/filter by notification type/i);
+    expect(
+      screen.getByLabelText(/filter by delivery status/i),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByLabelText(/filter from date/i),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByLabelText(/filter to date/i),
+    ).toBeInTheDocument();
+
+    const typeSelect = screen.getByLabelText(
+      /filter by notification type/i,
+    );
+
     expect(typeSelect).toContainHTML('Discord');
     expect(typeSelect).toContainHTML('Email');
     expect(typeSelect).toContainHTML('Webhook');
@@ -96,25 +104,48 @@ describe('NotificationSearchPage filters', () => {
     render(<NotificationSearchPage />);
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/filter by notification type/i), {
-        target: { value: 'discord' },
-      });
-      fireEvent.change(screen.getByLabelText(/filter by delivery status/i), {
-        target: { value: 'FAILED' },
-      });
-      fireEvent.change(screen.getByLabelText(/filter from date/i), {
-        target: { value: '2026-01-01' },
-      });
-      fireEvent.change(screen.getByLabelText(/filter to date/i), {
-        target: { value: '2026-01-31' },
-      });
+      fireEvent.change(
+        screen.getByLabelText(
+          /filter by notification type/i,
+        ),
+        {
+          target: { value: 'discord' },
+        },
+      );
+
+      fireEvent.change(
+        screen.getByLabelText(
+          /filter by delivery status/i,
+        ),
+        {
+          target: { value: 'FAILED' },
+        },
+      );
+
+      fireEvent.change(
+        screen.getByLabelText(/filter from date/i),
+        {
+          target: { value: '2026-01-01' },
+        },
+      );
+
+      fireEvent.change(
+        screen.getByLabelText(/filter to date/i),
+        {
+          target: { value: '2026-01-31' },
+        },
+      );
     });
 
     await waitFor(() => {
       expect(mockedSearch).toHaveBeenCalled();
     });
 
-    const lastCall = mockedSearch.mock.calls[mockedSearch.mock.calls.length - 1];
+    const lastCall =
+      mockedSearch.mock.calls[
+        mockedSearch.mock.calls.length - 1
+      ];
+
     expect(lastCall?.[1]).toMatchObject({
       type: 'discord',
       status: 'FAILED',
@@ -137,6 +168,7 @@ describe('NotificationSearchPage filters', () => {
           status: 'COMPLETED',
           createdAt: '2026-03-01T00:00:00.000Z',
           payload: null,
+          failureReason: null,
         },
       ],
       total: 1,
@@ -149,76 +181,119 @@ describe('NotificationSearchPage filters', () => {
     render(<NotificationSearchPage />);
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/filter by notification type/i), {
-        target: { value: 'email' },
-      });
+      fireEvent.change(
+        screen.getByLabelText(
+          /filter by notification type/i,
+        ),
+        {
+          target: { value: 'email' },
+        },
+      );
     });
 
-    expect(await screen.findByText('email')).toBeInTheDocument();
-    expect(screen.getByText('COMPLETED')).toBeInTheDocument();
-    expect(screen.getByText(/1 result/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText('email'),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText('COMPLETED'),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(/1 result/i),
+    ).toBeInTheDocument();
   });
 
   it('clears type, status, and date filters', async () => {
     render(<NotificationSearchPage />);
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/filter by notification type/i), {
-        target: { value: 'sms' },
-      });
-      fireEvent.change(screen.getByLabelText(/filter by delivery status/i), {
-        target: { value: 'PENDING' },
-      });
-      fireEvent.change(screen.getByLabelText(/filter from date/i), {
-        target: { value: '2026-02-01' },
-      });
+      fireEvent.change(
+        screen.getByLabelText(
+          /filter by notification type/i,
+        ),
+        {
+          target: { value: 'sms' },
+        },
+      );
+
+      fireEvent.change(
+        screen.getByLabelText(
+          /filter by delivery status/i,
+        ),
+        {
+          target: { value: 'PENDING' },
+        },
+      );
+
+      fireEvent.change(
+        screen.getByLabelText(/filter from date/i),
+        {
+          target: { value: '2026-02-01' },
+        },
+      );
     });
 
-    expect(screen.getByRole('button', { name: /clear all filters/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: /clear all filters/i,
+      }),
+    ).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /clear all filters/i }));
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: /clear all filters/i,
+        }),
+      );
     });
 
-    expect(screen.getByLabelText(/filter by notification type/i)).toHaveValue('');
-    expect(screen.getByLabelText(/filter by delivery status/i)).toHaveValue('');
-    expect(screen.getByLabelText(/filter from date/i)).toHaveValue('');
-    expect(screen.queryByRole('button', { name: /clear all filters/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText(
+        /filter by notification type/i,
+      ),
+    ).toHaveValue('');
+
+    expect(
+      screen.getByLabelText(
+        /filter by delivery status/i,
+      ),
+    ).toHaveValue('');
+
+    expect(
+      screen.getByLabelText(/filter from date/i),
+    ).toHaveValue('');
+
+    expect(
+      screen.queryByRole('button', {
+        name: /clear all filters/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
-describe('searchNotifications query params', () => {
-  const originalFetch = global.fetch;
-
-  beforeEach(() => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => emptyResponse(),
-    });
-  });
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  it('appends type, status, startDate, and endDate to the URL', async () => {
-    const { searchNotifications: realSearch } = jest.requireActual(
-      '../services/eventsApi'
-    ) as typeof import('../services/eventsApi');
-
-    await realSearch('http://localhost:8787', {
-      type: 'webhook',
-      status: 'COMPLETED',
-      startDate: '2026-01-01',
-      endDate: '2026-01-31',
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('type=webhook')
+  it('shows a friendly timeout message when the listener search request expires', async () => {
+    mockedSearch.mockRejectedValue(
+      new Error(
+        'Listener API request timed out after 10000ms.',
+      ),
     );
-    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string;
-    expect(calledUrl).toContain('status=COMPLETED');
-    expect(calledUrl).toContain('startDate=2026-01-01');
-    expect(calledUrl).toContain('endDate=2026-01-31');
+
+    render(<NotificationSearchPage />);
+
+    fireEvent.change(
+      screen.getByLabelText(/free-text search/i),
+      {
+        target: { value: 'payment' },
+      },
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /The notification search timed out\. Please try again\./i,
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });
 
@@ -232,47 +307,68 @@ describe('NotificationSearchPage loading skeletons', () => {
     jest.useRealTimers();
   });
 
-  it('shows result-card skeletons while searching and hides Searching text', async () => {
-    mockedSearch.mockReturnValue(new Promise(() => {}));
-
-    render(<NotificationSearchPage />);
-
-    fireEvent.change(screen.getByLabelText(/free-text search/i), {
-      target: { value: 'payment' },
-    });
-
-    await act(async () => {
-      jest.advanceTimersByTime(300);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/searching notifications/i)).toBeInTheDocument();
-    });
-    expect(screen.queryByText(/searching…/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/searching notifications/i)).toHaveAttribute('aria-busy', 'true');
-  });
-
-  it('replaces skeletons with result cards once search completes', async () => {
-    let resolveSearch!: (value: NotificationSearchResponse) => void;
-    mockedSearch.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveSearch = resolve;
-        })
+  it('shows result-card skeletons while searching and hides result text', async () => {
+    mockedSearch.mockReturnValue(
+      new Promise(() => {}),
     );
 
     render(<NotificationSearchPage />);
 
-    fireEvent.change(screen.getByLabelText(/free-text search/i), {
-      target: { value: 'payment' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(/free-text search/i),
+      {
+        target: { value: 'payment' },
+      },
+    );
 
     await act(async () => {
       jest.advanceTimersByTime(300);
     });
 
     await waitFor(() => {
-      expect(screen.getByLabelText(/searching notifications/i)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/searching notifications/i),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByText(/searching…/i),
+    ).not.toBeInTheDocument();
+
+    expect(
+      screen.getByLabelText(/searching notifications/i),
+    ).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('replaces skeletons with result cards once search completes', async () => {
+    let resolveSearch!: (
+      value: NotificationSearchResponse,
+    ) => void;
+
+    mockedSearch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSearch = resolve;
+        }),
+    );
+
+    render(<NotificationSearchPage />);
+
+    fireEvent.change(
+      screen.getByLabelText(/free-text search/i),
+      {
+        target: { value: 'payment' },
+      },
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText(/searching notifications/i),
+      ).toBeInTheDocument();
     });
 
     await act(async () => {
@@ -280,132 +376,151 @@ describe('NotificationSearchPage loading skeletons', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByLabelText(/searching notifications/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(
+          /searching notifications/i,
+        ),
+      ).not.toBeInTheDocument();
     });
 
-    expect(screen.getByText(/1 result/i)).toBeInTheDocument();
-    expect(screen.getByText('evt-abc')).toBeInTheDocument();
-    expect(document.querySelector('.notif-result-card__status')).toHaveTextContent('PENDING');
+    expect(
+      screen.getByText(/1 result/i),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText('evt-abc'),
+    ).toBeInTheDocument();
+
+    expect(
+      document.querySelector(
+        '.notif-result-card__status',
+      ),
+    ).toHaveTextContent('PENDING');
   });
 });
 
-describe('searchNotifications query params', () => {
-  const originalFetch = global.fetch;
-
-  beforeEach(() => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => emptyResponse(),
 describe('NotificationResultCard copy notification ID', () => {
   beforeEach(() => {
     mockedSearch.mockReset();
     jest.useFakeTimers();
+
     Object.assign(navigator, {
       clipboard: {
-        writeText: jest.fn().mockResolvedValue(undefined),
+        writeText: jest
+          .fn()
+          .mockResolvedValue(undefined),
       },
     });
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  it('appends type, status, startDate, and endDate to the URL', async () => {
-    const { searchNotifications: realSearch } = jest.requireActual(
-      '../services/eventsApi'
-    ) as typeof import('../services/eventsApi');
-
-    await realSearch('http://localhost:8787', {
-      type: 'webhook',
-      status: 'COMPLETED',
-      startDate: '2026-01-01',
-      endDate: '2026-01-31',
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('type=webhook')
-    );
-    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string;
-    expect(calledUrl).toContain('status=COMPLETED');
-    expect(calledUrl).toContain('startDate=2026-01-01');
-    expect(calledUrl).toContain('endDate=2026-01-31');
     jest.useRealTimers();
   });
 
   it('renders the notification ID with a copy button in result cards', async () => {
     mockedSearch.mockResolvedValue(mockResult);
+
     render(<NotificationSearchPage />);
 
-    // Trigger a search
-    fireEvent.change(screen.getByLabelText(/free-text search/i), {
-      target: { value: 'test' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(/free-text search/i),
+      {
+        target: { value: 'test' },
+      },
+    );
 
     await act(async () => {
       jest.advanceTimersByTime(300);
     });
 
     await waitFor(() => {
-      expect(screen.getByText('1')).toBeInTheDocument();
+      expect(
+        screen.getByText('1'),
+      ).toBeInTheDocument();
     });
 
-    // Verify the notification ID label and value are present
-    expect(screen.getByText('Notification ID')).toBeInTheDocument();
+    expect(
+      screen.getByText('Notification ID'),
+    ).toBeInTheDocument();
 
-    // Verify a CopyButton with the correct aria-label is present
-    const copyBtn = screen.getByRole('button', { name: /copy notification id/i });
-    expect(copyBtn).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: /copy notification id/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   it('copies notification ID to clipboard when copy button is clicked', async () => {
     mockedSearch.mockResolvedValue(mockResult);
+
     render(<NotificationSearchPage />);
 
-    fireEvent.change(screen.getByLabelText(/free-text search/i), {
-      target: { value: 'test' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(/free-text search/i),
+      {
+        target: { value: 'test' },
+      },
+    );
 
     await act(async () => {
       jest.advanceTimersByTime(300);
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Notification ID')).toBeInTheDocument();
+      expect(
+        screen.getByText('Notification ID'),
+      ).toBeInTheDocument();
     });
 
-    const copyBtn = screen.getByRole('button', { name: /copy notification id/i });
+    const copyBtn = screen.getByRole('button', {
+      name: /copy notification id/i,
+    });
+
     await act(async () => {
       fireEvent.click(copyBtn);
     });
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('1');
+    expect(
+      navigator.clipboard.writeText,
+    ).toHaveBeenCalledWith('1');
   });
 
   it('shows success feedback after copying notification ID', async () => {
     mockedSearch.mockResolvedValue(mockResult);
+
     render(<NotificationSearchPage />);
 
-    fireEvent.change(screen.getByLabelText(/free-text search/i), {
-      target: { value: 'test' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(/free-text search/i),
+      {
+        target: { value: 'test' },
+      },
+    );
 
     await act(async () => {
       jest.advanceTimersByTime(300);
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Notification ID')).toBeInTheDocument();
+      expect(
+        screen.getByText('Notification ID'),
+      ).toBeInTheDocument();
     });
 
-    const copyBtn = screen.getByRole('button', { name: /copy notification id/i });
+    const copyBtn = screen.getByRole('button', {
+      name: /copy notification id/i,
+    });
+
     await act(async () => {
       fireEvent.click(copyBtn);
     });
 
-    // After clicking, the CopyButton should show "Copied" feedback
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /notification id copied/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {
+          name: /notification id copied/i,
+        }),
+      ).toBeInTheDocument();
     });
   });
 });

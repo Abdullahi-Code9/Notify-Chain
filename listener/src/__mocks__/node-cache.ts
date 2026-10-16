@@ -4,17 +4,30 @@
  */
 
 class NodeCache {
-  private store: Map<string, any> = new Map();
+  private store: Map<string, { value: any; expiresAt?: number }> = new Map();
   private listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
+  private stdTTL: number = 0;
 
-  constructor(_options?: Record<string, any>) {}
-
-  get<T>(key: string): T | undefined {
-    return this.store.get(key) as T | undefined;
+  constructor(options?: { stdTTL?: number; checkperiod?: number }) {
+    this.stdTTL = (options?.stdTTL ?? 0) * 1000;
   }
 
-  set(key: string, value: any, _ttl?: number): boolean {
-    this.store.set(key, value);
+  get<T>(key: string): T | undefined {
+    const item = this.store.get(key);
+    if (!item) return undefined;
+    if (item.expiresAt && Date.now() >= item.expiresAt) {
+      this.store.delete(key);
+      const callbacks = this.listeners.get('expired') ?? [];
+      callbacks.forEach((cb) => cb(key, item.value));
+      return undefined;
+    }
+    return item.value as T;
+  }
+
+  set(key: string, value: any, ttl?: number): boolean {
+    const ttlMs = ttl !== undefined ? ttl * 1000 : this.stdTTL;
+    const expiresAt = ttlMs > 0 ? Date.now() + ttlMs : undefined;
+    this.store.set(key, { value, expiresAt });
     return true;
   }
 
@@ -28,7 +41,7 @@ class NodeCache {
   }
 
   has(key: string): boolean {
-    return this.store.has(key);
+    return this.get(key) !== undefined;
   }
 
   flushAll(): void {

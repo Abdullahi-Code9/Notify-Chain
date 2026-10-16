@@ -53,7 +53,7 @@ function seededRandom(seed: number): () => number {
 export function generateMockWebhookDeliveries(
   count: number = 400,
   hours: number = 24,
-  seed: number = 42
+  seed: number = 42,
 ): WebhookDelivery[] {
   const rand = seededRandom(seed);
   const now = Date.now();
@@ -163,7 +163,7 @@ export function computeSummaryMetrics(deliveries: WebhookDelivery[]): WebhookSum
  */
 export function bucketDeliveriesByTime(
   deliveries: WebhookDelivery[],
-  rangeHours: number
+  rangeHours: number,
 ): WebhookMetricBucket[] {
   const bucketHours = rangeHours <= 24 ? 1 : 6;
   const bucketMs = bucketHours * 60 * 60 * 1000;
@@ -177,10 +177,16 @@ export function bucketDeliveriesByTime(
 
     let displayLabel: string;
     if (bucketHours === 1) {
-      displayLabel = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      displayLabel = d.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
     } else {
-      displayLabel = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
-        ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      displayLabel =
+        d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+        ' ' +
+        d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     }
 
     return {
@@ -219,13 +225,13 @@ export function bucketDeliveriesByTime(
           d.status === 'success' &&
           d.latencyMs !== null &&
           d.attemptedAt >= bucketStart &&
-          d.attemptedAt < bucketEnd
+          d.attemptedAt < bucketEnd,
       )
       .map((d) => d.latencyMs as number);
 
     if (latencies.length > 0) {
       buckets[i].avgLatencyMs = Math.round(
-        latencies.reduce((acc, v) => acc + v, 0) / latencies.length
+        latencies.reduce((acc, v) => acc + v, 0) / latencies.length,
       );
     }
   }
@@ -245,7 +251,7 @@ export function getErrorCategory(delivery: WebhookDelivery): WebhookErrorCategor
 /** Apply filters to a flat list of deliveries. */
 export function filterDeliveries(
   deliveries: WebhookDelivery[],
-  filters: WebhookFilters
+  filters: WebhookFilters,
 ): WebhookDelivery[] {
   const rangeHoursMap: Record<string, number> = { '1h': 1, '6h': 6, '24h': 24, '7d': 168 };
   const rangeHours = rangeHoursMap[filters.dateRange] ?? 24;

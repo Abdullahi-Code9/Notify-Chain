@@ -66,7 +66,11 @@ export const Interactive: Story = {
 
     return (
       <div>
-        <button type="button" className="modal__button modal__button--primary" onClick={() => setIsOpen(true)}>
+        <button
+          type="button"
+          className="modal__button modal__button--primary"
+          onClick={() => setIsOpen(true)}
+        >
           Open modal
         </button>
         <Modal {...args} isOpen={isOpen} onClose={() => setIsOpen(false)} />

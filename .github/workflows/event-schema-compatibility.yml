@@ -1,0 +1,45 @@
+name: Event Schema Compatibility
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/event-schema-compatibility.yml'
+      - 'contract/contracts/hello-world/src/base/events.rs'
+      - 'listener/package.json'
+      - 'listener/src/schema/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/event-schema-compatibility.yml'
+      - 'contract/contracts/hello-world/src/base/events.rs'
+      - 'listener/package.json'
+      - 'listener/src/schema/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install listener dependencies
+        run: npm install --package-lock=false
+        working-directory: listener
+      - name: Check contract event compatibility
+        run: npm run check:event-schema
+        working-directory: listener
+      - name: Test compatibility checker with coverage
+        run: >-
+          npm test -- --runInBand --coverage
+          --collectCoverageFrom=src/schema/compatibility-check.ts
+          src/schema/compatibility-check.test.ts
+        working-directory: listener
+      - name: Typecheck listener
+        run: npm run typecheck
+        working-directory: listener

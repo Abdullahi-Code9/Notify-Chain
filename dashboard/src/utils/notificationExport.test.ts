@@ -17,6 +17,7 @@ const sample: NotificationSearchResult[] = [
     status: 'COMPLETED',
     createdAt: '2026-07-26T12:00:00.000Z',
     payload: '{"message":"hi"}',
+    failureReason: null,
   },
   {
     id: 2,
@@ -29,13 +30,22 @@ const sample: NotificationSearchResult[] = [
     status: 'FAILED',
     createdAt: '2026-07-26T13:00:00.000Z',
     payload: null,
+    failureReason: 'Timeout',
   },
 ];
 
 describe('notificationExport', () => {
   it('builds JSON that includes filters and all rows', () => {
-    const json = buildNotificationExportJson(sample, { status: 'COMPLETED', q: 'hi' });
+    const json = buildNotificationExportJson(
+      sample,
+      {
+        status: 'COMPLETED',
+        q: 'hi',
+      },
+    );
+
     const parsed = JSON.parse(json);
+
     expect(parsed.format).toBe('json');
     expect(parsed.filters.status).toBe('COMPLETED');
     expect(parsed.total).toBe(2);
@@ -45,17 +55,29 @@ describe('notificationExport', () => {
   it('builds CSV with header and escaped fields', () => {
     const csv = buildNotificationExportCsv(sample);
     const lines = csv.split('\n');
-    expect(lines[0]).toContain('id,source,eventId');
+
+    expect(lines[0]).toContain(
+      'id,source,eventId',
+    );
     expect(lines).toHaveLength(3);
     expect(lines[1]).toContain('COMPLETED');
   });
 
   it('creates downloadable blobs for json and csv', () => {
-    const jsonBlob = buildNotificationExportBlob(sample, 'json', { type: 'discord' });
+    const jsonBlob = buildNotificationExportBlob(
+      sample,
+      'json',
+      { type: 'discord' },
+    );
+
     expect(jsonBlob.filename).toMatch(/\.json$/);
     expect(jsonBlob.blob.type).toContain('json');
 
-    const csvBlob = buildNotificationExportBlob(sample, 'csv');
+    const csvBlob = buildNotificationExportBlob(
+      sample,
+      'csv',
+    );
+
     expect(csvBlob.filename).toMatch(/\.csv$/);
     expect(csvBlob.blob.type).toContain('csv');
   });

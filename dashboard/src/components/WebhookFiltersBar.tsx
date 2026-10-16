@@ -56,11 +56,7 @@ export const WebhookFiltersBar = memo(function WebhookFiltersBar({
         <span className="webhook-filters__label" id="date-range-label">
           Time range
         </span>
-        <div
-          className="webhook-filters__btn-group"
-          role="group"
-          aria-labelledby="date-range-label"
-        >
+        <div className="webhook-filters__btn-group" role="group" aria-labelledby="date-range-label">
           {DATE_RANGE_OPTIONS.map(({ value, label }) => (
             <button
               key={value}
@@ -143,9 +139,7 @@ export const WebhookFiltersBar = memo(function WebhookFiltersBar({
             Demo
           </span>
         )}
-        {refreshedLabel && (
-          <span className="webhook-filters__updated">{refreshedLabel}</span>
-        )}
+        {refreshedLabel && <span className="webhook-filters__updated">{refreshedLabel}</span>}
         <button
           type="button"
           className="webhook-filters__refresh-btn"

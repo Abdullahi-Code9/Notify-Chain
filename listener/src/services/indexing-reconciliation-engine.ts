@@ -7,6 +7,7 @@ import {
   type IndexedEventRef,
   type GapDetectionResult,
 } from './indexing-gap-detector';
+import { sanitizeForDiscord } from './discord-notification';
 
 export interface GapAlertSink {
   notify(result: {
@@ -42,12 +43,16 @@ export class DiscordWebhookAlertSink implements GapAlertSink {
     const missingCount = result.gaps.missingEvents.length;
     const sample = result.gaps.missingEvents.slice(0, 3);
     const sampleLines = sample
-      .map((e) => `• ledger ${e.ledger} event ${e.eventId}${e.txHash ? ` tx ${e.txHash}` : ''}`)
+      .map((e) => {
+        const evId = sanitizeForDiscord(e.eventId);
+        const tx = e.txHash ? ` tx ${sanitizeForDiscord(e.txHash)}` : '';
+        return `• ledger ${e.ledger} event ${evId}${tx}`;
+      })
       .join('\n');
 
     const content =
       `🚨 Indexing gap detected\n` +
-      `Contract: ${result.contractAddress}\n` +
+      `Contract: ${sanitizeForDiscord(result.contractAddress)}\n` +
       `Window: ${result.window.startLedger}..${result.window.endLedger}\n` +
       `Missing events: ${missingCount}\n` +
       (sampleLines ? `Sample:\n${sampleLines}` : '');
@@ -272,6 +277,11 @@ export class IndexingReconciliationEngine {
       const startLedger = Math.max(1, tip - this.lookbackLedgers);
       const endLedger = tip;
 
+      logger.info('Indexing reconciliation run started', {
+        window: { startLedger, endLedger },
+        contracts: this.contractAddresses.length,
+      });
+
       for (const contractAddress of this.contractAddresses) {
         await this.checkContract(contractAddress, startLedger, endLedger);
       }
@@ -311,6 +321,17 @@ export class IndexingReconciliationEngine {
     });
 
     const gaps = detectIndexingGaps(onChain, indexed);
+
+    if (onChain.length > 0 || indexed.length > 0) {
+      logger.info('Reconciliation contract progress', {
+        contractAddress,
+        window: { startLedger, endLedger },
+        onChainCount: onChain.length,
+        indexedCount: indexed.length,
+        missingEvents: gaps.missingEvents.length,
+      });
+    }
+
     if (gaps.missingEvents.length === 0) {
       return;
     }

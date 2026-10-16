@@ -1,19 +1,8 @@
 import type { BlockchainEvent } from '../types/event';
 import type { ContractStatus } from '../services/eventsApi';
 import { formatTimestamp } from '../utils/formatTime';
+import { getEventKindClass, getEventKindLabel, isKnownEventType } from '../utils/eventTypeMapping';
 import { CopyButton } from './CopyButton';
-
-const EVENT_KIND_STYLES: Record<string, string> = {
-  contract: 'event-explorer__badge--blue',
-  system: 'event-explorer__badge--purple',
-  debug: 'event-explorer__badge--default',
-};
-
-const EVENT_KIND_LABELS: Record<string, string> = {
-  contract: 'Contract',
-  system: 'System',
-  debug: 'Debug',
-};
 
 function shortenAddress(address: string) {
   if (address.length <= 14) {
@@ -23,36 +12,46 @@ function shortenAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function getEventKindClass(type: string) {
-  return EVENT_KIND_STYLES[type.toLowerCase()] ?? EVENT_KIND_STYLES.debug;
-}
-
-function getEventKindLabel(type: string) {
-  return EVENT_KIND_LABELS[type.toLowerCase()] ?? 'Unknown';
-}
-
-interface EventExplorerCardProps {
+export interface EventExplorerCardProps {
   event: BlockchainEvent;
-  onCopyContract: (contractAddress: string) => void;
-  isCopied: boolean;
+  onCopyContract?: (contractAddress: string) => void;
+  isCopied?: boolean;
   onSelect?: (event: BlockchainEvent) => void;
-  contractStatuses: ContractStatus[];
   contractStatuses?: ContractStatus[];
 }
 
-export function EventExplorerCard({
+export const EventExplorerCard = memo(function EventExplorerCard({
   event,
   onCopyContract,
-  isCopied,
+  isCopied = false,
   onSelect,
-  contractStatuses,
   contractStatuses = [],
 }: EventExplorerCardProps) {
-  const contractStatus = contractStatuses.find((c) => c.address === event.contractAddress);
+  const contractStatus = contractStatuses.find(
+    (status) => status.address === event.contractAddress,
+  );
   const isPaused = contractStatus?.paused ?? false;
   const label = event.eventName ?? event.type;
   const badgeClass = getEventKindClass(event.type);
   const kindLabel = getEventKindLabel(event.type);
+  const isUnknown = !isKnownEventType(event.type);
+
+  const handleCopyClick = useCallback(() => {
+    onCopyContract?.(event.contractAddress);
+  }, [onCopyContract, event.contractAddress]);
+
+  const handleKeyDown = useCallback(
+    (keyboardEvent: KeyboardEvent<HTMLElement>) => {
+      if (!onSelect) {
+        return;
+      }
+      if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+        keyboardEvent.preventDefault();
+        onSelect(event);
+      }
+    },
+    [onSelect, event],
+  );
 
   return (
     <article
@@ -60,17 +59,9 @@ export function EventExplorerCard({
       role={onSelect ? 'button' : 'row'}
       tabIndex={onSelect ? 0 : undefined}
       data-event-id={event.eventId}
+      data-event-type-known={isUnknown ? 'false' : 'true'}
       onClick={onSelect ? () => onSelect(event) : undefined}
-      onKeyDown={
-        onSelect
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect(event);
-              }
-            }
-          : undefined
-      }
+      onKeyDown={onSelect ? handleKeyDown : undefined}
       aria-label={onSelect ? `View details for ${label} notification` : undefined}
     >
       <div className="event-explorer__cell" data-label="Contract" role="cell">
@@ -102,7 +93,12 @@ export function EventExplorerCard({
       </div>
 
       <div className="event-explorer__cell" data-label="Kind" role="cell">
-        <span className={`event-explorer__badge ${badgeClass}`}>{kindLabel}</span>
+        <span
+          className={`event-explorer__badge ${badgeClass}`}
+          title={isUnknown ? `Unrecognized event kind: ${event.type}` : undefined}
+        >
+          {kindLabel}
+        </span>
       </div>
 
       <div className="event-explorer__cell" data-label="Received" role="cell">

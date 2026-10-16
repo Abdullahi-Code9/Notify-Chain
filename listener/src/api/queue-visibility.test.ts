@@ -42,10 +42,15 @@ async function makeRequest(
       },
       (res) => {
         let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
         res.on('end', () => {
           try {
-            resolve({ status: res.statusCode!, body: JSON.parse(data) });
+            const parsed = JSON.parse(data);
+            const body =
+              parsed && typeof parsed === 'object' && 'data' in parsed ? parsed.data : parsed;
+            resolve({ status: res.statusCode!, body });
           } catch {
             resolve({ status: res.statusCode!, body: data });
           }
@@ -69,7 +74,11 @@ describe('Queue Visibility API (issue #490)', () => {
 
   beforeEach(async () => {
     // Clean up any leftover test database from a previous run.
-    try { await fs.unlink(TEST_DB_PATH); } catch { /* ignore */ }
+    try {
+      await fs.unlink(TEST_DB_PATH);
+    } catch {
+      /* ignore */
+    }
 
     db = new Database(TEST_DB_PATH);
     await db.initialize();
@@ -91,7 +100,11 @@ describe('Queue Visibility API (issue #490)', () => {
       server.close((err) => (err ? reject(err) : resolve())),
     );
     await db.close();
-    try { await fs.unlink(TEST_DB_PATH); } catch { /* ignore */ }
+    try {
+      await fs.unlink(TEST_DB_PATH);
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── Criterion 1: Queue statistics ────────────────────────────────────────
@@ -244,11 +257,7 @@ describe('Queue Visibility API (issue #490)', () => {
         });
       }
 
-      const { status, body } = await makeRequest(
-        server,
-        'GET',
-        '/api/schedule/queue?limit=3',
-      );
+      const { status, body } = await makeRequest(server, 'GET', '/api/schedule/queue?limit=3');
 
       expect(status).toBe(200);
       const payload = body as { count: number; jobs: unknown[] };
@@ -281,11 +290,7 @@ describe('Queue Visibility API (issue #490)', () => {
         maxRetries: 3,
       });
 
-      const { status, body } = await makeRequest(
-        server,
-        'GET',
-        '/api/v1/schedule/queue',
-      );
+      const { status, body } = await makeRequest(server, 'GET', '/api/v1/schedule/queue');
 
       expect(status).toBe(200);
       const payload = body as { count: number; jobs: unknown[] };
@@ -298,11 +303,7 @@ describe('Queue Visibility API (issue #490)', () => {
   describe('GET /api/notifications/health — queue health signal', () => {
     it('returns 503 with an error message when the health monitor is not configured', async () => {
       // The server was created without a healthMonitor option — the default.
-      const { status, body } = await makeRequest(
-        server,
-        'GET',
-        '/api/notifications/health',
-      );
+      const { status, body } = await makeRequest(server, 'GET', '/api/notifications/health');
 
       expect(status).toBe(503);
       const payload = body as { error: string };
@@ -329,11 +330,7 @@ describe('Queue Visibility API (issue #490)', () => {
       });
       await new Promise<void>((resolve) => server.listen(TEST_PORT, resolve));
 
-      const { status, body } = await makeRequest(
-        server,
-        'GET',
-        '/api/notifications/health',
-      );
+      const { status, body } = await makeRequest(server, 'GET', '/api/notifications/health');
 
       monitor.stop();
 
@@ -368,11 +365,7 @@ describe('Queue Visibility API (issue #490)', () => {
       });
       await new Promise<void>((resolve) => server.listen(TEST_PORT, resolve));
 
-      const { status, body } = await makeRequest(
-        server,
-        'GET',
-        '/api/notifications/health',
-      );
+      const { status, body } = await makeRequest(server, 'GET', '/api/notifications/health');
 
       monitor.stop();
 

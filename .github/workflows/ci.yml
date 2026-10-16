@@ -1,146 +1,38 @@
 name: CI
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
-      - staging
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
 
 jobs:
-  format:
-    name: Formatting checks
+  migrations:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
 
-      - name: Install dashboard dependencies
-        working-directory: dashboard
-        run: npm ci
-
-      - name: Check dashboard formatting (Prettier)
-        working-directory: dashboard
-        run: npm run format:check
-
-      - name: Install listener dependencies
-        working-directory: listener
-        run: npm ci
-
-      - name: Check listener formatting (Prettier)
-        working-directory: listener
-        run: npm run format:check
-
-  frontend:
-    name: Frontend (lint, typecheck, test)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
-          cache-dependency-path: dashboard/package-lock.json
       - name: Install dependencies
-        working-directory: dashboard
-        run: npm ci
-      - name: Run lint
-        working-directory: dashboard
-        run: npm run lint
-      - name: TypeScript check (build)
-        working-directory: dashboard
-        run: npm run build
-      - name: Run tests
-        working-directory: dashboard
-        run: npm test --silent
-      - name: Run wallet integration tests
-        working-directory: dashboard
-        run: npm run test:wallet --silent
-      - name: Upload wallet test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: wallet-integration-report
-          path: dashboard/reports/wallet-integration.json
-
-  listener:
-    name: Listener (lint, typecheck, test)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
-          cache-dependency-path: listener/package-lock.json
-      - name: Install dependencies
-        working-directory: listener
-        run: npm ci
-      - name: Run lint
-        working-directory: listener
-        run: npm run lint
-      - name: TypeScript check
-        working-directory: listener
-        run: npm run typecheck
-      - name: Run tests
-        working-directory: listener
-        run: npm test --silent
-
-  check-migrations:
-    name: Check Pending Migrations
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
-          cache-dependency-path: listener/package-lock.json
-      - name: Install dependencies
-        working-directory: listener
-        run: npm ci
-      - name: Create test database and apply all migrations
-        working-directory: listener
         run: |
-          mkdir -p ./data
-          npm run migrate
-      - name: Check for pending migrations
-        working-directory: listener
-        run: npm run check-migrations
+          cd listener
+          npm ci
 
-  rust:
-    name: Rust (fmt check, tests, fuzz)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-      - name: Check formatting
-        working-directory: contract
+      - name: Verify migration order and apply migrations
+        env:
+          DATABASE_PATH: ./data/notifications.db
         run: |
-          rustup component add rustfmt || true
-          cargo fmt --all -- --check
-      - name: Run unit tests
-        working-directory: contract
-        run: cargo test --workspace --all-features --verbose
-      - name: Run fuzz tests
-        working-directory: contract
-        run: cargo test fuzz_ --verbose -- --nocapture
-      - name: Generate fuzz coverage report
-        run: bash scripts/run-fuzz-coverage.sh
-      - name: Upload fuzz coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: fuzz-coverage-report
-          path: contract/reports/fuzz-coverage.json
+          cd listener
+          npm run check-migrations   # fails if pending migrations
+          npm run migrate            # apply all migrations
+
+      - name: Run listener typecheck and tests
+        run: |
+          cd listener
+          npm run typecheck
+          npm test

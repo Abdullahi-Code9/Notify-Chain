@@ -23,9 +23,13 @@ export function CopyButton({ value, label, size = 'sm' }: CopyButtonProps) {
       title={copied ? 'Copied!' : `Copy ${label}`}
     >
       {copied ? (
-        <span className="copy-btn__icon" aria-hidden="true">✓</span>
+        <span className="copy-btn__icon" aria-hidden="true">
+          ✓
+        </span>
       ) : (
-        <span className="copy-btn__icon" aria-hidden="true">⎘</span>
+        <span className="copy-btn__icon" aria-hidden="true">
+          ⎘
+        </span>
       )}
       <span className="copy-btn__label">{copied ? 'Copied' : 'Copy'}</span>
     </button>

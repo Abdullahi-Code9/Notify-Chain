@@ -1,0 +1,38 @@
+name: Contract Event Documentation Drift Check
+
+on:
+  pull_request:
+    paths:
+      - "contract/**/events.rs"
+      - "docs/CONTRACT_EVENTS.md"
+      - "scripts/validate-contract-events.py"
+  push:
+    branches: [main]
+    paths:
+      - "contract/**/events.rs"
+      - "docs/CONTRACT_EVENTS.md"
+
+concurrency:
+  group: event-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-events:
+    name: check-event-documentation-drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate Contract Event Documentation Drift
+        run: |
+          python3 scripts/validate-contract-events.py

@@ -1,6 +1,6 @@
 /**
  * Refactored NotificationScheduler Tests
- * 
+ *
  * Uses NotificationFixtureBuilder to eliminate duplicate fixtures
  * and provide deterministic, type-safe test data.
  */
@@ -52,9 +52,7 @@ describe('NotificationScheduler (Refactored)', () => {
   describe('ScheduledNotificationRepository', () => {
     test('should create a scheduled notification', async () => {
       // ✅ Using fixture builder - no more hardcoded fixture
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
-        .build();
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput().build();
 
       const id = await repository.create(input);
       expect(id).toBeGreaterThan(0);
@@ -67,14 +65,12 @@ describe('NotificationScheduler (Refactored)', () => {
 
     test('should fetch and lock pending notifications', async () => {
       // ✅ Using deterministic date - always same result
-      const input1 = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input1 = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution() // Past date for immediate processing
         .withPayload({ message: 'Test 1' })
         .build();
 
-      const input2 = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input2 = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .withPayload({ message: 'Test 2' })
         .build();
@@ -86,7 +82,7 @@ describe('NotificationScheduler (Refactored)', () => {
       const notifications = await repository.fetchAndLockPendingNotifications(
         processorId,
         30000,
-        10
+        10,
       );
 
       expect(notifications.length).toBe(2);
@@ -97,8 +93,7 @@ describe('NotificationScheduler (Refactored)', () => {
 
     test('should prevent race conditions with distributed locking', async () => {
       // ✅ Single fixture creation, easy to read
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .build();
 
@@ -107,12 +102,12 @@ describe('NotificationScheduler (Refactored)', () => {
       const processor1 = await repository.fetchAndLockPendingNotifications(
         'processor-1',
         30000,
-        10
+        10,
       );
       const processor2 = await repository.fetchAndLockPendingNotifications(
         'processor-2',
         30000,
-        10
+        10,
       );
 
       expect(processor1.length).toBe(1);
@@ -120,8 +115,7 @@ describe('NotificationScheduler (Refactored)', () => {
     });
 
     test('should recover stale locks', async () => {
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .build();
 
@@ -146,8 +140,7 @@ describe('NotificationScheduler (Refactored)', () => {
     });
 
     test('should mark notification as completed', async () => {
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .build();
 
@@ -160,8 +153,7 @@ describe('NotificationScheduler (Refactored)', () => {
     });
 
     test('should retry failed notification', async () => {
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .withMaxRetries(3)
         .build();
@@ -178,8 +170,7 @@ describe('NotificationScheduler (Refactored)', () => {
     });
 
     test('should mark as failed after max retries', async () => {
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .withMaxRetries(3)
         .build();
@@ -196,14 +187,13 @@ describe('NotificationScheduler (Refactored)', () => {
 
     test('should cancel pending notification', async () => {
       // ✅ Future execution - easy to express intent
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forFutureExecution()
         .build();
 
       const id = await repository.create(input);
       const cancelled = await repository.cancel(id);
-      
+
       expect(cancelled).toBe(true);
 
       const notification = await repository.getById(id);
@@ -213,17 +203,15 @@ describe('NotificationScheduler (Refactored)', () => {
     test('should get statistics', async () => {
       // ✅ Create multiple with different scenarios
       await repository.create(
-        NotificationFixtureBuilder
-          .aScheduledNotificationInput()
+        NotificationFixtureBuilder.aScheduledNotificationInput()
           .withExecuteAt(new Date(Date.now() + 3600000))
-          .build()
+          .build(),
       );
 
       await repository.create(
-        NotificationFixtureBuilder
-          .aScheduledNotificationInput()
+        NotificationFixtureBuilder.aScheduledNotificationInput()
           .forImmediateExecution() // Overdue
-          .build()
+          .build(),
       );
 
       const stats = await repository.getStats();
@@ -232,8 +220,7 @@ describe('NotificationScheduler (Refactored)', () => {
     });
 
     test('should increment retry_count and log attempt on lock recovery', async () => {
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .withMaxRetries(3)
         .build();
@@ -259,15 +246,17 @@ describe('NotificationScheduler (Refactored)', () => {
       expect(notification!.lastError).toBe('Lock expired/Processor timeout');
 
       // Verify execution log
-      const logs = await db.all('SELECT * FROM notification_execution_log WHERE scheduled_notification_id = ?', [id]);
+      const logs = await db.all(
+        'SELECT * FROM notification_execution_log WHERE scheduled_notification_id = ?',
+        [id],
+      );
       expect(logs.length).toBe(1);
       expect(logs[0].status).toBe('RETRY');
       expect(logs[0].error_message).toBe('Lock expired/Processor timeout');
     });
 
     test('should mark as failed if retry_count reaches max_retries on lock recovery', async () => {
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .withMaxRetries(1)
         .build();
@@ -292,7 +281,10 @@ describe('NotificationScheduler (Refactored)', () => {
       expect(notification!.retryCount).toBe(1);
 
       // Verify execution log
-      const logs = await db.all('SELECT * FROM notification_execution_log WHERE scheduled_notification_id = ?', [id]);
+      const logs = await db.all(
+        'SELECT * FROM notification_execution_log WHERE scheduled_notification_id = ?',
+        [id],
+      );
       expect(logs.length).toBe(1);
       expect(logs[0].status).toBe('FAILED');
     });
@@ -300,20 +292,19 @@ describe('NotificationScheduler (Refactored)', () => {
     test('should return correct statistics accounting for stale locks', async () => {
       // 1. Create a notification in the future (pending, not overdue)
       await repository.create(
-        NotificationFixtureBuilder
-          .aScheduledNotificationInput()
+        NotificationFixtureBuilder.aScheduledNotificationInput()
           .withExecuteAt(new Date(Date.now() + 3600000))
-          .build()
+          .build(),
       );
 
       // 2. Create a notification in the past (overdue, pending)
       const overdueId = await repository.create(
-      // 2. Create a notification in the past that is currently PROCESSING but lock is expired
+        NotificationFixtureBuilder.aScheduledNotificationInput().forImmediateExecution().build(),
+      );
+
+      // 3. Create a notification in the past that is currently PROCESSING but lock is expired
       const staleId = await repository.create(
-        NotificationFixtureBuilder
-          .aScheduledNotificationInput()
-          .forImmediateExecution()
-          .build()
+        NotificationFixtureBuilder.aScheduledNotificationInput().forImmediateExecution().build(),
       );
       const pastLock = NotificationFixtureBuilder.dates.past(1000);
       await db.run(
@@ -326,22 +317,19 @@ describe('NotificationScheduler (Refactored)', () => {
           pastLock.toISOString(),
           pastLock.toISOString(),
           staleId,
-        ]
+        ],
       );
 
       // 3. Create a notification in the past (overdue, pending) - created AFTER locking to remain in PENDING status
       await repository.create(
-        NotificationFixtureBuilder
-          .aScheduledNotificationInput()
-          .forImmediateExecution()
-          .build()
+        NotificationFixtureBuilder.aScheduledNotificationInput().forImmediateExecution().build(),
       );
       // Lock only the stale notification — fetchAndLock picks up past items by priority order,
       // so we lock both past items then restore item 2 to PENDING to isolate the stale case.
       await repository.fetchAndLockPendingNotifications('processor-1', 30000, 10);
       await db.run(
         "UPDATE scheduled_notifications SET status = 'PENDING', processor_id = NULL, lock_expires_at = NULL WHERE id = ?",
-        [overdueId]
+        [overdueId],
       );
       const pastLock = NotificationFixtureBuilder.dates.past(1000);
       await db.run('UPDATE scheduled_notifications SET lock_expires_at = ? WHERE id = ?', [
@@ -354,7 +342,7 @@ describe('NotificationScheduler (Refactored)', () => {
       // - item 2: PENDING (restored, overdue)
       // - item 3: PROCESSING with expired lock → getStats adjusts to PENDING
       const stats = await repository.getStats();
-      
+
       expect(stats.pending).toBe(3);
       expect(stats.overdue).toBe(2);
       expect(stats.processing).toBe(0);
@@ -363,8 +351,7 @@ describe('NotificationScheduler (Refactored)', () => {
 
   describe('NotificationAPI', () => {
     test('should schedule notification via API', async () => {
-      const input = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const input = NotificationFixtureBuilder.aScheduledNotificationInput()
         .withExecuteAt(new Date(Date.now() + 3600000))
         .withPayload({ message: 'API test' })
         .build();
@@ -379,15 +366,14 @@ describe('NotificationScheduler (Refactored)', () => {
 
     test('should reject past execution time', async () => {
       // ✅ Deterministic past date
-      const pastInput = NotificationFixtureBuilder
-        .aScheduledNotificationInput()
+      const pastInput = NotificationFixtureBuilder.aScheduledNotificationInput()
         .forImmediateExecution()
         .withExecuteAt(NotificationFixtureBuilder.dates.past(60000))
         .build();
 
-      await expect(
-        api.scheduleNotification(pastInput)
-      ).rejects.toThrow('executeAt must be a future timestamp');
+      await expect(api.scheduleNotification(pastInput)).rejects.toThrow(
+        'executeAt must be a future timestamp',
+      );
     });
 
     test('should schedule Discord notification', async () => {
@@ -399,7 +385,7 @@ describe('NotificationScheduler (Refactored)', () => {
         webhookUrl,
         { content: 'Hello World' },
         executeAt,
-        { priority: 1, maxRetries: 5 }
+        { priority: 1, maxRetries: 5 },
       );
 
       expect(id).toBeGreaterThan(0);
@@ -419,8 +405,7 @@ describe('NotificationScheduler (Refactored)', () => {
       ];
 
       for (const type of types) {
-        const input = NotificationFixtureBuilder
-          .aScheduledNotificationInput()
+        const input = NotificationFixtureBuilder.aScheduledNotificationInput()
           .withType(type)
           .withExecuteAt(new Date(Date.now() + 3600000))
           .build();
@@ -435,10 +420,9 @@ describe('NotificationScheduler (Refactored)', () => {
 
     test('should get statistics via API', async () => {
       await api.scheduleNotification(
-        NotificationFixtureBuilder
-          .aScheduledNotificationInput()
+        NotificationFixtureBuilder.aScheduledNotificationInput()
           .withExecuteAt(new Date(Date.now() + 3600000))
-          .build()
+          .build(),
       );
 
       const stats = await api.getStatistics();

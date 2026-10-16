@@ -358,6 +358,23 @@ export class StellarEventBuilder {
     return this;
   }
 
+  /**
+   * Set the event value to an ScvMap containing a `payload_version` key,
+   * matching the shape of the Soroban `NotificationScheduled` event data.
+   *
+   * Events that pre-date versioning should use `withValue` / `withStringValue`
+   * directly; this helper is specifically for testing version-aware parsing.
+   */
+  withPayloadVersion(version: number): this {
+    this.event.value = xdr.ScVal.scvMap([
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol('payload_version'),
+        val: xdr.ScVal.scvU32(version),
+      }),
+    ]);
+    return this;
+  }
+
   build(): StellarSDK.rpc.Api.EventResponse {
     return this.event as StellarSDK.rpc.Api.EventResponse;
   }

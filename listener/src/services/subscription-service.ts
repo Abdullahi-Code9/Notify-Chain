@@ -1,6 +1,16 @@
 import { Subscription, SubscribeInput, SubscribeResult } from '../types/subscription';
 
 /**
+ * Returns true when a channel name is blank (empty or whitespace-only).
+ *
+ * Issue #479: channel names must contain at least one non-whitespace character
+ * so that consumers can reliably identify and route to a channel.
+ */
+export function isBlankChannelName(name: string): boolean {
+  return name.trim().length === 0;
+}
+
+/**
  * SubscriptionService manages user subscriptions to notification channels.
  * 
  * Core responsibilities:
@@ -40,13 +50,22 @@ export class SubscriptionService {
   subscribe(input: SubscribeInput): SubscribeResult {
     const { userId, channel } = input;
 
-    // Validate input
+    // Validate input — issue #479: reject blank / whitespace-only channel names
     if (!userId || !channel) {
       return {
         success: false,
         subscription: null,
         error: 'INVALID_INPUT',
         message: 'userId and channel are required',
+      };
+    }
+
+    if (isBlankChannelName(channel)) {
+      return {
+        success: false,
+        subscription: null,
+        error: 'INVALID_INPUT',
+        message: 'Channel name must not be empty or whitespace-only',
       };
     }
 

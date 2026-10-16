@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormField, FormInput } from '../components/FormField';
 
 type ChannelKey = 'inApp' | 'email' | 'discord' | 'telegram';
 type CategoryKey = 'security' | 'governance' | 'system' | 'custom';
@@ -13,10 +14,26 @@ const channelDefinitions = [
 ];
 
 const categoryDefinitions = [
-  { key: 'security' as const, label: 'Security Alerts', description: 'Critical account and access events.' },
-  { key: 'governance' as const, label: 'Protocol Governance', description: 'Voting, proposals and governance lifecycle updates.' },
-  { key: 'system' as const, label: 'System Updates', description: 'Platform health, maintenance windows, and service notices.' },
-  { key: 'custom' as const, label: 'Custom Triggers', description: 'User-defined automations and webhook-style notifications.' },
+  {
+    key: 'security' as const,
+    label: 'Security Alerts',
+    description: 'Critical account and access events.',
+  },
+  {
+    key: 'governance' as const,
+    label: 'Protocol Governance',
+    description: 'Voting, proposals and governance lifecycle updates.',
+  },
+  {
+    key: 'system' as const,
+    label: 'System Updates',
+    description: 'Platform health, maintenance windows, and service notices.',
+  },
+  {
+    key: 'custom' as const,
+    label: 'Custom Triggers',
+    description: 'User-defined automations and webhook-style notifications.',
+  },
 ];
 
 const defaultPreferences: PreferencesMatrix = {
@@ -51,39 +68,40 @@ export function NotificationPreferencesPage() {
       categoryDefinitions
         .filter((category) => !Object.values(preferences[category.key]).some(Boolean))
         .map((category) => category.label),
-    [preferences]
+    [preferences],
   );
 
   const emailSelected = useMemo(
     () => Object.values(preferences).some((row) => row.email),
-    [preferences]
+    [preferences],
   );
 
   const telegramSelected = useMemo(
     () => Object.values(preferences).some((row) => row.telegram),
-    [preferences]
+    [preferences],
   );
 
   const emailInvalid = useMemo(
     () => emailSelected && !validateEmail(contactEmail),
-    [contactEmail, emailSelected]
+    [contactEmail, emailSelected],
   );
 
   const telegramInvalid = useMemo(
     () => telegramSelected && !validateTelegram(telegramHandle),
-    [telegramHandle, telegramSelected]
+    [telegramHandle, telegramSelected],
   );
 
   const canSave = useMemo(
-    () => !isLoading && !loadError && !emailInvalid && !telegramInvalid && errorCategories.length === 0,
-    [emailInvalid, errorCategories.length, isLoading, loadError, telegramInvalid]
+    () =>
+      !isLoading && !loadError && !emailInvalid && !telegramInvalid && errorCategories.length === 0,
+    [emailInvalid, errorCategories.length, isLoading, loadError, telegramInvalid],
   );
 
   const summaryText = useMemo(() => {
     const channelCounts = channelDefinitions.map((channel) => {
       const count = categoryDefinitions.reduce(
         (total, category) => total + (preferences[category.key][channel.key] ? 1 : 0),
-        0
+        0,
       );
       return `${channel.label}: ${count}`;
     });
@@ -118,19 +136,16 @@ export function NotificationPreferencesPage() {
     };
   }, [simulateFailure]);
 
-  const handleTogglePreference = useCallback(
-    (categoryKey: CategoryKey, channelKey: ChannelKey) => {
-      setPreferences((current) => ({
-        ...current,
-        [categoryKey]: {
-          ...current[categoryKey],
-          [channelKey]: !current[categoryKey][channelKey],
-        },
-      }));
-      setSaveState('idle');
-    },
-    []
-  );
+  const handleTogglePreference = useCallback((categoryKey: CategoryKey, channelKey: ChannelKey) => {
+    setPreferences((current) => ({
+      ...current,
+      [categoryKey]: {
+        ...current[categoryKey],
+        [channelKey]: !current[categoryKey][channelKey],
+      },
+    }));
+    setSaveState('idle');
+  }, []);
 
   const handleSave = useCallback(() => {
     if (!canSave) {
@@ -156,7 +171,8 @@ export function NotificationPreferencesPage() {
           <p className="notification-preferences__eyebrow">Notification Preferences</p>
           <h1>Recipient preference control panel</h1>
           <p className="notification-preferences__lead">
-            Toggle notification channels for each recipient category and validate contact fields before saving.
+            Toggle notification channels for each recipient category and validate contact fields
+            before saving.
           </p>
         </div>
         <div className="notification-preferences__header-actions">
@@ -181,8 +197,16 @@ export function NotificationPreferencesPage() {
       <div className="notification-preferences__status-row">
         <p className="notification-preferences__status-text">{summaryText}</p>
         {isLoading && <span className="notification-preferences__pill">Loading…</span>}
-        {loadError && <span className="notification-preferences__pill notification-preferences__pill--error">Error</span>}
-        {saveState === 'saved' && <span className="notification-preferences__pill notification-preferences__pill--success">Saved</span>}
+        {loadError && (
+          <span className="notification-preferences__pill notification-preferences__pill--error">
+            Error
+          </span>
+        )}
+        {saveState === 'saved' && (
+          <span className="notification-preferences__pill notification-preferences__pill--success">
+            Saved
+          </span>
+        )}
       </div>
 
       {isLoading ? (
@@ -199,18 +223,29 @@ export function NotificationPreferencesPage() {
         </section>
       ) : (
         <div className="notification-preferences__workspace">
-          <section className="notification-preferences__matrix-panel" aria-labelledby="notification-matrix-title">
+          <section
+            className="notification-preferences__matrix-panel"
+            aria-labelledby="notification-matrix-title"
+          >
             <div className="notification-preferences__panel-header">
               <div>
                 <h2 id="notification-matrix-title">Delivery matrix</h2>
-                <p>Map channels to notification categories with fast toggles and immediate validation feedback.</p>
+                <p>
+                  Map channels to notification categories with fast toggles and immediate validation
+                  feedback.
+                </p>
               </div>
               <p className="notification-preferences__matrix-note">
-                Categories must route through at least one channel. Email and Telegram require valid contact details.
+                Categories must route through at least one channel. Email and Telegram require valid
+                contact details.
               </p>
             </div>
 
-            <div className="notification-preferences__matrix" role="table" aria-label="Notification preference matrix">
+            <div
+              className="notification-preferences__matrix"
+              role="table"
+              aria-label="Notification preference matrix"
+            >
               <div className="matrix-cell matrix-cell--corner">Categories / Channels</div>
               {channelDefinitions.map((channel) => (
                 <div key={channel.key} className="matrix-cell matrix-cell--header">
@@ -219,27 +254,31 @@ export function NotificationPreferencesPage() {
               ))}
 
               {categoryDefinitions.map((category) => (
-              <Fragment key={category.key}>
-                <div className="matrix-cell matrix-cell--category">
-                  <div>{category.label}</div>
-                  <p>{category.description}</p>
-                </div>
-                {channelDefinitions.map((channel) => {
-                  const fieldId = `pref-${category.key}-${channel.key}`;
-                  return (
-                    <label key={fieldId} className="matrix-cell matrix-cell--toggle" htmlFor={fieldId}>
-                      <input
-                        id={fieldId}
-                        type="checkbox"
-                        checked={preferences[category.key][channel.key]}
-                        onChange={() => handleTogglePreference(category.key, channel.key)}
-                      />
-                      <span className="matrix-toggle" aria-hidden="true" />
-                    </label>
-                  );
-                })}
-              </Fragment>
-            ))}
+                <Fragment key={category.key}>
+                  <div className="matrix-cell matrix-cell--category">
+                    <div>{category.label}</div>
+                    <p>{category.description}</p>
+                  </div>
+                  {channelDefinitions.map((channel) => {
+                    const fieldId = `pref-${category.key}-${channel.key}`;
+                    return (
+                      <label
+                        key={fieldId}
+                        className="matrix-cell matrix-cell--toggle"
+                        htmlFor={fieldId}
+                      >
+                        <input
+                          id={fieldId}
+                          type="checkbox"
+                          checked={preferences[category.key][channel.key]}
+                          onChange={() => handleTogglePreference(category.key, channel.key)}
+                        />
+                        <span className="matrix-toggle" aria-hidden="true" />
+                      </label>
+                    );
+                  })}
+                </Fragment>
+              ))}
             </div>
           </section>
 
@@ -249,10 +288,23 @@ export function NotificationPreferencesPage() {
               <p>Provide delivery details for email and Telegram routing.</p>
             </div>
 
-            <div className={`notification-preferences__field${emailInvalid ? ' notification-preferences__field--invalid' : ''}`}>
+            <div
+              className={`notification-preferences__field${emailInvalid ? ' notification-preferences__field--invalid' : ''}`}
+            >
               <label htmlFor="contact-email">Email address</label>
               <input
                 id="contact-email"
+            <FormField
+              id="contact-email"
+              label="Email address"
+              error={
+                emailInvalid
+                  ? 'Email address: enter a valid email when Email notifications are enabled.'
+                  : null
+              }
+            >
+              <FormInput
+                fieldId="contact-email"
                 type="email"
                 value={contactEmail}
                 onChange={(event) => {
@@ -260,21 +312,42 @@ export function NotificationPreferencesPage() {
                   setSaveState('idle');
                 }}
                 placeholder="recipient@example.com"
-                aria-invalid={emailInvalid}
-                aria-describedby={emailInvalid ? 'contact-email-error' : undefined}
-                className={emailInvalid ? 'notification-preferences__input--invalid' : undefined}
+                error={
+                  emailInvalid
+                    ? 'Email address: enter a valid email when Email notifications are enabled.'
+                    : null
+                }
               />
               {emailInvalid && (
-                <p id="contact-email-error" className="notification-preferences__field-error" role="alert">
+                <p
+                  id="contact-email-error"
+                  className="notification-preferences__field-error"
+                  role="alert"
+                >
                   Enter a valid email when Email notifications are enabled.
                 </p>
               )}
             </div>
 
-            <div className={`notification-preferences__field${telegramInvalid ? ' notification-preferences__field--invalid' : ''}`}>
+            <div
+              className={`notification-preferences__field${telegramInvalid ? ' notification-preferences__field--invalid' : ''}`}
+            >
               <label htmlFor="telegram-handle">Telegram handle</label>
               <input
                 id="telegram-handle"
+            </FormField>
+
+            <FormField
+              id="telegram-handle"
+              label="Telegram handle"
+              error={
+                telegramInvalid
+                  ? 'Telegram handle: must start with @ and contain at least 3 characters.'
+                  : null
+              }
+            >
+              <FormInput
+                fieldId="telegram-handle"
                 type="text"
                 value={telegramHandle}
                 onChange={(event) => {
@@ -282,16 +355,23 @@ export function NotificationPreferencesPage() {
                   setSaveState('idle');
                 }}
                 placeholder="@yourhandle"
-                aria-invalid={telegramInvalid}
-                aria-describedby={telegramInvalid ? 'telegram-handle-error' : undefined}
-                className={telegramInvalid ? 'notification-preferences__input--invalid' : undefined}
+                error={
+                  telegramInvalid
+                    ? 'Telegram handle: must start with @ and contain at least 3 characters.'
+                    : null
+                }
               />
               {telegramInvalid && (
-                <p id="telegram-handle-error" className="notification-preferences__field-error" role="alert">
+                <p
+                  id="telegram-handle-error"
+                  className="notification-preferences__field-error"
+                  role="alert"
+                >
                   Telegram handle must start with @ and contain at least 3 characters.
                 </p>
               )}
             </div>
+            </FormField>
 
             {errorCategories.length > 0 && (
               <div className="notification-preferences__validation-panel" role="alert">
@@ -315,7 +395,8 @@ export function NotificationPreferencesPage() {
                 {saveState === 'saving' ? 'Saving preferences…' : 'Save preferences'}
               </button>
               <p className="notification-preferences__save-note">
-                Changes are stored locally for the current session and can be reloaded using the controls above.
+                Changes are stored locally for the current session and can be reloaded using the
+                controls above.
               </p>
             </div>
           </aside>

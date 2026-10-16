@@ -91,7 +91,7 @@ export interface EventFilters {
   eventType: string;
   status: NotificationReadFilter;
   dateFrom: string; // ISO date string "YYYY-MM-DD" or ""
-  dateTo: string;   // ISO date string "YYYY-MM-DD" or ""
+  dateTo: string; // ISO date string "YYYY-MM-DD" or ""
   txHash?: string;
   /** Active sort order for the notification list (#495). Defaults to "newest". */
   sortBy?: NotificationSortOption;

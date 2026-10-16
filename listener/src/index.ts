@@ -9,7 +9,7 @@ import { NotificationTemplateService } from './services/notification-template-se
 import { TemplateAuditTrail } from './services/template-audit-trail';
 import { getTemplateCache } from './services/notification-template-cache';
 import { NotificationAPI } from './services/notification-api';
-import { CleanupService } from './services/cleanup-service';
+import { DatabaseCleanupJob } from './services/database-cleanup-job';
 import { ArchiveService } from './services/archive-service';
 import { ArchiveStore } from './services/archive-store';
 import { loadArchiveConfig } from './services/archive-config';
@@ -21,37 +21,38 @@ import {
   IndexingReconciliationEngine,
   createDefaultAlertSink,
 } from './services/indexing-reconciliation-engine';
+import { HistoricalBackfillService } from './services/historical-backfill-service';
+import { EventDeduplicationService } from './services/event-deduplication-service';
 import { initNotificationAnalyticsAggregator } from './services/notification-analytics-aggregator';
 import { NotificationMetricsStore } from './services/notification-metrics-store';
 import { NotificationMetricsRunner } from './services/notification-metrics-runner';
 import { eventRegistry } from './store/event-registry';
 import logger from './utils/logger';
 import { loadConfig, validateConfig, ConfigError } from './config';
+import { SecretValidationError } from './config/validate-secrets';
 import { NotificationHealthMonitor } from './services/notification-health-monitor';
 import { getWorkerManager } from './services/worker-manager';
 import { EventDeduplicationService } from './services/event-deduplication-service';
+import { DeliveryReceiptRepository } from './services/delivery-receipt-repository';
 
 dotenv.config();
 
+// Track process startup time for uptime calculation
+const PROCESS_START_TIME = Date.now();
+
 async function main() {
   const config = loadConfig();
-  // Validate all config values before starting any services (#494).
-  // This throws a descriptive ConfigError listing every problem found.
   validateConfig(config);
 
   let scheduler: NotificationScheduler | null = null;
   let retryScheduler: RetryScheduler | null = null;
   let notificationAPI: NotificationAPI | null = null;
-  let templateService: TemplateService | null = null;
   let healthMonitor: NotificationHealthMonitor | null = null;
+  let subscriber: EventSubscriber | null = null;
 
-  if (config.scheduler?.enabled) {
-    try {
-      logger.info('Initializing database for scheduled notifications and templates');
-      const db = await initializeDatabase(config.databasePath);
   let templateService: NotificationTemplateService | null = null;
   let legacyTemplateService: TemplateService | null = null;
-  let cleanupService: CleanupService | null = null;
+  let databaseCleanupJob: DatabaseCleanupJob | null = null;
   let repository: ScheduledNotificationRepository | null = null;
   let reconciliationEngine: IndexingReconciliationEngine | null = null;
   let archiveService: ArchiveService | null = null;
@@ -59,11 +60,7 @@ async function main() {
   let metricsRunner: NotificationMetricsRunner | null = null;
   let metricsStore: NotificationMetricsStore | null = null;
   let deduplicationService: EventDeduplicationService | null = null;
-
-  repository = new ScheduledNotificationRepository(db);
-  healthMonitor = new NotificationHealthMonitor(null, getWorkerManager(), {
-    repository,
-  });
+  let deliveryReceiptRepository: DeliveryReceiptRepository | null = null;
 
   if (config.analytics?.enabled) {
     initNotificationAnalyticsAggregator(config.analytics);
@@ -73,13 +70,29 @@ async function main() {
     logger.info('Initializing database');
     const db = await initializeDatabase(config.databasePath);
 
+    repository = new ScheduledNotificationRepository(
+      db,
+      undefined,
+      config.notificationDefaultTtlSeconds ?? 0,
+    );
+    deliveryReceiptRepository = new DeliveryReceiptRepository(db);
+    
+
+    healthMonitor = new NotificationHealthMonitor(null, getWorkerManager(), {
+      repository,
+      getLastSuccessfulPoll: () => subscriber?.getLastSuccessfulPoll() ?? null,
+      getUptimeMs: () => Date.now() - PROCESS_START_TIME,
+    });
+
     // Rebuild registry with configured event TTL
     if (config.cleanup) {
       eventRegistry.setTtlMs(config.cleanup.eventRetentionMs);
     }
 
-    cleanupService = new CleanupService(db, eventRegistry, config.cleanup);
-    cleanupService.start();
+    if (config.cleanup) {
+      databaseCleanupJob = new DatabaseCleanupJob(db, config.cleanup, eventRegistry);
+      databaseCleanupJob.start();
+    }
 
     reconciliationEngine = new IndexingReconciliationEngine({
       db,
@@ -96,7 +109,6 @@ async function main() {
       logger.info('Notification metrics runner started successfully');
     }
 
-    // Archive service: moves old notifications to the archive table.
     const archiveCfg = loadArchiveConfig();
     archiveStore = new ArchiveStore(db);
     archiveService = new ArchiveService(db, archiveCfg);
@@ -114,28 +126,38 @@ async function main() {
     templateService = new NotificationTemplateService(templateRepository);
 
     if (config.scheduler?.enabled) {
-      repository = new ScheduledNotificationRepository(db);
       notificationAPI = new NotificationAPI(repository);
 
-      // Initialize legacy template service
       const legacyTemplateRepo = new TemplateRepository(db);
       legacyTemplateService = new TemplateService(legacyTemplateRepo);
 
       logger.info('Template service initialized successfully');
 
-      // Initialize scheduler with Discord service if available
       let discordService: DiscordNotificationService | null = null;
       if (config.discord) {
         discordService = new DiscordNotificationService(config.discord);
       }
 
-      scheduler = new NotificationScheduler(repository, config.scheduler, discordService);
+      scheduler = new NotificationScheduler(
+        repository,
+        config.scheduler,
+        discordService,
+        undefined,
+        undefined,
+        deliveryReceiptRepository,
+      );
       await scheduler.start();
 
       logger.info('Notification scheduler started successfully');
 
       if (config.retryScheduler?.enabled) {
-        retryScheduler = new RetryScheduler(repository, config.retryScheduler, discordService);
+        retryScheduler = new RetryScheduler(
+          repository,
+          config.retryScheduler,
+          discordService,
+          undefined,
+          deliveryReceiptRepository,
+        );
         await retryScheduler.start();
         logger.info('Retry scheduler started successfully');
       }
@@ -149,11 +171,13 @@ async function main() {
     port: config.eventsApiPort,
     corsOrigin: config.eventsApiCorsOrigin,
     stellarRpcUrl: config.stellarRpcUrl,
+    stellarNetwork: config.stellarNetwork,
     stellarNetworkPassphrase: config.stellarNetworkPassphrase,
     contractAddresses: config.contractAddresses,
     discordWebhookUrl: config.discord?.webhookUrl,
     notificationAPI,
-    templateService: legacyTemplateService,
+    templateService,
+    schedulerTemplateService: legacyTemplateService,
     webhookSecrets: config.webhookSecrets,
     apiKeys: config.apiKeys,
     rateLimit: config.rateLimit,
@@ -161,66 +185,88 @@ async function main() {
     archiveService,
     metricsStore,
     healthMonitor,
+    deliveryReceiptRepository,
   });
 
   if (healthMonitor) {
     healthMonitor.start();
   }
 
-  const subscriber = new EventSubscriber(config, deduplicationService);
+  subscriber = new EventSubscriber(config, deduplicationService ?? undefined);
   await subscriber.start();
 
-  const shutdown = async () => {
-    logger.info('Shutting down services...');
+  let isShuttingDown = false;
 
-    if (healthMonitor) {
-      healthMonitor.stop();
+  const shutdown = async (signal: string) => {
+    // Idempotency: prevent duplicate shutdown if multiple signals arrive
+    if (isShuttingDown) {
+      logger.warn('Shutdown already in progress, ignoring signal', { signal });
+      return;
     }
 
-    if (cleanupService) {
-      await cleanupService.stop();
+    isShuttingDown = true;
+    logger.info('Graceful shutdown initiated', { signal });
+
+    try {
+      if (healthMonitor) {
+        healthMonitor.stop();
+      }
+
+      if (databaseCleanupJob) {
+        await databaseCleanupJob.stop();
+      }
+
+      if (reconciliationEngine) {
+        reconciliationEngine.stop();
+      }
+
+      if (metricsRunner) {
+        await metricsRunner.stop();
+      }
+
+      if (archiveService) {
+        await archiveService.stop();
+      }
+
+      if (scheduler) {
+        await scheduler.stop();
+      }
+
+      if (retryScheduler) {
+        await retryScheduler.stop();
+      }
+
+      if (subscriber) {
+        await subscriber.stop();
+      }
+
+      eventsServer.close();
+
+      logger.info('Graceful shutdown completed successfully', { signal });
+      process.exit(0);
+    } catch (error) {
+      logger.error('Error during graceful shutdown', { signal, error });
+      process.exit(1);
     }
-
-    if (reconciliationEngine) {
-      reconciliationEngine.stop();
-    }
-
-    if (metricsRunner) {
-      await metricsRunner.stop();
-    }
-
-    if (archiveService) {
-      await archiveService.stop();
-    }
-
-    if (scheduler) {
-      await scheduler.stop();
-    }
-
-    if (retryScheduler) {
-      await retryScheduler.stop();
-    }
-
-    await subscriber.stop();
-    eventsServer.close();
-
-    logger.info('All services stopped successfully');
-    process.exit(0);
   };
 
   process.on('SIGINT', async () => {
-    logger.info('Received SIGINT, shutting down');
-    await shutdown();
+    await shutdown('SIGINT');
   });
 
   process.on('SIGTERM', async () => {
-    logger.info('Received SIGTERM, shutting down');
-    await shutdown();
+    await shutdown('SIGTERM');
   });
 }
 
 main().catch((err) => {
-  if (err instanceof ConfigError) {
+  if (err instanceof SecretValidationError) {
+    // Secret validation failures are reported field-by-field without echoing
+    // actual secret values (#692).
+    logger.error('Startup secret validation failed — service will not start', {
+      error: err.message,
+    });
+  } else if (err instanceof ConfigError) {
     logger.error('Configuration error', { error: err.message });
   } else {
     logger.error('Error starting service', { error: err });

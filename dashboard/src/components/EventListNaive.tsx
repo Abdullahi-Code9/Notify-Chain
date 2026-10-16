@@ -7,12 +7,12 @@ interface EventListNaiveProps {
 }
 
 /** Naive list used only for benchmark comparisons — renders every row in the DOM. */
-export const EventListNaive = memo(function EventListNaive({
-  events,
-}: EventListNaiveProps) {
+export const EventListNaive = memo(function EventListNaive({ events }: EventListNaiveProps) {
   return (
     <div className="event-list event-list--naive">
-      {events.map((event) => <EventRow key={event.eventId} event={event} />)}
+      {events.map((event) => (
+        <EventRow key={event.eventId} event={event} />
+      ))}
     </div>
   );
 });

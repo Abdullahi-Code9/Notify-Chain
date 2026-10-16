@@ -59,13 +59,7 @@ describe('MobileNavDrawer (#396)', () => {
   it('calls onSelectTab and onClose when a nav item is clicked', () => {
     const onSelectTab = jest.fn();
     const onClose = jest.fn();
-    render(
-      <MobileNavDrawer
-        {...defaultProps}
-        onSelectTab={onSelectTab}
-        onClose={onClose}
-      />,
-    );
+    render(<MobileNavDrawer {...defaultProps} onSelectTab={onSelectTab} onClose={onClose} />);
     fireEvent.click(screen.getByText('Delivery Timeline'));
     expect(onSelectTab).toHaveBeenCalledWith('timeline');
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -104,7 +98,7 @@ describe('MobileNavDrawer (#396)', () => {
 
   it('has a nav landmark with accessible label', () => {
     render(<MobileNavDrawer {...defaultProps} />);
-    const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+    const nav = screen.getByRole('navigation', { name: 'Mobile navigation' });
     expect(nav).toBeInTheDocument();
   });
 });

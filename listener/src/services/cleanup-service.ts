@@ -11,6 +11,8 @@ export interface CleanupConfig {
   rateLimitEventRetentionMs: number;
   /** Retain notification execution log rows for this long (ms). Default: 90 days. */
   executionLogRetentionMs: number;
+  /** Retain processed event metadata for this long (ms). Default: 30 days. */
+  processedEventRetentionMs: number;
 }
 
 const DEFAULTS: CleanupConfig = {
@@ -18,6 +20,7 @@ const DEFAULTS: CleanupConfig = {
   notificationRetentionMs: 7 * 24 * 60 * 60 * 1000,
   rateLimitEventRetentionMs: 24 * 60 * 60 * 1000,
   executionLogRetentionMs: 90 * 24 * 60 * 60 * 1000,
+  processedEventRetentionMs: 30 * 24 * 60 * 60 * 1000,
 };
 
 export class CleanupService {
@@ -48,15 +51,21 @@ export class CleanupService {
     logger.info('CleanupService stopped');
   }
 
-  async runDbCleanup(): Promise<{ notifications: number; executionLogs: number; rateLimitEvents: number }> {
+  async runDbCleanup(): Promise<{
+    notifications: number;
+    executionLogs: number;
+    rateLimitEvents: number;
+    processedEvents: number;
+  }> {
     const notificationCutoff = new Date(Date.now() - this.config.notificationRetentionMs).toISOString();
     const rateLimitCutoff = new Date(Date.now() - this.config.rateLimitEventRetentionMs).toISOString();
     const executionLogCutoff = new Date(Date.now() - this.config.executionLogRetentionMs).toISOString();
+    const processedEventRetentionSeconds = this.config.processedEventRetentionMs / 1000;
 
-    const [notifResult, rateLimitResult, executionLogResult] = await Promise.all([
+    const [notifResult, rateLimitResult, executionLogResult, processedEventResult] = await Promise.all([
       this.db.run(
         `DELETE FROM scheduled_notifications
-         WHERE status IN ('COMPLETED','FAILED','CANCELLED')
+         WHERE status IN ('COMPLETED','FAILED','CANCELLED','EXPIRED')
            AND processing_completed_at < ?`,
         [notificationCutoff],
       ),
@@ -68,12 +77,18 @@ export class CleanupService {
         `DELETE FROM notification_execution_log WHERE execution_time < ?`,
         [executionLogCutoff],
       ),
+      this.db.run(
+        `DELETE FROM processed_events
+         WHERE processed_at < datetime('now', '-' || ? || ' seconds')`,
+        [processedEventRetentionSeconds],
+      ),
     ]);
 
     const result = {
       notifications: notifResult.changes,
       executionLogs: executionLogResult.changes,
       rateLimitEvents: rateLimitResult.changes,
+      processedEvents: processedEventResult.changes,
     };
 
     logger.info('DB cleanup completed', result);

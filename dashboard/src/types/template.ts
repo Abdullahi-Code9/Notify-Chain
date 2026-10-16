@@ -57,11 +57,7 @@ export interface SmsPayload {
   phoneNumber?: string;
 }
 
-export type NotificationPayload = 
-  | DiscordPayload 
-  | EmailPayload 
-  | WebhookPayload 
-  | SmsPayload;
+export type NotificationPayload = DiscordPayload | EmailPayload | WebhookPayload | SmsPayload;
 
 export interface TemplatePreviewData {
   template: NotificationTemplate;

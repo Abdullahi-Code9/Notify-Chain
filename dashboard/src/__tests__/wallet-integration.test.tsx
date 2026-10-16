@@ -48,8 +48,8 @@ function writeReport(results: { wallet: string; passed: boolean }[]) {
         wallets: results,
       },
       null,
-      2
-    )
+      2,
+    ),
   );
 }
 
@@ -94,19 +94,22 @@ describe('Wallet connection flows', () => {
 });
 
 describe('Wallet switching', () => {
-  it.each(SUPPORTED_WALLETS)('switches to $label and updates persisted wallet id', async ({ id, address }) => {
-    const { wallet, store, kit } = await load();
+  it.each(SUPPORTED_WALLETS)(
+    'switches to $label and updates persisted wallet id',
+    async ({ id, address }) => {
+      const { wallet, store, kit } = await load();
 
-    kit.__control.authModalImpl = async () => {
-      kit.__emit('WALLET_SELECTED', { id });
-      kit.__emit('STATE_UPDATED', { address });
-    };
+      kit.__control.authModalImpl = async () => {
+        kit.__emit('WALLET_SELECTED', { id });
+        kit.__emit('STATE_UPDATED', { address });
+      };
 
-    await wallet.connectWallet();
+      await wallet.connectWallet();
 
-    expect(localStorage.getItem(WALLET_ID_KEY)).toBe(id);
-    expect(store.useWalletStore.getState().address).toBe(address);
-  });
+      expect(localStorage.getItem(WALLET_ID_KEY)).toBe(id);
+      expect(store.useWalletStore.getState().address).toBe(address);
+    },
+  );
 
   it('switches wallets without leaving a stale session', async () => {
     const { wallet, store, kit } = await load();
@@ -130,25 +133,23 @@ describe('Wallet switching', () => {
 
 describe('Notification workflow with wallet connected', () => {
   it('loads events while wallet session is active', async () => {
-    const fetchMock = jest
-      .fn<() => Promise<Response>>()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          events: [
-            {
-              eventId: 'evt-wallet-1',
-              contractAddress: 'CTEST',
-              eventName: 'task_created',
-              type: 'contract',
-              topic: [],
-              value: '',
-              ledger: 100,
-              receivedAt: Date.parse('2026-06-24T12:00:00Z'),
-            },
-          ],
-        }),
-      } as unknown as Response);
+    const fetchMock = jest.fn<() => Promise<Response>>().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        events: [
+          {
+            eventId: 'evt-wallet-1',
+            contractAddress: 'CTEST',
+            eventName: 'task_created',
+            type: 'contract',
+            topic: [],
+            value: '',
+            ledger: 100,
+            receivedAt: Date.parse('2026-06-24T12:00:00Z'),
+          },
+        ],
+      }),
+    } as unknown as Response);
     global.fetch = fetchMock as unknown as typeof fetch;
 
     const { fetchEvents } = await import('../services/eventsApi');
@@ -258,7 +259,9 @@ describe('Notification feed clears on wallet switch (issue #175)', () => {
 
     // localStorage must reflect the new account only
     expect(localStorage.getItem('notify-chain:wallet-address')).toBe(SUPPORTED_WALLETS[2].address);
-    expect(localStorage.getItem('notify-chain:wallet-address')).not.toBe(SUPPORTED_WALLETS[0].address);
+    expect(localStorage.getItem('notify-chain:wallet-address')).not.toBe(
+      SUPPORTED_WALLETS[0].address,
+    );
     expect(store.useWalletStore.getState().address).toBe(SUPPORTED_WALLETS[2].address);
   });
 

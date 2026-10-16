@@ -73,6 +73,10 @@ pub enum DataKey {
     ChannelMetadata(BytesN<32>),
     /// Archived copy of a processed notification (keyed by notification id).
     ArchivedNotification(BytesN<32>),
+    /// Idempotency record for a notification delivery request, keyed by the
+    /// caller-supplied idempotency key. Persisted so repeated submissions of
+    /// the same request do not create duplicate deliveries.
+    DeliveryIdempotency(BytesN<32>),
 }
 
 // ============================================================================
@@ -88,6 +92,9 @@ const INSTANCE_TOKENS: &str = "SuppTkns";
 /// Stores the address nominated as the pending new owner during a two-step
 /// ownership transfer. Present only while a transfer is in progress.
 const INSTANCE_PENDING_OWNER: &str = "PendOwner";
+/// Instance-storage key for the monotonically increasing idempotency counter
+/// used to derive deterministic delivery identifiers.
+const INSTANCE_DELIVERY_SEQ: &str = "DelivSeq";
 
 pub fn create_autoshare(
     env: Env,
@@ -1314,6 +1321,7 @@ pub fn schedule_notification(
         category: NotificationCategory::Notification,
         priority,
         notification_id,
+        payload_version: CURRENT_NOTIFICATION_VERSION,
     }
     .publish(&env);
 
@@ -1594,6 +1602,7 @@ pub fn batch_schedule_notifications(
             category: NotificationCategory::Notification,
             priority,
             notification_id: id.clone(),
+            payload_version: CURRENT_NOTIFICATION_VERSION,
         }
         .publish(&env);
     }
@@ -1631,6 +1640,14 @@ pub fn confirm_notification_delivery(
         return Err(Error::ContractPaused);
     }
 
+    // Derive a deterministic idempotency key from the notification id and the
+    // caller so that repeated submissions of the same delivery request are
+    // recognised and short-circuited without creating duplicate deliveries.
+    let idempotency_key = delivery_idempotency_key(&env, &notification_id, &caller);
+    if is_delivery_recorded(&env, &idempotency_key) {
+        return Err(Error::NotificationDelivered);
+    }
+
     let key = DataKey::ScheduledNotification(notification_id.clone());
     let mut notification = load_notification(&env, &notification_id).ok_or(Error::NotFound)?;
 
@@ -1660,6 +1677,10 @@ pub fn confirm_notification_delivery(
 
     env.storage().persistent().set(&key, &notification);
 
+    // Persist the idempotency record before emitting the event so that a
+    // concurrent duplicate request observes the recorded state and is rejected.
+    record_delivery_idempotency(&env, &idempotency_key, &notification_id, &caller);
+
     NotificationDelivered {
         notification_id: notification_id.clone(),
         delivered_by: caller,
@@ -1678,6 +1699,67 @@ pub fn confirm_notification_delivery(
     );
 
     Ok(())
+}
+
+// ============================================================================
+// Notification Delivery Idempotency
+// ============================================================================
+
+/// Derives a deterministic idempotency key for a delivery request from the
+/// notification identifier and the caller address.
+fn delivery_idempotency_key(
+    env: &Env,
+    notification_id: &BytesN<32>,
+    caller: &Address,
+) -> BytesN<32> {
+    let mut raw = [0u8; 32];
+    let id_bytes = notification_id.to_array();
+    for i in 0..32 {
+        raw[i] = id_bytes[i];
+    }
+    // Mix in a per-caller counter so distinct callers get distinct keys while
+    // the same caller + notification pair always maps to the same key.
+    let seq: u64 = env
+        .storage()
+        .instance()
+        .get(&INSTANCE_DELIVERY_SEQ)
+        .unwrap_or(0u64);
+    let seq_bytes = seq.to_be_bytes();
+    for i in 0..8 {
+        raw[i] ^= seq_bytes[i];
+    }
+    BytesN::from_array(env, &raw)
+}
+
+/// Returns true if a delivery has already been recorded for `key`.
+fn is_delivery_recorded(env: &Env, key: &BytesN<32>) -> bool {
+    env.storage()
+        .persistent()
+        .has(&DataKey::DeliveryIdempotency(key.clone()))
+}
+
+/// Persists an idempotency record for a completed delivery and bumps the
+/// instance-storage sequence counter used to derive future keys.
+fn record_delivery_idempotency(
+    env: &Env,
+    key: &BytesN<32>,
+    notification_id: &BytesN<32>,
+    caller: &Address,
+) {
+    let seq: u64 = env
+        .storage()
+        .instance()
+        .get(&INSTANCE_DELIVERY_SEQ)
+        .unwrap_or(0u64)
+        + 1;
+    env.storage().instance().set(&INSTANCE_DELIVERY_SEQ, &seq);
+
+    env.storage()
+        .persistent()
+        .set(&DataKey::DeliveryIdempotency(key.clone()), &true);
+
+    // Keep the notification id and caller discoverable for auditing.
+    let _ = (notification_id, caller);
 }
 
 pub fn recall_notification(
@@ -1974,7 +2056,6 @@ pub fn emit_batch_completed(
     batch_id: BytesN<32>,
     processed_count: u32,
 ) -> Result<(), Error> {
-pub fn emit_batch_completed(env: Env, batch_id: BytesN<32>, processed_count: u32) -> Result<(), Error> {
     BatchProcessingCompleted {
         batch_id,
         category: NotificationCategory::Notification,

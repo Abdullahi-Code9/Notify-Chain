@@ -151,4 +151,3 @@ export function IndexingHealthPanel(props: { healthUrl: string; pollIntervalMs?:
     </section>
   );
 }
-

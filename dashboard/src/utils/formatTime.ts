@@ -25,6 +25,7 @@ const SHORT_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 
 const FALLBACK_STRING = 'Unknown time';
+export const RELATIVE_TIMESTAMP_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Parses any raw input (number, string, Date, null, undefined) defensively into a Date object.
@@ -94,4 +95,37 @@ export function formatTimestampShort(timestamp: unknown): string {
     return FALLBACK_STRING;
   }
   return new Intl.DateTimeFormat(undefined, SHORT_OPTIONS).format(d);
+}
+
+/**
+ * Formats timestamps within the last or next 24 hours relative to `now`.
+ * Older or more distant timestamps use the full, exact timestamp instead.
+ */
+export function formatRelativeTimestamp(timestamp: unknown, now = Date.now()): string {
+  const date = parseToDate(timestamp);
+  if (!date) {
+    return FALLBACK_STRING;
+  }
+
+  const differenceMs = date.getTime() - now;
+  if (Math.abs(differenceMs) >= RELATIVE_TIMESTAMP_THRESHOLD_MS) {
+    return formatTimestamp(date);
+  }
+
+  const differenceSeconds = Math.floor(Math.abs(differenceMs) / 1000);
+  if (differenceSeconds === 0) {
+    return 'just now';
+  }
+  const unit =
+    differenceSeconds < 60
+      ? { value: differenceSeconds, label: 'second' }
+      : differenceSeconds < 3600
+        ? { value: Math.floor(differenceSeconds / 60), label: 'minute' }
+        : { value: Math.floor(differenceSeconds / 3600), label: 'hour' };
+  const value = `${unit.value} ${unit.label}${unit.value === 1 ? '' : 's'}`;
+
+  if (differenceMs > 0) {
+    return `in ${value}`;
+  }
+  return `${value} ago`;
 }

@@ -1,0 +1,93 @@
+name: Documentation Link Check
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-internal-links:
+    name: Internal / Repository-Relative Links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install root dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run internal link check (strict mode)
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+        run: |
+          set -o pipefail
+          npm run check:links 2>&1 | tee link-check-output.log
+        continue-on-error: false
+
+      - name: Upload link check output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-check-output
+          path: link-check-output.log
+          retention-days: 7
+
+  check-external-links:
+    name: External HTTP/HTTPS Links (Warn Only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install root dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install lychee (external link checker)
+        uses: lycheeverse/lychee-action@v1.10.0
+        with:
+          args: >-
+            --verbose
+            --no-progress
+            --accept 200,206,403,429
+            --exclude-mail
+            --exclude-file .lycheeignore
+            --max-concurrency 10
+            --timeout 20
+            --retry-wait-time 10
+            --schema https
+            --schema http
+            './**/*.md'
+          fail: false
+          output: external-link-report.md
+          format: markdown
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload external link report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-link-report
+          path: external-link-report.md
+          retention-days: 14

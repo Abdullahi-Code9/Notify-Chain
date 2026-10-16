@@ -1,4 +1,13 @@
-import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from '@jest/globals';
 import http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -31,7 +40,9 @@ const mockResponse = () => {
   let statusCode = 200;
   let body = '';
   return {
-    setHeader: jest.fn().mockImplementation((name: any, val: any) => headers.set(name.toLowerCase(), String(val))),
+    setHeader: jest
+      .fn()
+      .mockImplementation((name: any, val: any) => headers.set(name.toLowerCase(), String(val))),
     writeHead: jest.fn().mockImplementation((code: any, h: any) => {
       statusCode = code;
       if (h) {
@@ -102,7 +113,7 @@ describe('RateLimiter', () => {
         maxRequests: 5,
         clientOverrides: {},
       });
-      const req = mockRequest({ 'authorization': 'Bearer token-abc' });
+      const req = mockRequest({ authorization: 'Bearer token-abc' });
       const client = limiter.identifyClient(req);
 
       expect(client.clientId).toBe('token-abc');
@@ -189,8 +200,9 @@ describe('RateLimiter', () => {
       expect(res3._getHeaders().get('retry-after')).toBeDefined();
 
       const body = JSON.parse(res3._getBody());
-      expect(body.error).toBe('Too Many Requests');
-      expect(body.message).toContain('Rate limit exceeded');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RATE_LIMITED');
+      expect(body.error.message).toContain('Rate limit exceeded');
       limiter.destroy();
     });
 
@@ -249,7 +261,7 @@ describe('RateLimiter', () => {
       });
 
       const req = mockRequest({}, '127.0.0.1');
-      
+
       // Initial metrics
       let metrics = limiter.getMetrics();
       expect(metrics.totalRequests).toBe(0);
@@ -381,7 +393,7 @@ describe('RateLimiter', () => {
       });
 
       const req = mockRequest({ 'x-api-key': 'attacker-key' }, '8.8.8.8');
-      
+
       // Request 1: Allowed
       await limiter.handle(req, mockResponse());
 
@@ -396,12 +408,12 @@ describe('RateLimiter', () => {
           clientId: 'attacker...',
           clientType: 'API_KEY',
           endpoint: '/api/schedule',
-        })
+        }),
       );
 
       // Verify DB record
       // Need a small timeout to allow async DB insert to complete
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const rows = await db.all('SELECT * FROM rate_limit_events');
       expect(rows.length).toBe(1);
@@ -426,7 +438,10 @@ describe('Events Server Rate Limiting Integration', () => {
     }
   });
 
-  const makeRequest = (path: string, headers: Record<string, string> = {}): Promise<{ status: number; headers: any }> => {
+  const makeRequest = (
+    path: string,
+    headers: Record<string, string> = {},
+  ): Promise<{ status: number; headers: any }> => {
     return new Promise((resolve, reject) => {
       const req = http.request(
         {
@@ -438,7 +453,7 @@ describe('Events Server Rate Limiting Integration', () => {
         },
         (res) => {
           resolve({ status: res.statusCode!, headers: res.headers });
-        }
+        },
       );
       req.on('error', reject);
       req.end();
@@ -497,29 +512,33 @@ describe('Events Server Rate Limiting Integration', () => {
     await makeRequest('/api/events'); // This one should be blocked
 
     // Fetch metrics
-    const metricsResponse = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-      const req = http.request(
-        {
-          host: '127.0.0.1',
-          port,
-          path: '/api/rate-limit/metrics',
-          method: 'GET',
-        },
-        (res) => {
-          let body = '';
-          res.on('data', (chunk) => { body += chunk; });
-          res.on('end', () => {
-            resolve({ status: res.statusCode!, body });
-          });
-        }
-      );
-      req.on('error', reject);
-      req.end();
-    });
+    const metricsResponse = await new Promise<{ status: number; body: string }>(
+      (resolve, reject) => {
+        const req = http.request(
+          {
+            host: '127.0.0.1',
+            port,
+            path: '/api/rate-limit/metrics',
+            method: 'GET',
+          },
+          (res) => {
+            let body = '';
+            res.on('data', (chunk) => {
+              body += chunk;
+            });
+            res.on('end', () => {
+              resolve({ status: res.statusCode!, body });
+            });
+          },
+        );
+        req.on('error', reject);
+        req.end();
+      },
+    );
 
     expect(metricsResponse.status).toBe(200);
     const metrics = JSON.parse(metricsResponse.body);
-    
+
     expect(metrics.totalRequests).toBeGreaterThanOrEqual(3);
     expect(metrics.allowedRequests).toBeGreaterThanOrEqual(2);
     expect(metrics.blockedRequests).toBeGreaterThanOrEqual(1);

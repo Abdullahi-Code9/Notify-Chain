@@ -15,4 +15,3 @@ export function formatDuration(ms: number | null): string {
   }
   return `${seconds}s`;
 }
-

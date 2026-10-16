@@ -24,11 +24,7 @@ describe('NotificationDetailsDrawer', () => {
     const onClose = jest.fn();
 
     render(
-      <NotificationDetailsDrawer
-        isOpen={true}
-        notification={notification}
-        onClose={onClose}
-      />
+      <NotificationDetailsDrawer isOpen={true} notification={notification} onClose={onClose} />,
     );
 
     expect(screen.getByRole('dialog', { name: 'Notification details' })).toBeInTheDocument();
@@ -46,11 +42,7 @@ describe('NotificationDetailsDrawer', () => {
     const onClose = jest.fn();
 
     render(
-      <NotificationDetailsDrawer
-        isOpen={true}
-        notification={notification}
-        onClose={onClose}
-      />
+      <NotificationDetailsDrawer isOpen={true} notification={notification} onClose={onClose} />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Close drawer' }));
@@ -79,7 +71,7 @@ describe('NotificationDetailsDrawer', () => {
             { label: 'Delivered', timestampMs: 2, detail: 'Sent successfully' },
           ],
         })}
-      />
+      />,
     );
 
     expect(await screen.findByText('Queued')).toBeInTheDocument();
@@ -102,7 +94,7 @@ describe('NotificationDetailsDrawer', () => {
         fetchMetadata={async () => {
           throw new Error('boom');
         }}
-      />
+      />,
     );
 
     expect(await screen.findByText(/Failed to load details: boom/i)).toBeInTheDocument();
@@ -113,11 +105,7 @@ describe('NotificationDetailsDrawer', () => {
     const onClose = jest.fn();
 
     render(
-      <NotificationDetailsDrawer
-        isOpen={true}
-        notification={notification}
-        onClose={onClose}
-      />
+      <NotificationDetailsDrawer isOpen={true} notification={notification} onClose={onClose} />,
     );
 
     expect(screen.getByText('Notification ID')).toBeInTheDocument();
@@ -128,16 +116,46 @@ describe('NotificationDetailsDrawer', () => {
     expect(copyButtons.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('renders payload section with copy action for long values (#680)', () => {
+    const longPayload =
+      '{"detail":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}';
+    const notification = makeNotification({
+      value: longPayload,
+      txHash: 'abcdef1234567890abcdef1234567890abcdef12',
+    });
+
+    const { container } = render(
+      <NotificationDetailsDrawer
+        isOpen={true}
+        notification={notification}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Payload')).toBeInTheDocument();
+    expect(container.querySelector('.drawer__payload')).toHaveTextContent(longPayload);
+    expect(container.querySelector('.drawer__row--stack')).toBeTruthy();
+  });
+
+  it('keeps close and copy actions available in the drawer chrome', () => {
+    render(
+      <NotificationDetailsDrawer
+        isOpen={true}
+        notification={makeNotification()}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Close drawer' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(0);
+  });
+
   it('does not render Notification ID row when relatedNotificationId is absent', () => {
     const notification = makeNotification();
     const onClose = jest.fn();
 
     render(
-      <NotificationDetailsDrawer
-        isOpen={true}
-        notification={notification}
-        onClose={onClose}
-      />
+      <NotificationDetailsDrawer isOpen={true} notification={notification} onClose={onClose} />,
     );
 
     expect(screen.queryByText('Notification ID')).not.toBeInTheDocument();
@@ -154,11 +172,7 @@ describe('NotificationDetailsDrawer', () => {
     const onClose = jest.fn();
 
     render(
-      <NotificationDetailsDrawer
-        isOpen={true}
-        notification={notification}
-        onClose={onClose}
-      />
+      <NotificationDetailsDrawer isOpen={true} notification={notification} onClose={onClose} />,
     );
 
     // Find the Notification ID row's copy button (first copy button in Blockchain Context)
@@ -171,4 +185,3 @@ describe('NotificationDetailsDrawer', () => {
     expect(await screen.findByText('Notification ID copied')).toBeInTheDocument();
   });
 });
-

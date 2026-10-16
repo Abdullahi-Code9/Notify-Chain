@@ -8,7 +8,7 @@ import { getEventsApiBaseUrl } from '../config/eventsApiUrl';
 const BASE_URL = getEventsApiBaseUrl();
 
 export async function fetchUserActivityTimeline(
-  limit: number = 50
+  limit: number = 50,
 ): Promise<UserActivityTimelineResponse> {
   const response = await fetch(`${BASE_URL}/api/user-activity?limit=${limit}`);
   if (!response.ok) {
@@ -46,8 +46,6 @@ export function generateMockUserActivity(count: number = 12): UserActivityEvent[
   });
 }
 
-export function sortUserActivityChronologically(
-  events: UserActivityEvent[]
-): UserActivityEvent[] {
+export function sortUserActivityChronologically(events: UserActivityEvent[]): UserActivityEvent[] {
   return [...events].sort((a, b) => b.timestamp - a.timestamp);
 }

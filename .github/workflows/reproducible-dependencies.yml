@@ -1,0 +1,47 @@
+name: Reproducible Dependency Installation Check
+
+on:
+  pull_request:
+    paths:
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - "scripts/check-dependency-locks.sh"
+  push:
+    branches: [main]
+    paths:
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+  workflow_dispatch:
+
+concurrency:
+  group: deps-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-lockfiles:
+    name: verify-frozen-lockfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Reproducible Dependency Verification
+        run: |
+          chmod +x scripts/check-dependency-locks.sh
+          ./scripts/check-dependency-locks.sh

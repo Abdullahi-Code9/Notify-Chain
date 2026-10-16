@@ -3,3 +3,8 @@ dist/
 .env
 *.log
 data/
+
+# Generated load-test reports. These are environment-specific; keep a curated
+# baseline (reports/load/baseline.json) committed so runs stay comparable.
+reports/load/*.json
+!reports/load/baseline.json

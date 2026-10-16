@@ -20,9 +20,7 @@ async function load(): Promise<{
   store: WalletStoreModule;
 }> {
   jest.resetModules();
-  const kit = (await import(
-    '@creit.tech/stellar-wallets-kit'
-  )) as unknown as KitMock;
+  const kit = (await import('@creit.tech/stellar-wallets-kit')) as unknown as KitMock;
   const store = await import('../store/walletStore');
   const wallet = await import('./wallet');
   return { kit, wallet, store };
@@ -155,4 +153,3 @@ describe('disconnectWallet', () => {
     expect(localStorage.getItem(WALLET_ADDRESS_KEY)).toBeNull();
   });
 });
-

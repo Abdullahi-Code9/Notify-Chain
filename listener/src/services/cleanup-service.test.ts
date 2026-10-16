@@ -98,8 +98,8 @@ describe('CleanupService', () => {
 
     const result = await service.runDbCleanup();
 
-    // Three DELETE calls: scheduled_notifications + rate_limit_events + execution_log
-    expect(db.run).toHaveBeenCalledTimes(3);
+    // Four DELETE calls, including processed event metadata.
+    expect(db.run).toHaveBeenCalledTimes(4);
     expect(db.run).toHaveBeenCalledWith(
       expect.stringContaining('DELETE FROM scheduled_notifications'),
       expect.any(Array),
@@ -112,9 +112,29 @@ describe('CleanupService', () => {
       expect.stringContaining('DELETE FROM notification_execution_log'),
       expect.any(Array),
     );
+    expect(db.run).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM processed_events'),
+      expect.any(Array),
+    );
     expect(result.notifications).toBe(5);
     expect(result.rateLimitEvents).toBe(5);
     expect(result.executionLogs).toBe(5);
+    expect(result.processedEvents).toBe(5);
+  });
+
+  it('uses the configured retention duration for processed event metadata', async () => {
+    const db = makeDb();
+    const registry = new EventRegistry();
+    const service = new CleanupService(db, registry, {
+      processedEventRetentionMs: 60_000,
+    });
+
+    await service.runDbCleanup();
+
+    expect(db.run).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM processed_events'),
+      [60],
+    );
   });
 
   it('stop clears the interval and stops registry cleanup', async () => {

@@ -34,7 +34,7 @@ describe('IndexingHealthPanel', () => {
       <IndexingHealthPanel
         healthUrl="http://localhost:8787/api/indexing/health"
         pollIntervalMs={60_000}
-      />
+      />,
     );
 
     expect(await screen.findByText('Indexing Health')).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe('IndexingHealthPanel', () => {
       <IndexingHealthPanel
         healthUrl="http://localhost:8787/api/indexing/health"
         pollIntervalMs={60_000}
-      />
+      />,
     );
 
     expect(await screen.findByText('Degraded')).toBeInTheDocument();
@@ -69,4 +69,3 @@ describe('IndexingHealthPanel', () => {
     expect(await screen.findByText('Behind by 20 ledger(s).')).toBeInTheDocument();
   });
 });
-

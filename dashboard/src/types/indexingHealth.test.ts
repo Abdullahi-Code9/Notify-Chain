@@ -27,4 +27,3 @@ describe('parseIndexingHealth', () => {
     expect(parsed.status).toBe('degraded');
   });
 });
-

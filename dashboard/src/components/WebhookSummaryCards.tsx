@@ -29,9 +29,7 @@ function MetricCard({
       ) : (
         <dd className="webhook-metric-card__value">
           <span className="webhook-metric-card__number">{value}</span>
-          {subValue && (
-            <span className="webhook-metric-card__sub">{subValue}</span>
-          )}
+          {subValue && <span className="webhook-metric-card__sub">{subValue}</span>}
         </dd>
       )}
     </div>
@@ -48,8 +46,8 @@ export const WebhookSummaryCards = memo(function WebhookSummaryCards({
   const avgLatencyStr = isLoading
     ? '—'
     : summary.avgLatencyMs !== null
-    ? `${summary.avgLatencyMs.toLocaleString()} ms`
-    : '—';
+      ? `${summary.avgLatencyMs.toLocaleString()} ms`
+      : '—';
   const p95LatencyStr =
     !isLoading && summary.p95LatencyMs !== null
       ? `p95: ${summary.p95LatencyMs.toLocaleString()} ms`
@@ -61,24 +59,14 @@ export const WebhookSummaryCards = memo(function WebhookSummaryCards({
 
   return (
     <dl className="webhook-summary-cards" aria-label="Webhook delivery summary">
-      <MetricCard
-        label="Total Attempts"
-        value={totalStr}
-        accent="blue"
-        isLoading={isLoading}
-      />
+      <MetricCard label="Total Attempts" value={totalStr} accent="blue" isLoading={isLoading} />
       <MetricCard
         label="Success Rate"
         value={successRateStr}
         accent={rateAccent}
         isLoading={isLoading}
       />
-      <MetricCard
-        label="Failed Deliveries"
-        value={failedStr}
-        accent="red"
-        isLoading={isLoading}
-      />
+      <MetricCard label="Failed Deliveries" value={failedStr} accent="red" isLoading={isLoading} />
       <MetricCard
         label="Avg Latency"
         value={avgLatencyStr}

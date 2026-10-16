@@ -295,7 +295,7 @@ describe('Notification delivery lifecycle (e2e)', () => {
 
       expect(result).toBe(false);
       expect(logger.error).toHaveBeenCalledWith(
-        'Error sending Discord notification',
+        'Discord webhook request error',
         expect.objectContaining({
           eventId: 'evt-neterr',
           webhookId: 'test-webhook',

@@ -50,7 +50,13 @@ Canonical setup path: workflow guide → [`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPM
 
 ## Getting Started
 
-### Prerequisites
+### Prerequisites & Environment Doctor
+
+Run the automated repository health check to verify your local toolchain before starting:
+
+```bash
+./scripts/doctor.sh
+```
 
 To contribute to NotifyChain, install the tools listed in
 [`docs/ENVIRONMENT_SETUP.md`](docs/ENVIRONMENT_SETUP.md) (Rust, WebAssembly
@@ -304,6 +310,27 @@ The PR template will prompt you for:
 - Address feedback promptly and push to the same branch (the PR updates automatically).
 - Keep the scope tight — don't mix unrelated changes in one PR.
 - Reviewers will test locally for significant changes.
+
+---
+
+## Security and Vulnerability Management
+
+Before modifying dependencies, manifests, or lockfiles:
+
+1. Run the vulnerability scanners locally (they also run automatically in CI):
+   - **Rust**: `cd contract && cargo audit --deny warnings`
+   - **Node**: `cd <component> && npm audit --audit-level=high`
+2. Ensure installs are reproducible: `npm ci` (Node) and `cargo build --locked`
+   (Rust). Never commit a modified `package.json` / `Cargo.toml` without the
+   matching refreshed lockfile.
+3. Verify the on-chain event reference is not stale:
+   ```bash
+   cd listener
+   npm run check:event-docs
+   ```
+
+Full policy, step-by-step remediation playbook, and contacts for responsible
+disclosure are documented in [`docs/security.md`](docs/security.md).
 
 ---
 

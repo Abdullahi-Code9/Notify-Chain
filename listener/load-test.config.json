@@ -1,0 +1,59 @@
+{
+  "$schema": "./load-test.config.schema.md",
+  "target": {
+    "baseUrl": "http://127.0.0.1:3000",
+    "rateLimit": {
+      "enabled": false,
+      "windowMs": 60000,
+      "maxRequests": 1000000,
+      "clientOverrides": {}
+    }
+  },
+  "scenarios": [
+    {
+      "name": "status",
+      "description": "Service status - the liveness/readiness probe used by load balancers.",
+      "method": "GET",
+      "path": "/api/status",
+      "concurrency": 10,
+      "durationMs": 3000,
+      "warmupMs": 500,
+      "maxRequests": 3000
+    },
+    {
+      "name": "events",
+      "description": "Event registry read - the hottest read path for the dashboard.",
+      "method": "GET",
+      "path": "/api/events",
+      "concurrency": 10,
+      "durationMs": 3000,
+      "warmupMs": 500,
+      "maxRequests": 3000
+    },
+    {
+      "name": "analytics",
+      "description": "Analytics snapshot - read by the metrics dashboard on every refresh.",
+      "method": "GET",
+      "path": "/api/analytics",
+      "concurrency": 10,
+      "durationMs": 3000,
+      "warmupMs": 500,
+      "maxRequests": 3000
+    },
+    {
+      "name": "rate-limit-metrics",
+      "description": "Rate-limit observability endpoint - must stay fast while clients are throttled.",
+      "method": "GET",
+      "path": "/api/rate-limit/metrics",
+      "concurrency": 5,
+      "durationMs": 2000,
+      "warmupMs": 300,
+      "maxRequests": 1500
+    }
+  ],
+  "thresholds": {
+    "maxErrorRate": 0.01,
+    "maxP95Ms": 250,
+    "minThroughputRps": 25
+  }
+}

@@ -1,0 +1,49 @@
+/**
+ * Keyboard focus visibility (#675) — high-contrast rings for light and dark themes.
+ */
+
+:root {
+  --focus-ring-color: #1a73e8;
+  --focus-ring-offset: 2px;
+  --focus-ring-width: 3px;
+}
+
+[data-theme='light'] {
+  --focus-ring-color: #1a56db;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: 3px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role='tab']:focus-visible,
+[role='menuitem']:focus-visible,
+[tabindex='0']:focus-visible {
+  box-shadow: 0 0 0 1px var(--focus-ring-color);
+}
+
+.theme-toggle:focus-visible,
+.app__hamburger:focus-visible,
+.mobile-drawer__close:focus-visible,
+.drawer__close:focus-visible,
+.modal__close:focus-visible,
+.copy-btn:focus-visible,
+.app-tabs__btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+[data-theme='light'] .skip-link:focus-visible {
+  outline-color: #ffffff;
+}

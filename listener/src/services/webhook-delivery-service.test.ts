@@ -272,4 +272,59 @@ describe('WebhookDeliveryService', () => {
       );
     });
   });
+
+  // ── Machine-readable failure classification ──────────────────────────────
+
+  describe('failure classification', () => {
+    it('labels a request timeout as "timeout"', async () => {
+      mockSendWebhook.mockRejectedValue(makeAbortError());
+
+      const result = await service.deliver(TARGET_URL, PAYLOAD, REQUEST_ID);
+
+      expect(result.failureReason).toBe('timeout');
+    });
+
+    it('labels a TimeoutError as "timeout"', async () => {
+      const err = new Error('request timed out');
+      err.name = 'TimeoutError';
+      mockSendWebhook.mockRejectedValue(err);
+
+      const result = await service.deliver(TARGET_URL, PAYLOAD, REQUEST_ID);
+
+      expect(result.failureReason).toBe('timeout');
+    });
+
+    it('labels a generic network error as "network"', async () => {
+      mockSendWebhook.mockRejectedValue(new Error('ECONNREFUSED'));
+
+      const result = await service.deliver(TARGET_URL, PAYLOAD, REQUEST_ID);
+
+      expect(result.failureReason).toBe('network');
+      expect(result.failureReason).not.toBe('timeout');
+    });
+
+    it('labels a 5xx response as "http_retryable"', async () => {
+      mockSendWebhook.mockResolvedValue(makeResponse(503, false));
+
+      const result = await service.deliver(TARGET_URL, PAYLOAD, REQUEST_ID);
+
+      expect(result.failureReason).toBe('http_retryable');
+    });
+
+    it('labels a 4xx response as "http_permanent"', async () => {
+      mockSendWebhook.mockResolvedValue(makeResponse(404, false));
+
+      const result = await service.deliver(TARGET_URL, PAYLOAD, REQUEST_ID);
+
+      expect(result.failureReason).toBe('http_permanent');
+    });
+
+    it('leaves failureReason undefined on success', async () => {
+      mockSendWebhook.mockResolvedValue(makeResponse(200));
+
+      const result = await service.deliver(TARGET_URL, PAYLOAD, REQUEST_ID);
+
+      expect(result.failureReason).toBeUndefined();
+    });
+  });
 });

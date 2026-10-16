@@ -15,7 +15,7 @@
  */
 
 import http from 'http';
-import logger from '../utils/logger';
+import logger, { sanitizeUrl } from '../utils/logger';
 
 export interface ResponseTimeOptions {
   /**
@@ -81,7 +81,11 @@ export class ResponseTimeMiddleware {
     }
 
     const method = req.method ?? 'UNKNOWN';
-    const url = req.url ?? '/';
+    // Sanitized, not raw: the path is what makes this line useful for finding
+    // a slow endpoint, but query strings routinely carry `?token=` or
+    // `?api_key=`, and those would otherwise be written verbatim into the log
+    // aggregator on every single request.
+    const url = sanitizeUrl(req.url ?? '/');
     const status = statusCode ?? res.statusCode;
     const isSlow = durationMs >= this.threshold;
 

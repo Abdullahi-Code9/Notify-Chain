@@ -74,6 +74,7 @@ export const ErrorCode = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   PARSE_ERROR: 'PARSE_ERROR',
+  UNSUPPORTED_MEDIA_TYPE: 'UNSUPPORTED_MEDIA_TYPE',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -115,11 +116,8 @@ export function err(
 /**
  * Write a raw JSON response.  Prefer `sendOk` / `sendErr` over this.
  */
-export function sendJson(
-  res: http.ServerResponse,
-  statusCode: number,
-  body: unknown,
-): void {
+export function sendJson(res: http.ServerResponse, statusCode: number, body: unknown): void {
+  res.setHeader('Content-Type', 'application/json');
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }

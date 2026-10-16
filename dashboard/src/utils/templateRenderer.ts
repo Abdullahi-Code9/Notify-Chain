@@ -21,13 +21,13 @@ export function extractVariables(text: string): string[] {
   const variablePattern = /\{\{(\w+)\}\}/g;
   const matches = text.matchAll(variablePattern);
   const variables = new Set<string>();
-  
+
   for (const match of matches) {
     if (match[1]) {
       variables.add(match[1]);
     }
   }
-  
+
   return Array.from(variables);
 }
 
@@ -35,35 +35,29 @@ export function extractVariables(text: string): string[] {
  * Replace variables in a string with their values
  * Variables in format {{variableName}} are replaced with values from the map
  */
-export function replaceVariables(
-  text: string,
-  variables: TemplateVariableValues
-): string {
+export function replaceVariables(text: string, variables: TemplateVariableValues): string {
   let result = text;
-  
+
   for (const [key, value] of Object.entries(variables)) {
     const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
     result = result.replace(pattern, value);
   }
-  
+
   return result;
 }
 
 /**
  * Recursively replace variables in an object
  */
-function replaceVariablesInObject(
-  obj: unknown,
-  variables: TemplateVariableValues
-): unknown {
+function replaceVariablesInObject(obj: unknown, variables: TemplateVariableValues): unknown {
   if (typeof obj === 'string') {
     return replaceVariables(obj, variables);
   }
-  
+
   if (Array.isArray(obj)) {
-    return obj.map(item => replaceVariablesInObject(item, variables));
+    return obj.map((item) => replaceVariablesInObject(item, variables));
   }
-  
+
   if (obj !== null && typeof obj === 'object') {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
@@ -71,7 +65,7 @@ function replaceVariablesInObject(
     }
     return result;
   }
-  
+
   return obj;
 }
 
@@ -80,7 +74,7 @@ function replaceVariablesInObject(
  */
 export function renderTemplatePayload(
   template: NotificationTemplate,
-  variables: TemplateVariableValues
+  variables: TemplateVariableValues,
 ): NotificationPayload {
   try {
     // Try to parse body as JSON first (for structured payloads)
@@ -90,26 +84,26 @@ export function renderTemplatePayload(
   } catch {
     // If not JSON, treat as plain text and create appropriate payload
     const renderedBody = replaceVariables(template.body, variables);
-    
+
     switch (template.type) {
       case 'discord':
         return {
           content: renderedBody,
         } as DiscordPayload;
-        
+
       case 'email':
         return {
-          subject: template.subject 
-            ? replaceVariables(template.subject, variables) 
+          subject: template.subject
+            ? replaceVariables(template.subject, variables)
             : 'Notification',
           body: renderedBody,
         } as EmailPayload;
-        
+
       case 'sms':
         return {
           message: renderedBody,
         } as SmsPayload;
-        
+
       case 'webhook':
       default:
         return {
@@ -124,13 +118,13 @@ export function renderTemplatePayload(
  */
 export function validateVariables(
   template: NotificationTemplate,
-  variables: TemplateVariableValues
+  variables: TemplateVariableValues,
 ): { valid: boolean; missingVariables: string[] } {
   const templateVariables = template.variables || extractVariables(template.body);
   const missingVariables = templateVariables.filter(
-    varName => !variables[varName] || variables[varName].trim() === ''
+    (varName) => !variables[varName] || variables[varName].trim() === '',
   );
-  
+
   return {
     valid: missingVariables.length === 0,
     missingVariables,
@@ -143,7 +137,7 @@ export function validateVariables(
 export function getSampleVariableValues(template: NotificationTemplate): TemplateVariableValues {
   const variables = template.variables || extractVariables(template.body);
   const sampleValues: TemplateVariableValues = {};
-  
+
   for (const varName of variables) {
     // Provide sensible defaults based on common variable names
     switch (varName.toLowerCase()) {
@@ -186,7 +180,7 @@ export function getSampleVariableValues(template: NotificationTemplate): Templat
         sampleValues[varName] = `[${varName}]`;
     }
   }
-  
+
   return sampleValues;
 }
 
@@ -200,7 +194,7 @@ export function formatNotificationType(type: NotificationType): string {
     webhook: 'Webhook',
     sms: 'SMS',
   };
-  
+
   return typeMap[type] || type;
 }
 
@@ -214,6 +208,6 @@ export function getNotificationTypeColor(type: NotificationType): string {
     webhook: '#4285F4',
     sms: '#34A853',
   };
-  
+
   return colorMap[type] || '#9aa0a6';
 }

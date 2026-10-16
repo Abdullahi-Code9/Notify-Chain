@@ -1,6 +1,6 @@
-# Local Development Setup Guide
+# Local Development Guide
 
-This guide walks you through setting up every component of NotifyChain on your local machine: the Soroban smart contracts (Rust), the off-chain listener service (Node.js/TypeScript), and the React dashboard.
+This guide walks you through configuring and running every component of NotifyChain on your local machine: the Soroban smart contracts (Rust), the off-chain listener service (Node.js/TypeScript), and the React dashboard.
 
 ---
 
@@ -8,12 +8,12 @@ This guide walks you through setting up every component of NotifyChain on your l
 
 1. [Prerequisites](#prerequisites)
 2. [Repository Setup](#repository-setup)
-3. [Smart Contracts](#smart-contracts)
-4. [Listener Service](#listener-service)
-5. [Dashboard](#dashboard)
-6. [Running Everything Together](#running-everything-together)
-7. [Environment Variables Reference](#environment-variables-reference)
-8. [Example Configuration](#example-configuration)
+3. [Environment Variables](#environment-variables)
+4. [Database Setup](#database-setup)
+5. [Local Services](#local-services)
+6. [Running the Applications](#running-the-applications)
+7. [Running Tests](#running-tests)
+8. [Common Development Commands](#common-development-commands)
 9. [IDE Setup (VS Code)](#ide-setup-vs-code)
 10. [Troubleshooting](#troubleshooting)
 
@@ -21,14 +21,15 @@ This guide walks you through setting up every component of NotifyChain on your l
 
 ## Prerequisites
 
-### Required tools
+Install the following tools before continuing.
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Node.js | ≥ 18 (20 recommended for Listener) | [nodejs.org](https://nodejs.org) |
+| [Node.js](https://nodejs.org) | ≥ 18 (20 recommended) | [nodejs.org](https://nodejs.org) |
 | npm | ≥ 9 | Bundled with Node.js |
-| Rust | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| Stellar CLI | latest | `cargo install --locked stellar-cli --features opt` |
+| [Rust](https://rustup.rs) | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/stellar-cli) | latest | `cargo install --locked stellar-cli --features opt` |
+| [Freighter Wallet](https://www.freighter.app/) | latest | Browser extension for signing Stellar transactions |
 
 ### Verify installations
 
@@ -55,60 +56,163 @@ git clone https://github.com/Core-Foundry/Notify-Chain.git
 cd Notify-Chain
 ```
 
+Install dependencies for each package:
+
+```bash
+# Listener
+cd listener && npm ci && cd ..
+
+# Dashboard
+cd dashboard && npm ci && cd ..
+```
+
 ---
 
-## Smart Contracts
+## Environment Variables
 
-### AutoShare contract
+Each package has its own `.env` file. Copy the examples and fill in values before starting any service.
+
+### Listener — `listener/.env`
+
+```bash
+cp listener/.env.example listener/.env
+```
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `STELLAR_NETWORK` | `testnet` | Yes | Network name (`testnet` or `mainnet`) |
+| `STELLAR_RPC_URL` | `https://soroban-testnet.stellar.org:443` | Yes | Stellar RPC endpoint |
+| `STELLAR_NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | Yes | Network passphrase |
+| `CONTRACT_ADDRESSES` | — | Yes | JSON array of `{ address, events }` objects |
+| `EVENTS_API_PORT` | `8787` | No | Port for the HTTP events API |
+| `EVENTS_API_CORS_ORIGIN` | `http://localhost:5173` | No | Allowed CORS origin for the dashboard |
+| `DATABASE_PATH` | `./data/notifications.db` | No | Path to the SQLite database file |
+| `DISCORD_WEBHOOK_URL` | — | No | Discord webhook URL for notifications |
+| `WEBHOOK_SECRETS` | `[]` | No | JSON array of `{ id, secret }` for webhook verification |
+| `POLL_INTERVAL_MS` | `30000` | No | How often to poll for new events (ms) |
+| `MAX_RECONNECT_ATTEMPTS` | `5` | No | Max reconnect attempts on RPC failure |
+| `RECONNECT_DELAY_MS` | `5000` | No | Delay between reconnect attempts (ms) |
+| `SCHEDULER_ENABLED` | `true` | No | Enable the scheduled notifications scheduler |
+| `SCHEDULER_POLL_INTERVAL_MS` | `10000` | No | How often the scheduler checks for due notifications |
+| `SCHEDULER_BATCH_SIZE` | `10` | No | Max notifications processed per scheduler cycle |
+| `RATE_LIMIT_ENABLED` | `true` | No | Enable API rate limiting |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | No | Rate limit time window (ms) |
+| `RATE_LIMIT_MAX_REQUESTS` | `60` | No | Max requests per window per client |
+
+### Dashboard — `dashboard/.env`
+
+```bash
+cp dashboard/.env.example dashboard/.env
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_EVENTS_API_URL` | `http://localhost:8787/api/events` | Listener API endpoint |
+| `VITE_STELLAR_NETWORK` | `TESTNET` | Stellar network (`TESTNET` or `PUBLIC`) |
+
+### Minimal working configuration
+
+**`listener/.env`:**
+
+```env
+STELLAR_NETWORK=testnet
+STELLAR_RPC_URL=https://soroban-testnet.stellar.org:443
+STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+CONTRACT_ADDRESSES=[{"address":"<YOUR_CONTRACT_ID>","events":["*"]}]
+EVENTS_API_PORT=8787
+EVENTS_API_CORS_ORIGIN=http://localhost:5173
+DATABASE_PATH=./data/notifications.db
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN
+```
+
+**`dashboard/.env`:**
+
+```env
+VITE_EVENTS_API_URL=http://localhost:8787/api/events
+VITE_STELLAR_NETWORK=TESTNET
+```
+
+---
+
+## Database Setup
+
+The listener uses **SQLite** — no external database server is required.
+
+### Initialize the database
+
+```bash
+cd listener
+npm run migrate
+```
+
+This creates the `data/` directory (if it doesn't exist) and applies all pending migrations.
+
+### Reset the database
+
+```bash
+rm -f listener/data/notifications.db
+cd listener && npm run migrate
+```
+
+### Apply template migrations (if applicable)
+
+```bash
+cd listener
+npm run migrate:templates
+```
+
+### Check migration status
+
+```bash
+cd listener
+npm run check-migrations
+```
+
+> The listener tests use an in-memory SQLite database (`:memory:`) so they do not require a migrated local database.
+
+---
+
+## Local Services
+
+NotifyChain has no Docker dependencies — all services run as local Node.js processes.
+
+| Service | Directory | Port | Command |
+|---------|-----------|------|---------|
+| Listener (events API) | `listener/` | `8787` | `npm run dev` |
+| Dashboard (React + Vite) | `dashboard/` | `5173` | `npm run dev` |
+
+### Smart contracts (Rust / Soroban)
+
+Contracts run on the Stellar testnet — there is no local chain to start.
+
+Build the AutoShare contract:
 
 ```bash
 cd contract
 stellar contract build
 ```
 
-Run tests:
-
-```bash
-cd contracts/hello-world
-cargo test
-```
-
-### TaskBounty contract
+Build the TaskBounty contract:
 
 ```bash
 cd "Documents/Task Bounty"
 stellar contract build
-# or: cargo build --target wasm32-unknown-unknown --release
 ```
 
-Run tests:
+Deploy to testnet (one-time setup):
 
 ```bash
-cargo test
-```
-
-### Deploying to testnet (optional)
-
-Generate and fund a test identity:
-
-```bash
+# Generate and fund a test identity
 stellar keys generate dev-account --network testnet
 stellar keys fund dev-account --network testnet
-```
 
-Deploy:
-
-```bash
+# Deploy and note the printed CONTRACT_ID
 stellar contract deploy \
   --wasm target/wasm32-unknown-unknown/release/hello_world.wasm \
   --source dev-account \
   --network testnet
-# Outputs: CONTRACT_ID
-```
 
-Initialize:
-
-```bash
+# Initialize admin
 stellar contract invoke \
   --id <CONTRACT_ID> \
   --source dev-account \
@@ -119,124 +223,34 @@ stellar contract invoke \
 
 ---
 
-## Listener Service
+## Running the Applications
 
-The listener polls Stellar for contract events, persists them to SQLite, sends Discord notifications, and exposes an HTTP API.
+Open two terminal tabs from the repo root.
 
-### Install dependencies
+### Listener
 
 ```bash
 cd listener
-npm ci
-```
-
-### Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` — at minimum set:
-
-```env
-STELLAR_RPC_URL=https://soroban-testnet.stellar.org:443
-CONTRACT_ADDRESSES=[{"address":"<YOUR_CONTRACT_ID>","events":["*"]}]
-EVENTS_API_PORT=8787
-```
-
-See [Environment Variables Reference](#environment-variables-reference) for all options.
-
-Use `npm ci` when installing from the lockfile (CI / clean setups). Use `npm install` for local dependency updates.
-
-### Initialize database
-
-```bash
-npm run migrate
-```
-
-### Run in development mode
-
-```bash
 npm run dev
 ```
 
-### Build and run compiled output
-
-```bash
-npm run build
-npm start
-```
-
-### Run tests
-
-```bash
-npm test
-```
-
-### Verify the service is running
+The listener starts on `http://localhost:8787`. Verify it is running:
 
 ```bash
 curl http://localhost:8787/health
+# {"status":"ok","timestamp":"...","services":{...}}
 ```
 
-Expected response:
-
-```json
-{ "status": "ok", "timestamp": "...", "services": { ... } }
-```
-
----
-
-## Dashboard
-
-The dashboard is a React + Vite app that displays events fetched from the listener.
-
-### Install dependencies
+### Dashboard
 
 ```bash
 cd dashboard
-npm ci
-```
-
-### Configure environment
-
-```bash
-cp .env.example .env
-```
-
-The default `.env` points to the listener at `http://localhost:8787`:
-
-```env
-VITE_EVENTS_API_URL=http://localhost:8787/api/events
-VITE_STELLAR_NETWORK=TESTNET
-```
-
-### Run in development mode
-
-```bash
 npm run dev
 ```
 
 The dashboard is available at `http://localhost:5173`.
 
-### Build for production
-
-```bash
-npm run build
-npm run preview
-```
-
-### Run tests
-
-```bash
-npm test
-```
-
----
-
-## Running Everything Together
-
-Open three terminal tabs:
+### Run both together (three tabs)
 
 ```bash
 # Tab 1 — listener
@@ -245,107 +259,126 @@ cd listener && npm run dev
 # Tab 2 — dashboard
 cd dashboard && npm run dev
 
-# Tab 3 — health check
+# Tab 3 — verify health
 curl http://localhost:8787/health
 ```
 
-The dashboard at `http://localhost:5173` will start receiving events from the listener.
-
 ---
 
-## Environment Variables Reference
+## Running Tests
 
-### Listener (`listener/.env`)
+### Listener tests (Jest)
 
-#### Network
+```bash
+cd listener
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `STELLAR_NETWORK` | `testnet` | Network name |
-| `STELLAR_RPC_URL` | `https://soroban-testnet.stellar.org:443` | Stellar RPC endpoint |
-| `STELLAR_NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | Network passphrase |
-| `CONTRACT_ADDRESSES` | — | JSON array of `{ address, events }` objects |
+# Run all tests
+npm test
 
-#### Polling
+# Run in watch mode
+npm test -- --watch
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POLL_INTERVAL_MS` | `30000` | How often to poll for new events (ms) |
-| `MAX_RECONNECT_ATTEMPTS` | `5` | Max reconnect attempts on failure |
-| `RECONNECT_DELAY_MS` | `5000` | Delay between reconnect attempts (ms) |
+# Run a specific test file
+npm test -- src/store/event-registry.test.ts
 
-#### API
+# Run with coverage
+npm test -- --coverage
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EVENTS_API_PORT` | `8787` | Port for the HTTP events API |
-| `EVENTS_API_CORS_ORIGIN` | `http://localhost:5173` | Allowed CORS origin |
-| `WEBHOOK_SECRETS` | `[]` | JSON array of `{ id, secret }` for webhook verification |
-
-#### Database
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_PATH` | `./data/notifications.db` | Path to the SQLite database file |
-
-#### Discord (optional)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DISCORD_WEBHOOK_URL` | — | Discord webhook URL for notifications |
-
-#### Scheduler
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SCHEDULER_ENABLED` | `true` | Enable the scheduled notifications scheduler |
-| `SCHEDULER_POLL_INTERVAL_MS` | `10000` | How often the scheduler checks for due notifications |
-| `SCHEDULER_BATCH_SIZE` | `10` | Max notifications processed per cycle |
-
-#### Rate limiting
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RATE_LIMIT_ENABLED` | `true` | Enable rate limiting on the API |
-| `RATE_LIMIT_WINDOW_MS` | `60000` | Time window for rate limiting (ms) |
-| `RATE_LIMIT_MAX_REQUESTS` | `60` | Max requests per window per client |
-
-### Dashboard (`dashboard/.env`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_EVENTS_API_URL` | `http://localhost:8787/api/events` | Listener API endpoint |
-| `VITE_STELLAR_NETWORK` | `TESTNET` | Stellar network (`TESTNET` or `PUBLIC`) |
-
----
-
-## Example Configuration
-
-Minimal `listener/.env` to monitor a testnet contract and receive Discord alerts:
-
-```env
-STELLAR_NETWORK=testnet
-STELLAR_RPC_URL=https://soroban-testnet.stellar.org:443
-STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
-
-CONTRACT_ADDRESSES=[{"address":"CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX","events":["*"]}]
-
-EVENTS_API_PORT=8787
-EVENTS_API_CORS_ORIGIN=http://localhost:5173
-
-DATABASE_PATH=./data/notifications.db
-
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN
-
-SCHEDULER_ENABLED=true
-RATE_LIMIT_ENABLED=true
+# Run stress tests (long-running)
+npm run test:stress
 ```
 
-Minimal `dashboard/.env`:
+### Dashboard tests (Jest + Testing Library)
 
-```env
-VITE_EVENTS_API_URL=http://localhost:8787/api/events
-VITE_STELLAR_NETWORK=TESTNET
+```bash
+cd dashboard
+
+# Run all tests
+npm test
+
+# Run wallet integration tests only
+npm run test:wallet
+```
+
+### Contract tests (Rust)
+
+```bash
+# AutoShare contract
+cd contract
+cargo test
+
+# TaskBounty contract
+cd "Documents/Task Bounty"
+cargo test
+```
+
+---
+
+## Common Development Commands
+
+### Install dependencies
+
+```bash
+# Listener
+cd listener && npm ci
+
+# Dashboard
+cd dashboard && npm ci
+```
+
+### Build
+
+```bash
+# Listener — compiles TypeScript to dist/
+cd listener && npm run build
+
+# Dashboard — Vite production build
+cd dashboard && npm run build
+
+# Contracts
+cd contract && stellar contract build
+```
+
+### Lint
+
+```bash
+cd listener && npm run lint
+cd dashboard && npm run lint
+```
+
+### Format check
+
+```bash
+cd listener && npm run format:check
+cd dashboard && npm run format:check
+```
+
+### Typecheck (without emitting files)
+
+```bash
+cd listener && npm run typecheck
+```
+
+### Database migrations
+
+```bash
+cd listener
+npm run migrate               # Apply pending migrations
+npm run migrate:templates     # Apply template-specific migrations
+npm run check-migrations      # Show current migration status
+```
+
+### Generate and fund a Stellar test account
+
+```bash
+stellar keys generate dev-account --network testnet
+stellar keys fund dev-account --network testnet
+```
+
+### Check Stellar contract info
+
+```bash
+stellar contract info --id <CONTRACT_ID> --network testnet
 ```
 
 ---
@@ -354,16 +387,14 @@ VITE_STELLAR_NETWORK=TESTNET
 
 ### Recommended extensions
 
-Install the following extensions for the best development experience across the Rust contracts and TypeScript listener/dashboard:
-
 | Extension | ID | Purpose |
 |-----------|-----|---------|
-| **rust-analyzer** | `rust-lang.rust-analyzer` | Rust language support (autocomplete, inlay hints, go-to-definition) |
+| **rust-analyzer** | `rust-lang.rust-analyzer` | Rust language support |
 | **CodeLLDB** | `vadimcn.vscode-lldb` | Native debugger for Rust |
-| **Better TOML** | `bungcip.better-toml` | Syntax highlighting for `Cargo.toml` files |
-| **ESLint** | `dbaeumer.vscode-eslint` | TypeScript/JavaScript linting for the listener and dashboard |
+| **Better TOML** | `bungcip.better-toml` | Syntax highlighting for `Cargo.toml` |
+| **ESLint** | `dbaeumer.vscode-eslint` | TypeScript/JavaScript linting |
 
-Install all at once from the terminal:
+Install all at once:
 
 ```bash
 code --install-extension rust-lang.rust-analyzer
@@ -374,8 +405,6 @@ code --install-extension dbaeumer.vscode-eslint
 
 ### Recommended `.vscode/settings.json`
 
-The repository already ships with a `.vscode/settings.json`. If you need to create or extend it, the recommended settings are:
-
 ```json
 {
   "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
@@ -384,23 +413,15 @@ The repository already ships with a `.vscode/settings.json`. If you need to crea
 }
 ```
 
-- `rust-analyzer.cargo.target` — tells rust-analyzer to check the code against the `wasm32-unknown-unknown` target, matching how the contracts are built. Without this, rust-analyzer may surface false-positive errors for WASM-only APIs.
-- `rust-analyzer.checkOnSave.allTargets` — disabling prevents rust-analyzer from checking every target on every save, which speeds up feedback in a multi-target workspace.
-- `editor.formatOnSave` — auto-formats Rust files with `rustfmt` and TypeScript files with Prettier (if configured) on each save.
-
-> **Note:** A `.vscode/settings.json` file is already included in the repository root with the `rust-analyzer` target pre-configured. You can edit it directly rather than creating a new one.
-
 ---
 
 ## Troubleshooting
 
 ### Listener fails to start: `ConfigError`
 
-Check that `STELLAR_RPC_URL` and `CONTRACT_ADDRESSES` are set in `listener/.env`. The service exits on startup if required config is missing.
+`STELLAR_RPC_URL` and `CONTRACT_ADDRESSES` are required. The service exits on startup if they are missing from `listener/.env`.
 
 ### `DATABASE_PATH` directory does not exist
-
-Create the `data/` directory before starting the listener:
 
 ```bash
 mkdir -p listener/data
@@ -408,106 +429,42 @@ mkdir -p listener/data
 
 ### No events appearing in the dashboard
 
-1. Confirm the listener is healthy: `curl http://localhost:8787/health`
-2. Check `VITE_EVENTS_API_URL` in `dashboard/.env` matches the listener port.
-3. Check `EVENTS_API_CORS_ORIGIN` in `listener/.env` matches the dashboard origin (`http://localhost:5173` by default).
+1. Check the listener is healthy: `curl http://localhost:8787/health`
+2. Confirm `VITE_EVENTS_API_URL` in `dashboard/.env` matches the listener port.
+3. Confirm `EVENTS_API_CORS_ORIGIN` in `listener/.env` matches the dashboard origin (`http://localhost:5173` by default).
 4. Confirm `CONTRACT_ADDRESSES` contains the correct deployed contract ID.
 
-### Stellar RPC errors / timeouts
+### Dashboard shows CORS error
 
-- Switch to a different public RPC endpoint. The [Stellar Developer docs](https://developers.stellar.org/docs/tools/developer-tools/rpc-providers) list available providers.
-- Increase `POLL_INTERVAL_MS` to reduce request frequency.
+`EVENTS_API_CORS_ORIGIN` in `listener/.env` must exactly match the origin in the browser address bar (including protocol and port, no trailing slash):
 
-### Contract build fails: `wasm32-unknown-unknown` not found
+```env
+EVENTS_API_CORS_ORIGIN=http://localhost:5173
+```
+
+Restart the listener after editing `.env`.
+
+### Port already in use
+
+Change `EVENTS_API_PORT` in `listener/.env` and update `VITE_EVENTS_API_URL` in `dashboard/.env` to match.
+
+### `wasm32-unknown-unknown` target not found
 
 ```bash
 rustup target add wasm32-unknown-unknown
 ```
 
-### `cargo install --locked stellar-cli --features opt` is slow or fails
+### `cargo install --locked stellar-cli --features opt` fails
 
-Try with the `--locked` flag to use pinned dependency versions:
-
-```bash
-cargo install --locked stellar-cli --features opt
-```
-
-### Tests fail with SQLite errors
-
-The listener tests use an in-memory SQLite database (`:memory:`). Make sure `sqlite3` native bindings compiled correctly:
-
-```bash
-cd listener
-npm ci
-npm test
-```
-
-If `sqlite3` fails to build, ensure you have a C++ toolchain installed (`build-essential` on Debian/Ubuntu, `xcode-select --install` on macOS).
-
-### Port already in use
-
-If port `8787` is taken, change `EVENTS_API_PORT` in `listener/.env` and update `VITE_EVENTS_API_URL` in `dashboard/.env` to match.
-
-### Rust version too old
-
-Soroban contracts require a recent stable Rust toolchain. If you see errors such as `error[E0XXX]: ...` about unstable features or missing trait implementations, your local Rust is likely out of date.
-
-Update to the latest stable release:
+Ensure Rust is up-to-date:
 
 ```bash
 rustup update stable
 ```
 
-After updating, verify the version:
+### `npm run dev` fails with ts-node ESM errors
 
-```bash
-rustc --version   # should be 1.78 or later
-```
-
-Then rebuild the contract:
-
-```bash
-cd contract
-stellar contract build
-```
-
-### stellar-cli version mismatch
-
-Running `stellar contract build` with an outdated `stellar-cli` may silently produce a Wasm binary that is incompatible with the current Soroban host environment on testnet, causing invocation errors or unexpected behaviour at runtime.
-
-Reinstall the CLI to the latest pinned version:
-
-```bash
-cargo install --locked stellar-cli --features opt
-```
-
-Verify the installed version:
-
-```bash
-stellar --version
-```
-
-If multiple versions are on your `PATH` (e.g. from a previous global install), check which binary is being used:
-
-```bash
-which stellar
-```
-
-### npm run dev fails with ts-node / ESM errors
-
-The listener uses TypeScript with ES module output. Depending on your Node.js version, `ts-node` may fail to resolve ESM imports, producing errors like:
-
-```
-Error [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"
-```
-
-or
-
-```
-SyntaxError: Cannot use import statement in a module
-```
-
-**Reliable workaround — compile first, then run:**
+Compile first, then run:
 
 ```bash
 cd listener
@@ -515,122 +472,27 @@ npm run build
 npm start
 ```
 
-**Alternative — check `tsconfig.json`:**
+### SQLite `database is locked` error
 
-Ensure the `module` and `moduleResolution` settings are consistent. For Node 18+, the recommended combination is:
-
-```json
-{
-  "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext"
-  }
-}
-```
-
-If you need to keep `ts-node` for a faster dev loop, add `"ts-node": { "esm": true }` to `tsconfig.json` and use `node --loader ts-node/esm src/index.ts`.
-
-### Dashboard shows CORS error
-
-The browser blocks requests from the dashboard to the listener when the `Origin` header does not match the value of `EVENTS_API_CORS_ORIGIN` in `listener/.env`. The mismatch must be **exact** — including the protocol, hostname, and port.
-
-**Symptom:**
-
-```
-Access to fetch at 'http://localhost:8787/api/events' from origin 'http://localhost:5173'
-has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present.
-```
-
-**Fix:**
-
-Open `listener/.env` and set `EVENTS_API_CORS_ORIGIN` to exactly the origin shown in the browser's address bar:
-
-```env
-# Default dashboard dev server
-EVENTS_API_CORS_ORIGIN=http://localhost:5173
-
-# If you changed the dashboard port or are using a different host
-EVENTS_API_CORS_ORIGIN=http://localhost:4173
-```
-
-Restart the listener after editing `.env`. The header value must not have a trailing slash.
-
-### SQLite WAL mode contention
-
-The listener opens its SQLite database in WAL (Write-Ahead Logging) mode for better concurrency. However, if two or more listener processes attempt to **write** to the same database file simultaneously, you will see errors such as:
-
-```
-SqliteError: database is locked
-SQLITE_BUSY: database is locked
-```
-
-**Fix 1 — ensure only one listener process runs at a time:**
+Only one listener process should write to the database at a time:
 
 ```bash
-# Check for existing listener processes
+# Check for existing processes
 lsof listener/data/notifications.db
-
-# Kill any stale processes before starting a new one
+# Kill stale processes
 pkill -f "node.*listener"
-```
-
-**Fix 2 — give each process its own database file:**
-
-If you intentionally run multiple listener instances (e.g. one per contract), point each to a separate file using the `DATABASE_PATH` environment variable:
-
-```env
-# Instance A
-DATABASE_PATH=./data/contract-a.db
-
-# Instance B
-DATABASE_PATH=./data/contract-b.db
-```
-
-### Contract invoke returns "simulation failed"
-
-`stellar contract invoke` runs a local simulation before broadcasting the transaction. A `simulation failed` error usually points to one of three causes:
-
-1. **Contract not initialized** — the contract was deployed but `initialize_admin` (or equivalent) was never called. Re-run the initialization step:
-
-   ```bash
-   stellar contract invoke \
-     --id <CONTRACT_ID> \
-     --source dev-account \
-     --network testnet \
-     -- initialize_admin \
-     --admin <YOUR_PUBLIC_KEY>
-   ```
-
-2. **Wrong network** — the `--network` flag does not match where the contract was deployed. Confirm the contract exists on the target network:
-
-   ```bash
-   stellar contract info --id <CONTRACT_ID> --network testnet
-   ```
-
-3. **Wrong `--id`** — the contract ID was miscopied. The deploy command prints the contract ID on stdout. You can re-check it with:
-
-   ```bash
-   stellar keys list          # list your identities
-   # Re-deploy if needed and note the printed CONTRACT_ID
-   ```
-
-Enable verbose output for more detail:
-
-```bash
-stellar contract invoke --id <CONTRACT_ID> --source dev-account --network testnet --verbose -- <FUNCTION> <ARGS>
 ```
 
 ### Freighter not detecting local testnet
 
-Freighter does not automatically switch networks. If your contract is deployed on Testnet but Freighter is set to Mainnet (or vice versa), transactions will be rejected or signed for the wrong network.
+In the Freighter extension: **Settings → Network → Testnet**. `VITE_STELLAR_NETWORK` in `dashboard/.env` must match.
 
-**Fix:**
+### Stellar RPC timeouts
 
-1. Click the Freighter browser extension icon.
-2. Open **Settings → Network**.
-3. Select **Testnet** for local development.
-4. Reload your dApp page.
+Switch to a different RPC endpoint from the [Stellar Developer docs](https://developers.stellar.org/docs/tools/developer-tools/rpc-providers) or increase `POLL_INTERVAL_MS` to reduce request frequency.
 
-Freighter must be on the **same network** as the `--network` flag you used when deploying the contract and as `VITE_STELLAR_NETWORK` in `dashboard/.env`.
+### Contract invoke returns "simulation failed"
 
-For a full list of Freighter connection issues (extension not detected, popup not appearing, signing timeouts, wrong network errors), see the [Freighter Troubleshooting](README.md#freighter-troubleshooting) section in `README.md`.
+1. Confirm the contract was initialized: re-run `initialize_admin` if needed.
+2. Confirm `--network` matches where the contract was deployed.
+3. Confirm the contract ID is correct: `stellar contract info --id <CONTRACT_ID> --network testnet`

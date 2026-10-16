@@ -11,12 +11,13 @@ CREATE TABLE IF NOT EXISTS notification_archive (
 
   -- Original scheduling / timing
   execute_at DATETIME NOT NULL,
+  expires_at DATETIME,
   created_at DATETIME NOT NULL,
   processing_completed_at DATETIME,
 
   -- Final status at time of archiving
-  status VARCHAR(20) NOT NULL,              -- COMPLETED | FAILED | CANCELLED
-  retry_count INTEGER NOT NULL DEFAULT 0,
+  status VARCHAR(20) NOT NULL CHECK (status IN ('COMPLETED', 'FAILED', 'CANCELLED', 'EXPIRED')),
+  retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
   last_error TEXT,
 
   -- Optional references

@@ -1,4 +1,4 @@
-import { ConfigError, loadConfig } from './config';
+import { ConfigError, loadConfig, validateConfig } from './config';
 
 describe('Config validation', () => {
   const originalEnv = process.env;
@@ -7,7 +7,7 @@ describe('Config validation', () => {
     process.env = { ...originalEnv };
     // CONTRACT_ADDRESSES is a required variable; give it a valid default so
     // tests unrelated to required-variable validation aren't affected.
-    process.env.CONTRACT_ADDRESSES = JSON.stringify([{ address: 'CTEST', events: ['*'] }]);
+    process.env.CONTRACT_ADDRESSES = JSON.stringify([{ address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['*'] }]);
   });
 
   afterEach(() => {
@@ -55,8 +55,38 @@ describe('Config validation', () => {
     expect(() => loadConfig()).toThrow('EVENTS_API_PORT must be a valid integer, got "eighty"');
   });
 
+  it('loads the default blockchain event batch size', () => {
+    delete process.env.EVENT_BATCH_SIZE;
+
+    expect(loadConfig().eventBatchSize).toBe(100);
+  });
+
+  it('loads a configured blockchain event batch size', () => {
+    process.env.EVENT_BATCH_SIZE = '250';
+
+    expect(loadConfig().eventBatchSize).toBe(250);
+  });
+
+  it('rejects a non-integer blockchain event batch size', () => {
+    process.env.EVENT_BATCH_SIZE = 'many';
+
+    expect(() => loadConfig()).toThrow(
+      'EVENT_BATCH_SIZE must be a valid integer, got "many"'
+    );
+  });
+
+  it('rejects a non-positive blockchain event batch size', () => {
+    process.env.EVENT_BATCH_SIZE = '0';
+
+    const config = loadConfig();
+
+    expect(() => validateConfig(config)).toThrow(
+      'EVENT_BATCH_SIZE must be >= 1 (received: 0).'
+    );
+  });
+
   it('loads default values when optional environment variables are omitted', () => {
-    process.env.CONTRACT_ADDRESSES = JSON.stringify([{ address: 'CTEST', events: ['*'] }]);
+    process.env.CONTRACT_ADDRESSES = JSON.stringify([{ address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['*'] }]);
     delete process.env.STELLAR_NETWORK;
     delete process.env.STELLAR_RPC_URL;
     delete process.env.POLL_INTERVAL_MS;
@@ -76,7 +106,7 @@ describe('Config validation', () => {
     expect(config).toMatchObject({
       stellarNetwork: 'testnet',
       stellarRpcUrl: 'https://soroban-testnet.stellar.org:443',
-      contractAddresses: [{ address: 'CTEST', events: ['*'] }],
+      contractAddresses: [{ address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['*'] }],
       pollIntervalMs: 30000,
       maxReconnectAttempts: 5,
       reconnectDelayMs: 5000,
@@ -98,9 +128,34 @@ describe('Config validation', () => {
         notificationRetentionMs: 604800000,
         rateLimitEventRetentionMs: 86400000,
         eventRetentionMs: 86400000,
+        processedEventRetentionMs: 2592000000,
         executionLogRetentionMs: 7776000000,
       },
     });
+  });
+
+  it('loads a configured processed event retention duration', () => {
+    process.env.PROCESSED_EVENT_RETENTION_MS = '3600000';
+
+    expect(loadConfig().cleanup?.processedEventRetentionMs).toBe(3600000);
+  });
+
+  it('rejects invalid processed event retention configuration', () => {
+    process.env.PROCESSED_EVENT_RETENTION_MS = 'not-a-duration';
+
+    expect(() => loadConfig()).toThrow(
+      'PROCESSED_EVENT_RETENTION_MS must be a valid integer, got "not-a-duration"'
+    );
+  });
+
+  it('rejects processed event retention shorter than one minute', () => {
+    process.env.PROCESSED_EVENT_RETENTION_MS = '59999';
+
+    const config = loadConfig();
+
+    expect(() => validateConfig(config)).toThrow(
+      'PROCESSED_EVENT_RETENTION_MS must be >= 60000 ms (received: 59999).'
+    );
   });
 
   it('loads notification deduplication settings when Discord is configured', () => {
@@ -240,4 +295,428 @@ describe('Config validation', () => {
       expect(() => loadConfig()).toThrow('WEBHOOK_SECRETS must be a JSON array');
     });
   });
+
+  describe('CORS and Schema Validation integration (#689, #694)', () => {
+    it('rejects wildcard CORS origin in production environment', () => {
+      process.env.NODE_ENV = 'production';
+      process.env.EVENTS_API_CORS_ORIGIN = '*';
+
+      const config = loadConfig();
+      expect(() => {
+        const { validateConfig } = require('./config');
+        validateConfig(config);
+      }).toThrow(ConfigError);
+    });
+
+    it('accepts valid HTTPS CORS origin in production environment', () => {
+      process.env.NODE_ENV = 'production';
+      process.env.EVENTS_API_CORS_ORIGIN = 'https://dashboard.notifychain.io';
+
+      const config = loadConfig();
+      const { validateConfig } = require('./config');
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+  describe('validateConfig - Startup Configuration Validation', () => {
+    it('passes validation with a complete valid configuration', () => {
+      process.env.CONTRACT_ADDRESSES = JSON.stringify([
+        { address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['TaskCreated'] }
+      ]);
+      process.env.STELLAR_RPC_URL = 'https://soroban-testnet.stellar.org:443';
+      process.env.STELLAR_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
+      process.env.POLL_INTERVAL_MS = '30000';
+      process.env.EVENTS_API_PORT = '8787';
+      process.env.DATABASE_PATH = './data/notifications.db';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('accepts multiple contract addresses in configuration', () => {
+      process.env.CONTRACT_ADDRESSES = JSON.stringify([
+        { address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['TaskCreated'] },
+        { address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['TaskCompleted', 'TaskFailed'] },
+        { address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['*'] }
+      ]);
+      process.env.STELLAR_RPC_URL = 'https://soroban-testnet.stellar.org:443';
+      process.env.STELLAR_NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
+      process.env.POLL_INTERVAL_MS = '30000';
+      process.env.EVENTS_API_PORT = '8787';
+      process.env.DATABASE_PATH = './data/notifications.db';
+
+      const config = loadConfig();
+      expect(config.contractAddresses).toHaveLength(3);
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('detects empty CONTRACT_ADDRESSES array during loadConfig', () => {
+      process.env.CONTRACT_ADDRESSES = '[]';
+
+      expect(() => loadConfig()).toThrow(ConfigError);
+      expect(() => loadConfig()).toThrow(
+        'CONTRACT_ADDRESSES is empty. The listener requires at least one contract to monitor'
+      );
+    });
+
+    it('detects empty CONTRACT_ADDRESSES array during validateConfig', () => {
+      process.env.CONTRACT_ADDRESSES = JSON.stringify([
+        { address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['TaskCreated'] }
+      ]);
+      
+      const config = loadConfig();
+      // Manually set to empty to test validateConfig path
+      config.contractAddresses = [];
+      
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'CONTRACT_ADDRESSES is empty. The listener requires at least one contract to monitor'
+      );
+    });
+
+    it('detects invalid STELLAR_RPC_URL format', () => {
+      process.env.STELLAR_RPC_URL = 'not-a-url';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'STELLAR_RPC_URL is not a valid URL'
+      );
+    });
+
+    it('detects STELLAR_RPC_URL with invalid protocol', () => {
+      process.env.STELLAR_RPC_URL = 'ftp://example.com';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'STELLAR_RPC_URL must use HTTP or HTTPS protocol'
+      );
+    });
+
+    it('detects invalid STELLAR_NETWORK_PASSPHRASE', () => {
+      process.env.STELLAR_NETWORK_PASSPHRASE = 'Wrong Network Passphrase';
+      process.env.STELLAR_NETWORK = 'testnet';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'STELLAR_NETWORK_PASSPHRASE does not match known Stellar networks'
+      );
+    });
+
+    it('accepts standalone network with custom passphrase', () => {
+      process.env.STELLAR_NETWORK_PASSPHRASE = 'Standalone Network ; February 2017';
+      process.env.STELLAR_NETWORK = 'standalone';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).not.toThrow();
+    });
+
+    it('detects invalid contract address length', () => {
+      process.env.CONTRACT_ADDRESSES = JSON.stringify([
+        { address: 'CSHORT', events: ['*'] }
+      ]);
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'CONTRACT_ADDRESSES[0].address must be exactly 56 characters'
+      );
+    });
+
+    it('detects contract address not starting with C', () => {
+      process.env.CONTRACT_ADDRESSES = JSON.stringify([
+        { address: 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['*'] }
+      ]);
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        "CONTRACT_ADDRESSES[0].address must start with 'C' for Stellar contracts"
+      );
+    });
+
+    it('detects empty event name in events array', () => {
+      process.env.CONTRACT_ADDRESSES = JSON.stringify([
+        { address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['TaskCreated', ''] }
+      ]);
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'CONTRACT_ADDRESSES[0].events[1] must be a non-empty string'
+      );
+    });
+
+    it('detects invalid POLL_INTERVAL_MS (too low)', () => {
+      process.env.POLL_INTERVAL_MS = '500';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'POLL_INTERVAL_MS must be at least 1000 ms to avoid excessive RPC load'
+      );
+    });
+
+    it('detects invalid EVENTS_API_PORT (out of range)', () => {
+      process.env.EVENTS_API_PORT = '70000';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'EVENTS_API_PORT must be between 1 and 65535'
+      );
+    });
+
+    it('detects invalid Discord webhook URL', () => {
+      process.env.DISCORD_WEBHOOK_URL = 'https://example.com/webhook';
+      process.env.DISCORD_WEBHOOK_ID = '123456';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'DISCORD_WEBHOOK_URL must start with "https://discord.com/api/webhooks/"'
+      );
+    });
+
+    it('reports multiple configuration errors together', () => {
+      process.env.CONTRACT_ADDRESSES = JSON.stringify([
+        { address: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', events: ['TaskCreated'] }
+      ]);
+      process.env.STELLAR_RPC_URL = 'not-a-url';
+      process.env.POLL_INTERVAL_MS = '500';
+      process.env.EVENTS_API_PORT = '70000';
+
+      const config = loadConfig();
+
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+
+      try {
+        validateConfig(config);
+      } catch (error) {
+        if (error instanceof ConfigError) {
+          // Verify all 3 errors are reported (CONTRACT_ADDRESSES is now valid)
+          expect(error.message).toContain('Configuration validation failed with 3 error(s)');
+          expect(error.message).toContain('STELLAR_RPC_URL is not a valid URL');
+          expect(error.message).toContain('POLL_INTERVAL_MS must be at least 1000 ms');
+          expect(error.message).toContain('EVENTS_API_PORT must be between 1 and 65535');
+        } else {
+          throw error;
+        }
+      }
+    });
+
+    it('detects missing DATABASE_PATH', () => {
+      delete process.env.DATABASE_PATH;
+      
+      const config = loadConfig();
+      // DATABASE_PATH has a default, so we need to manually override it
+      config.databasePath = '';
+      
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'DATABASE_PATH must be a non-empty string'
+      );
+    });
+
+    it('detects SCHEDULER_LOCK_TIMEOUT_MS less than POLL_INTERVAL_MS', () => {
+      process.env.SCHEDULER_POLL_INTERVAL_MS = '10000';
+      process.env.SCHEDULER_LOCK_TIMEOUT_MS = '5000';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'SCHEDULER_LOCK_TIMEOUT_MS must be >= SCHEDULER_POLL_INTERVAL_MS'
+      );
+    });
+
+    it('detects invalid RETRY_MULTIPLIER (less than 1)', () => {
+      process.env.RETRY_MULTIPLIER = '0';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'RETRY_MULTIPLIER must be >= 1'
+      );
+    });
+
+    it('detects RETRY_MAX_DELAY_MS less than RETRY_BASE_DELAY_MS', () => {
+      process.env.RETRY_BASE_DELAY_MS = '10000';
+      process.env.RETRY_MAX_DELAY_MS = '5000';
+      
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow(
+        'RETRY_MAX_DELAY_MS must be >= RETRY_BASE_DELAY_MS'
+      );
+    });
+
+    describe('Fallback RPC Configuration', () => {
+      it('loads fallback RPC URLs from comma-separated STELLAR_RPC_FALLBACK_URLS', () => {
+        process.env.STELLAR_RPC_URL = 'https://rpc1.stellar.org';
+        process.env.STELLAR_RPC_FALLBACK_URLS = 'https://rpc2.stellar.org, https://rpc3.stellar.org';
+
+        const config = loadConfig();
+        expect(config.stellarRpcUrl).toBe('https://rpc1.stellar.org');
+        expect(config.stellarRpcFallbackUrls).toEqual([
+          'https://rpc2.stellar.org',
+          'https://rpc3.stellar.org',
+        ]);
+        expect(config.stellarRpcUrls).toEqual([
+          'https://rpc1.stellar.org',
+          'https://rpc2.stellar.org',
+          'https://rpc3.stellar.org',
+        ]);
+        expect(() => validateConfig(config)).not.toThrow();
+      });
+
+      it('loads fallback RPC URLs from JSON array STELLAR_RPC_FALLBACK_URLS', () => {
+        process.env.STELLAR_RPC_URL = 'https://rpc1.stellar.org';
+        process.env.STELLAR_RPC_FALLBACK_URLS = JSON.stringify([
+          'https://rpc2.stellar.org',
+          'https://rpc3.stellar.org',
+        ]);
+
+        const config = loadConfig();
+        expect(config.stellarRpcFallbackUrls).toEqual([
+          'https://rpc2.stellar.org',
+          'https://rpc3.stellar.org',
+        ]);
+        expect(() => validateConfig(config)).not.toThrow();
+      });
+
+      it('loads primary and fallbacks from STELLAR_RPC_URLS list', () => {
+        delete process.env.STELLAR_RPC_URL;
+        process.env.STELLAR_RPC_URLS = 'https://primary.stellar.org, https://fallback.stellar.org';
+
+        const config = loadConfig();
+        expect(config.stellarRpcUrl).toBe('https://primary.stellar.org');
+        expect(config.stellarRpcFallbackUrls).toEqual(['https://fallback.stellar.org']);
+        expect(config.stellarRpcUrls).toEqual([
+          'https://primary.stellar.org',
+          'https://fallback.stellar.org',
+        ]);
+      });
+
+      it('deduplicates primary URL if present in fallback URLs', () => {
+        process.env.STELLAR_RPC_URL = 'https://rpc1.stellar.org';
+        process.env.STELLAR_RPC_FALLBACK_URLS = 'https://rpc1.stellar.org, https://rpc2.stellar.org';
+
+        const config = loadConfig();
+        expect(config.stellarRpcFallbackUrls).toEqual(['https://rpc2.stellar.org']);
+      });
+
+      it('loads custom RPC failover threshold, cooldown, and request timeout', () => {
+        process.env.RPC_FAILURE_THRESHOLD = '5';
+        process.env.RPC_COOLDOWN_MS = '120000';
+        process.env.RPC_REQUEST_TIMEOUT_MS = '8000';
+        process.env.RPC_MAX_RETRIES = '4';
+
+        const config = loadConfig();
+        expect(config.rpcFallback?.failureThreshold).toBe(5);
+        expect(config.rpcFallback?.cooldownMs).toBe(120000);
+        expect(config.rpcFallback?.requestTimeoutMs).toBe(8000);
+        expect(config.rpcFallback?.maxRetries).toBe(4);
+      });
+
+      it('detects invalid fallback RPC URL format', () => {
+        process.env.STELLAR_RPC_FALLBACK_URLS = 'invalid-not-a-url';
+
+        const config = loadConfig();
+        expect(() => validateConfig(config)).toThrow(ConfigError);
+        expect(() => validateConfig(config)).toThrow(
+          'Fallback RPC URL at index 0 is not a valid URL'
+        );
+      });
+
+      it('detects fallback RPC URL with invalid protocol', () => {
+        process.env.STELLAR_RPC_FALLBACK_URLS = 'ftp://ftp.stellar.org';
+
+        const config = loadConfig();
+        expect(() => validateConfig(config)).toThrow(ConfigError);
+        expect(() => validateConfig(config)).toThrow(
+          'Fallback RPC URL at index 0 must use HTTP or HTTPS protocol'
+        );
+      });
+
+      it('detects invalid RPC_FAILURE_THRESHOLD (less than 1)', () => {
+        process.env.RPC_FAILURE_THRESHOLD = '0';
+
+        const config = loadConfig();
+        expect(() => validateConfig(config)).toThrow(ConfigError);
+        expect(() => validateConfig(config)).toThrow(
+          'RPC_FAILURE_THRESHOLD must be >= 1'
+        );
+      });
+
+      it('detects invalid RPC_COOLDOWN_MS (less than 0)', () => {
+        process.env.RPC_COOLDOWN_MS = '-10';
+
+        const config = loadConfig();
+        expect(() => validateConfig(config)).toThrow(ConfigError);
+        expect(() => validateConfig(config)).toThrow(
+          'RPC_COOLDOWN_MS must be >= 0'
+        );
+      });
+
+      it('detects invalid RPC_REQUEST_TIMEOUT_MS (less than 500)', () => {
+        process.env.RPC_REQUEST_TIMEOUT_MS = '200';
+
+        const config = loadConfig();
+        expect(() => validateConfig(config)).toThrow(ConfigError);
+        expect(() => validateConfig(config)).toThrow(
+          'RPC_REQUEST_TIMEOUT_MS must be at least 500 ms'
+        );
+      });
+    });
+  });
+
+  describe('WEBHOOK_TIMEOUT_MS', () => {
+    it('defaults to 10000 when unset', () => {
+      delete process.env.WEBHOOK_TIMEOUT_MS;
+
+      expect(loadConfig().retryScheduler?.webhookTimeoutMs).toBe(10000);
+    });
+
+    it('loads a configured webhook timeout', () => {
+      process.env.WEBHOOK_TIMEOUT_MS = '2500';
+
+      expect(loadConfig().retryScheduler?.webhookTimeoutMs).toBe(2500);
+    });
+
+    it('rejects a non-numeric webhook timeout at parse time', () => {
+      process.env.WEBHOOK_TIMEOUT_MS = 'soon';
+
+      expect(() => loadConfig()).toThrow(ConfigError);
+      expect(() => loadConfig()).toThrow(
+        'WEBHOOK_TIMEOUT_MS must be a valid integer, got "soon"'
+      );
+    });
+
+    it('rejects a zero webhook timeout', () => {
+      process.env.WEBHOOK_TIMEOUT_MS = '0';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow('WEBHOOK_TIMEOUT_MS must be >= 1 ms');
+    });
+
+    it('rejects a negative webhook timeout', () => {
+      process.env.WEBHOOK_TIMEOUT_MS = '-50';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow('WEBHOOK_TIMEOUT_MS must be >= 1 ms');
+    });
+
+    it('rejects an absurdly large webhook timeout', () => {
+      process.env.WEBHOOK_TIMEOUT_MS = '9999999';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow('WEBHOOK_TIMEOUT_MS must be <= 300000 ms');
+    });
+  });
 });
+});
+
+

@@ -1,0 +1,26 @@
+name: API Contract Tests
+
+# Detects unintended changes to events API request/response structures
+# (issue #811). Runs the contract suite on every PR and push to main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: listener
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: listener/package-lock.json
+      - run: npm ci
+      - name: Run API contract tests
+        run: node ./node_modules/jest/bin/jest.js src/__tests__/api-contract.test.ts --ci

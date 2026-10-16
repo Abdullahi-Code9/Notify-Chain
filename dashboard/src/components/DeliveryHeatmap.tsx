@@ -64,12 +64,12 @@ function DeliveryHeatmapInner({ events }: DeliveryHeatmapProps) {
   const handleStartChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setDateRange((prev) => ({ ...prev, start: e.target.value })),
-    []
+    [],
   );
   const handleEndChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setDateRange((prev) => ({ ...prev, end: e.target.value })),
-    []
+    [],
   );
 
   const handlePreset = useCallback((days: number) => {
@@ -92,7 +92,7 @@ function DeliveryHeatmapInner({ events }: DeliveryHeatmapProps) {
   /* ── Heatmap data (memoised) ── */
   const heatmap = useMemo(
     () => aggregateHeatmapData(events, startDate, endDate),
-    [events, startDate, endDate]
+    [events, startDate, endDate],
   );
 
   /* ── Tooltip handlers ── */
@@ -109,7 +109,7 @@ function DeliveryHeatmapInner({ events }: DeliveryHeatmapProps) {
         y: cellRect.top - gridRect.top,
       });
     },
-    []
+    [],
   );
 
   const handleCellLeave = useCallback(() => setTooltip(null), []);
@@ -133,17 +133,11 @@ function DeliveryHeatmapInner({ events }: DeliveryHeatmapProps) {
 
         <div className="heatmap__stats">
           <div className="heatmap__stat">
-            <span className="heatmap__stat-value">
-              {heatmap.totalCount.toLocaleString()}
-            </span>
-            <span className="heatmap__stat-label">
-              {hasFilters ? 'Filtered' : 'Total'} Events
-            </span>
+            <span className="heatmap__stat-value">{heatmap.totalCount.toLocaleString()}</span>
+            <span className="heatmap__stat-label">{hasFilters ? 'Filtered' : 'Total'} Events</span>
           </div>
           <div className="heatmap__stat">
-            <span className="heatmap__stat-value">
-              {heatmap.maxCount.toLocaleString()}
-            </span>
+            <span className="heatmap__stat-value">{heatmap.maxCount.toLocaleString()}</span>
             <span className="heatmap__stat-label">Peak (per slot)</span>
           </div>
         </div>
@@ -153,10 +147,7 @@ function DeliveryHeatmapInner({ events }: DeliveryHeatmapProps) {
       <div className="heatmap__filters" id="heatmap-date-filters">
         <div className="heatmap__presets">
           {PRESETS.map((preset) => {
-            const isActive =
-              preset.days === 0
-                ? !dateRange.start && !dateRange.end
-                : false; // full active-state logic lives in CSS via data attribute
+            const isActive = preset.days === 0 ? !dateRange.start && !dateRange.end : false; // full active-state logic lives in CSS via data attribute
             return (
               <button
                 key={preset.label}
@@ -257,9 +248,7 @@ function DeliveryHeatmapInner({ events }: DeliveryHeatmapProps) {
                   handleCellEnter(cell.day, cell.hour, cell.count, e.currentTarget)
                 }
                 onMouseLeave={handleCellLeave}
-                onFocus={(e) =>
-                  handleCellEnter(cell.day, cell.hour, cell.count, e.currentTarget)
-                }
+                onFocus={(e) => handleCellEnter(cell.day, cell.hour, cell.count, e.currentTarget)}
                 onBlur={handleCellLeave}
                 tabIndex={0}
                 role="gridcell"

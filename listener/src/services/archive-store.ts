@@ -17,6 +17,7 @@ export interface ArchivedNotification {
   notificationType: string;
   targetRecipient: string;
   executeAt: string;
+  expiresAt: string | null;
   createdAt: string;
   processingCompletedAt: string | null;
   status: string;
@@ -36,6 +37,7 @@ interface ArchiveRow {
   notification_type: string;
   target_recipient: string;
   execute_at: string;
+  expires_at: string | null;
   created_at: string;
   processing_completed_at: string | null;
   status: string;
@@ -73,6 +75,7 @@ function mapRow(row: ArchiveRow): ArchivedNotification {
     notificationType: row.notification_type,
     targetRecipient: row.target_recipient,
     executeAt: row.execute_at,
+    expiresAt: row.expires_at,
     createdAt: row.created_at,
     processingCompletedAt: row.processing_completed_at,
     status: row.status,
@@ -89,7 +92,7 @@ export class ArchiveStore {
   constructor(private readonly db: Database) {}
 
   /**
-   * Insert a batch of completed/failed/cancelled notifications into the
+  * Insert a batch of terminal notifications into the
    * archive.  Returns the number of rows inserted.
    */
   async insertBatch(
@@ -99,6 +102,7 @@ export class ArchiveStore {
       notificationType: string;
       targetRecipient: string;
       executeAt: string;
+      expiresAt: string | null;
       createdAt: string;
       processingCompletedAt: string | null;
       status: string;
@@ -116,15 +120,16 @@ export class ArchiveStore {
       await this.db.run(
         `INSERT INTO notification_archive
            (original_id, payload, notification_type, target_recipient,
-            execute_at, created_at, processing_completed_at,
+            execute_at, expires_at, created_at, processing_completed_at,
             status, retry_count, last_error, event_id, contract_address, metadata)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           r.originalId,
           r.payload,
           r.notificationType,
           r.targetRecipient,
           r.executeAt,
+          r.expiresAt,
           r.createdAt,
           r.processingCompletedAt,
           r.status,

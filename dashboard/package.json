@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node ./node_modules/typescript/bin/tsc --noEmit && node ./node_modules/vite/bin/vite.js build",
     "preview": "node ./node_modules/vite/bin/vite.js preview",
@@ -17,15 +20,16 @@
   },
   "dependencies": {
     "@creit.tech/stellar-wallets-kit": "^2.3.0",
+    "@stellar/stellar-sdk": "^13.3.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "zustand": "^5.0.6"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@storybook/addon-essentials": "^8.6.14",
     "@storybook/addon-interactions": "^8.6.14",
     "@storybook/blocks": "^8.6.14",
-    "@storybook/react": "^8.6.14",
+    "@storybook/react": "^10.5.8",
     "@storybook/react-vite": "^8.6.14",
     "@storybook/test": "^8.6.14",
     "@testing-library/jest-dom": "^6.9.1",
@@ -44,8 +48,8 @@
     "jest-axe": "^10.0.0",
     "jest-environment-jsdom": "^29.7.0",
     "jsdom": "^26.1.0",
-    "storybook": "^8.6.14",
     "prettier": "3.3.3",
+    "storybook": "^8.6.14",
     "ts-jest": "^29.2.5",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"

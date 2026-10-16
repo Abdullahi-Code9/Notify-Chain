@@ -35,6 +35,31 @@ describe('EventRow notification ID copy action', () => {
     fireEvent.click(screen.getByRole('button', { name: /copy notification id/i }));
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('notif-42');
-    expect(await screen.findByRole('button', { name: /notification id copied/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /notification id copied/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('copies the full transaction hash and shows success feedback', async () => {
+    render(<EventRow event={mockEvent} />);
+
+    expect(screen.getByTitle(mockEvent.txHash)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /copy transaction hash/i }));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(mockEvent.txHash);
+    expect(
+      await screen.findByRole('button', { name: /transaction hash copied/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('handles transaction hash clipboard failures gracefully', async () => {
+    navigator.clipboard.writeText = jest.fn().mockRejectedValue(new Error('Denied'));
+    render(<EventRow event={mockEvent} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /copy transaction hash/i }));
+
+    expect(
+      await screen.findByRole('button', { name: /copy transaction hash/i }),
+    ).toBeInTheDocument();
   });
 });

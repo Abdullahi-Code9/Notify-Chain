@@ -57,7 +57,7 @@ describe('EventsPage loading skeletons', () => {
       () =>
         new Promise((resolve) => {
           resolveFetch = resolve;
-        })
+        }),
     );
 
     render(<EventsPage />);

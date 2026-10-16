@@ -7,7 +7,9 @@ export enum NotificationStatus {
   PROCESSING = 'PROCESSING',
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
+  DEAD_LETTERED = 'DEAD_LETTERED',
   CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
 }
 
 export enum NotificationType {
@@ -24,6 +26,7 @@ export interface ScheduledNotification {
   notificationType: NotificationType;
   targetRecipient: string;
   executeAt: Date;
+  expiresAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
   status: NotificationStatus;
@@ -39,8 +42,12 @@ export interface ScheduledNotification {
   contractAddress?: string | null;
   priority: number;
   metadata?: string | null; // JSON string
+  /** Optional reason supplied when a notification is cancelled. */
+  cancellationReason?: string | null;
   /** When the next retry should be attempted (null if not retrying). */
   nextRetryAt?: Date | null;
+  /** Stable logical key used to prevent duplicate delivery of the same notification. */
+  deduplicationKey?: string | null;
 }
 
 export interface CreateScheduledNotificationInput {
@@ -48,7 +55,9 @@ export interface CreateScheduledNotificationInput {
   notificationType: NotificationType;
   targetRecipient: string;
   executeAt: Date;
+  expiresAt?: Date | string | number | null;
   maxRetries?: number;
+  deduplicationKey?: string;
   eventId?: string;
   contractAddress?: string;
   priority?: number;
@@ -62,6 +71,7 @@ export interface ScheduledNotificationRow {
   notification_type: string;
   target_recipient: string;
   execute_at: string;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
   status: string;
@@ -72,12 +82,13 @@ export interface ScheduledNotificationRow {
   processor_id: string | null;
   lock_expires_at: string | null;
   last_error: string | null;
-  error_details: string | null;
+  error_details: string | null; // JSON; now may contain { cancellationReason?: string }
   event_id: string | null;
   contract_address: string | null;
   priority: number;
   metadata: string | null;
   next_retry_at: string | null;
+  deduplication_key: string | null;
 }
 
 export interface NotificationExecutionLog {
@@ -85,7 +96,7 @@ export interface NotificationExecutionLog {
   scheduledNotificationId: number;
   executionAttempt: number;
   executionTime: Date;
-  status: 'SUCCESS' | 'FAILED' | 'RETRY';
+  status: 'SUCCESS' | 'FAILED' | 'RETRY' | 'DEAD_LETTERED';
   errorMessage?: string | null;
   responseData?: string | null;
   durationMs?: number | null;
@@ -99,6 +110,8 @@ export interface SchedulerConfig {
   batchSize: number;
   timingBufferMs: number;
   retryDelayMs?: number;
+  /** Max notifications processed concurrently per poll cycle (WORKER_CONCURRENCY). Default 1 = serial. */
+  concurrency?: number;
 }
 
 export interface DeadLetterQueueEntry {

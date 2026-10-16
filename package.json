@@ -1,0 +1,20 @@
+{
+  "name": "notify-chain",
+  "version": "1.0.0",
+  "description": "NotifyChain - Event monitoring and notification system for smart contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint:config": "node scripts/check-unused-config.mjs",
+    "lint:config:verbose": "VERBOSE=true node scripts/check-unused-config.mjs"
+  },
+  "keywords": [
+    "blockchain",
+    "stellar",
+    "soroban",
+    "events",
+    "notifications"
+  ],
+  "author": "",
+  "license": "MIT"
+}

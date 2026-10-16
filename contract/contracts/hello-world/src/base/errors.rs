@@ -77,29 +77,17 @@ pub enum Error {
     InvalidLimit = 34,
     /// Triggered when a notification has already been delivered and cannot be recalled.
     NotificationDelivered = 35,
-    /// Triggered when an invalid limit configuration is provided.
-    InvalidLimit = 34,
-    /// Triggered when a notification has already been delivered and cannot be recalled.
-    NotificationDelivered = 35,
     /// Triggered when a notification category is not registered.
     CategoryNotRegistered = 36,
-    /// Triggered when an invalid limit configuration is provided.
-    InvalidLimit = 34,
-    /// Triggered when a notification has already been delivered and cannot be recalled.
-    NotificationDelivered = 35,
     /// Triggered when a notification lifetime exceeds the protocol maximum.
     /// See `MAX_NOTIFICATION_LIFETIME_SECONDS` in autoshare_logic.
-    NotificationLifetimeTooLong = 36,
-    NotAuthorizedToAcknowledge = 29,
-    /// Triggered when an invalid limit configuration is provided.
-    InvalidLimit = 32,
-    /// Triggered when a notification has already been delivered and cannot be recalled.
-    NotificationDelivered = 30,
-    InvalidLimit = 30,
+    NotificationLifetimeTooLong = 37,
     /// Triggered when referencing a template ID that does not exist in the registry.
-    TemplateNotFound = 31,
+    TemplateNotFound = 38,
     /// Triggered when a template name exceeds the maximum allowed length.
-    TemplateNameTooLong = 32,
+    TemplateNameTooLong = 39,
     /// Triggered when a template content field is empty.
-    TemplateContentEmpty = 33,
+    TemplateContentEmpty = 40,
+    /// Triggered when a duplicate notification delivery request is detected.
+    DuplicateDelivery = 41,
 }

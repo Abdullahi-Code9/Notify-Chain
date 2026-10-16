@@ -1,12 +1,4 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type UIEvent,
-} from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
 import type { BlockchainEvent } from '../types/event';
 import { EventRow } from './EventRow';
 
@@ -65,10 +57,7 @@ export const EventList = memo(function EventList({ events }: EventListProps) {
       aria-label={`Blockchain events, ${events.length.toLocaleString()} total`}
       tabIndex={0}
     >
-      <div
-        className="event-list__viewport"
-        style={{ height: `${windowState.totalHeight}px` }}
-      >
+      <div className="event-list__viewport" style={{ height: `${windowState.totalHeight}px` }}>
         {visibleEvents.map((event, index) => {
           const position = windowState.startIndex + index;
           return (

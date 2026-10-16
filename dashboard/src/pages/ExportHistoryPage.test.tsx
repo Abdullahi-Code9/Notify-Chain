@@ -1,65 +1,125 @@
 import '@testing-library/jest-dom';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, act } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { ExportHistoryPage } from './ExportHistoryPage';
 
 expect.extend(toHaveNoViolations);
 
 test('ExportHistoryPage has no accessibility violations', async () => {
-  const { container } = render(<ExportHistoryPage />);
-  const results = await axe(container);
-  expect(results).toHaveNoViolations();
+  jest.useFakeTimers();
+
+  try {
+    const { container } = render(<ExportHistoryPage />);
+
+    await act(async () => {
+      jest.advanceTimersByTime(900);
+    });
+
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
-test('ExportHistoryPage renders correctly and lists mock exports', () => {
-  const { getByText, getByRole, getAllByRole } = render(<ExportHistoryPage />);
-  
-  // Header text
-  expect(getByText('Notification Export History')).toBeInTheDocument();
-  expect(getByText(/Manage, filter, and download/)).toBeInTheDocument();
-  
-  // Table
-  expect(getByRole('table')).toBeInTheDocument();
-  
-  // First page mock rows (limit is 5)
-  const rows = getAllByRole('row');
-  // 1 header row + 5 data rows = 6 rows total
-  expect(rows).toHaveLength(6);
-});
+describe('ExportHistoryPage interactions', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
 
-test('ExportHistoryPage search and filtering works', () => {
-  const { getByLabelText, queryByText, getByText } = render(<ExportHistoryPage />);
-  
-  // Search for "System Alert" which exists in the mock list
-  const searchInput = getByLabelText('Search Exports');
-  fireEvent.change(searchInput, { target: { value: 'System Alert' } });
-  
-  // Should see it
-  expect(getByText('System Alert Notification logs')).toBeInTheDocument();
-  
-  // Should NOT see other items
-  expect(queryByText('Monthly billing export')).not.toBeInTheDocument();
-});
+  afterEach(() => {
+    jest.useRealTimers();
+  });
 
-test('ExportHistoryPage pagination limit and page switching works', () => {
-  const { getByLabelText, getByText, queryByText } = render(<ExportHistoryPage />);
-  
-  // Initially we are on page 1 of 3 (15 items total, limit 5)
-  expect(getByText('Page 1 of 3')).toBeInTheDocument();
-  expect(getByText('15 total export records')).toBeInTheDocument();
-  expect(getByText('System Alert Notification logs')).toBeInTheDocument();
-  
-  // Click Next
-  const nextBtn = getByText('Next');
-  fireEvent.click(nextBtn);
-  
-  expect(getByText('Page 2 of 3')).toBeInTheDocument();
-  expect(queryByText('System Alert Notification logs')).not.toBeInTheDocument();
-  
-  // Change limit to 10
-  const selectLimit = getByLabelText('Items per page');
-  fireEvent.change(selectLimit, { target: { value: '10' } });
-  
-  // Pages should recalculate to page 1 of 2
-  expect(getByText('Page 1 of 2')).toBeInTheDocument();
+  function renderLoadedPage() {
+    const view = render(<ExportHistoryPage />);
+
+    act(() => {
+      jest.advanceTimersByTime(900);
+    });
+
+    return view;
+  }
+
+  test('renders correctly and lists mock exports', () => {
+    const { getByText, getByRole, getAllByRole } =
+      renderLoadedPage();
+
+    expect(
+      getByText('Notification Export History'),
+    ).toBeInTheDocument();
+
+    expect(
+      getByText(/Manage, filter, and download/),
+    ).toBeInTheDocument();
+
+    expect(getByRole('table')).toBeInTheDocument();
+
+    const rows = getAllByRole('row');
+    expect(rows).toHaveLength(6);
+  });
+
+  test('search and filtering works', () => {
+    const {
+      getByLabelText,
+      queryByText,
+      getByText,
+    } = renderLoadedPage();
+
+    const searchInput =
+      getByLabelText('Search Exports');
+
+    fireEvent.change(searchInput, {
+      target: { value: 'System Alert' },
+    });
+
+    expect(
+      getByText('System Alert Notification logs'),
+    ).toBeInTheDocument();
+
+    expect(
+      queryByText('Monthly billing export'),
+    ).not.toBeInTheDocument();
+  });
+
+  test('pagination limit and page switching works', () => {
+    const {
+      getByLabelText,
+      getByText,
+      queryByText,
+    } = renderLoadedPage();
+
+    expect(
+      getByText('Page 1 of 3'),
+    ).toBeInTheDocument();
+
+    expect(
+      getByText('15 total export records'),
+    ).toBeInTheDocument();
+
+    expect(
+      getByText('System Alert Notification logs'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(getByText('Next'));
+
+    expect(
+      getByText('Page 2 of 3'),
+    ).toBeInTheDocument();
+
+    expect(
+      queryByText('System Alert Notification logs'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(
+      getByLabelText('Items per page'),
+      {
+        target: { value: '10' },
+      },
+    );
+
+    expect(
+      getByText('Page 1 of 2'),
+    ).toBeInTheDocument();
+  });
 });

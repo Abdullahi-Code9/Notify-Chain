@@ -9,14 +9,7 @@
  *  - aria-live="assertive" for errors (screen-reader immediacy)
  */
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useReducer,
-  useRef,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useReducer, useRef, type ReactNode } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,9 +27,7 @@ interface ToastState {
   toasts: Toast[];
 }
 
-type ToastAction =
-  | { type: 'ADD'; toast: Toast }
-  | { type: 'REMOVE'; id: string };
+type ToastAction = { type: 'ADD'; toast: Toast } | { type: 'REMOVE'; id: string };
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
@@ -119,7 +110,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   return (
     <ToastContext.Provider
-      value={{ toasts: state.toasts, addToast, removeToast, showSuccess, showError, showInfo, showWarning }}
+      value={{
+        toasts: state.toasts,
+        addToast,
+        removeToast,
+        showSuccess,
+        showError,
+        showInfo,
+        showWarning,
+      }}
     >
       {children}
       <ToastContainer toasts={state.toasts} onRemove={removeToast} />
@@ -153,13 +152,7 @@ const VARIANT_LABELS: Record<ToastVariant, string> = {
   warning: 'Warning',
 };
 
-function ToastContainer({
-  toasts,
-  onRemove,
-}: {
-  toasts: Toast[];
-  onRemove: (id: string) => void;
-}) {
+function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
   if (toasts.length === 0) return null;
 
   // Separate by aria-live politeness
@@ -185,13 +178,7 @@ function ToastContainer({
   );
 }
 
-function ToastItem({
-  toast,
-  onRemove,
-}: {
-  toast: Toast;
-  onRemove: (id: string) => void;
-}) {
+function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   return (
     <div
       role="status"

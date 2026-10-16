@@ -5,26 +5,32 @@ This document describes the metrics APIs available for monitoring notification s
 
 ## API Endpoints
 
-### 1. `/api/schedule/stats` - Notification-Level Statistics
+### 1. `/api/schedule/stats` - Notification-Level Statistics & Queue Metrics
 **Use Case:** Current system status and queue health monitoring
 
 **Returns:**
 ```json
 {
-  "pending": 15,      // Notifications waiting to be processed
-  "processing": 3,    // Currently being processed
-  "completed": 1234,  // Successfully delivered
-  "failed": 45,       // Permanently failed
-  "overdue": 2        // Past due date but still pending
+  "pending": 15,                  // Notifications waiting to be processed (legacy key)
+  "processing": 3,                // Currently being processed (legacy key)
+  "completed": 1234,              // Successfully delivered (legacy key)
+  "failed": 45,                   // Permanently failed (legacy key)
+  "overdue": 2,                   // Past due date but still pending
+  "deadLetterQueue": 5,           // Notifications moved to dead-letter queue
+  "pendingNotifications": 15,     // Operational metric: waiting to be delivered (#797)
+  "processingNotifications": 3,   // Operational metric: currently in flight (#797)
+  "successfulDeliveries": 1234,   // Operational metric: delivered successfully (#797)
+  "failedDeliveries": 45,         // Operational metric: permanently failed (#797)
+  "retryAttempts": 35             // Operational metric: total retries executed (#797)
 }
 ```
 
 **Characteristics:**
-- ✅ Fast query (simple GROUP BY on status)
+- ✅ Fast cached query
 - ✅ Real-time queue status
 - ✅ One count per notification
-- ❌ No retry visibility
-- ❌ No timing/performance data
+- ✅ Full retry attempt visibility
+- ✅ Backward compatible with legacy consumer keys
 
 **Best For:**
 - System health dashboards
@@ -33,7 +39,64 @@ This document describes the metrics APIs available for monitoring notification s
 
 ---
 
-### 2. `/api/schedule/execution-metrics` - Execution-Level Metrics (Deduplicated)
+### 2. `/api/schedule/queue/metrics` - Operational Metrics for Notification Queue Activity (#797)
+**Use Case:** Real-time operational visibility into notification queue dynamics, throughput, and error rates
+
+**Aliases:**
+- `GET /api/schedule/queue/metrics`
+- `GET /api/schedule/queue-metrics`
+- `GET /api/notifications/queue-metrics`
+
+**Returns:**
+```json
+{
+  "success": true,
+  "data": {
+    "pendingNotifications": 15,
+    "processingNotifications": 3,
+    "successfulDeliveries": 1234,
+    "failedDeliveries": 45,
+    "retryAttempts": 35
+  }
+}
+```
+
+**Metric Definitions and Meanings:**
+
+| Metric Name | Type | Description | Operational Significance |
+|-------------|------|-------------|--------------------------|
+| `pendingNotifications` | `Gauge (Integer)` | Number of notifications waiting in queue to be delivered. Includes newly scheduled notifications and retried jobs waiting for their backoff delay. | **Backlog Indicator:** A sustained increase indicates worker capacity saturation or worker starvation. |
+| `processingNotifications` | `Gauge (Integer)` | Number of notifications currently in flight and actively being processed by worker instances holding a valid distributed lock. | **Concurrency Indicator:** Should align with active worker concurrency limits. Unchanging counts may indicate stalled workers. |
+| `successfulDeliveries` | `Counter (Integer)` | Cumulative count of notifications that have been successfully delivered to their destination recipient (terminal `COMPLETED` state). | **Throughput Indicator:** Measures successful pipeline progress over time. |
+| `failedDeliveries` | `Counter (Integer)` | Cumulative count of notifications that permanently failed delivery (terminal `FAILED` state) after exhausting retries or hitting permanent errors (e.g. 4xx). | **Error Indicator:** Spikes indicate downstream recipient outages, invalid URLs, or configuration errors. |
+| `retryAttempts` | `Counter (Integer)` | Total number of delivery retry attempts executed across all notifications. Incremented every time a transient error schedules a retry cycle. | **Instability / Cost Indicator:** High retry-to-delivery ratios indicate downstream rate-limiting (429) or transient provider errors (5xx). |
+
+**Observability Integration:**
+- **Health Report:** The same metrics are surfaced automatically in `GET /api/notifications/health` under `queue.operationalMetrics`.
+- **Prometheus/Alerting Recommendation:**
+  ```promql
+  # High queue backlog alert
+  alert: NotificationQueueBacklogHigh
+  expr: notification_queue_pending_notifications > 500
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Notification queue backlog is high ({{ $value }} pending)"
+
+  # Elevated failure rate alert
+  alert: NotificationDeliveryFailureSpike
+  expr: rate(notification_queue_failed_deliveries[5m]) > 5
+  for: 2m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Spike in permanent notification delivery failures"
+  ```
+
+---
+
+### 3. `/api/schedule/execution-metrics` - Execution-Level Metrics (Deduplicated)
 **Use Case:** Accurate delivery metrics and retry analysis
 
 ⚠️ **CRITICAL:** This endpoint uses proper deduplication logic to prevent double-counting of retried notifications.
@@ -96,7 +159,7 @@ const retrySuccessRate = metrics.successfulAfterRetry / (metrics.successfulAfter
 
 ---
 
-### 3. `/api/schedule/retry-distribution` - Retry Breakdown
+### 4. `/api/schedule/retry-distribution` - Retry Breakdown
 **Use Case:** Understanding retry patterns and optimization
 
 **Returns:**
