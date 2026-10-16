@@ -126,7 +126,10 @@ function verifyNotification(
   // 4. Validate timestamp freshness (replay protection)
   if (timestamp !== null && timestamp !== '') {
     if (!isTimestampFresh(timestamp)) {
-      return { valid: false, reason: 'Request timestamp expired or invalid — possible replay attack' };
+      return {
+        valid: false,
+        reason: 'Request timestamp expired or invalid — possible replay attack',
+      };
     }
   }
 
@@ -164,7 +167,10 @@ function processVerifiedEvent(payload: unknown): void {
   // Common fields include:
   //   event.id, event.contractAddress, event.eventName, event.ledger,
   //   event.timestamp, event.data (the decoded on-chain event parameters).
-  console.log('[consumer] ✅  Verified event received — processing:', JSON.stringify(payload, null, 2));
+  console.log(
+    '[consumer] ✅  Verified event received — processing:',
+    JSON.stringify(payload, null, 2),
+  );
 
   // Example: branch on event type
   const ev = payload as Record<string, unknown>;
@@ -313,7 +319,9 @@ async function sendTestRequest(opts: {
       },
       (res) => {
         let data = '';
-        res.on('data', (chunk) => { data += chunk.toString(); });
+        res.on('data', (chunk) => {
+          data += chunk.toString();
+        });
         res.on('end', () => {
           const label = opts.tamper
             ? 'Tampered body'
@@ -338,8 +346,12 @@ async function sendTestRequest(opts: {
 if (require.main === module) {
   server.listen(PORT, '127.0.0.1', async () => {
     console.log(`[consumer] Webhook consumer listening on http://127.0.0.1:${PORT}`);
-    console.log(`[consumer] Using key-id "${KNOWN_SECRETS[0]!.id}" with secret "${KNOWN_SECRETS[0]!.secret}"`);
-    console.log('[consumer] Set WEBHOOK_SECRET and WEBHOOK_KEY_ID env vars to match your server config.\n');
+    console.log(
+      `[consumer] Using key-id "${KNOWN_SECRETS[0]!.id}" with secret "${KNOWN_SECRETS[0]!.secret}"`,
+    );
+    console.log(
+      '[consumer] Set WEBHOOK_SECRET and WEBHOOK_KEY_ID env vars to match your server config.\n',
+    );
 
     // Run a self-test suite to confirm the consumer behaves correctly
     console.log('──── Self-test suite ────');

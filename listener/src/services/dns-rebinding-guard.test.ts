@@ -113,17 +113,17 @@ describe('isInCidr', () => {
 
 describe('findBlockedIPv4Range', () => {
   const blockedAddresses = [
-    '127.0.0.1',      // loopback
-    '10.0.0.1',       // RFC-1918 class A
+    '127.0.0.1', // loopback
+    '10.0.0.1', // RFC-1918 class A
     '10.255.255.255',
-    '172.16.0.1',     // RFC-1918 class B
+    '172.16.0.1', // RFC-1918 class B
     '172.31.255.255',
-    '192.168.0.1',    // RFC-1918 class C
+    '192.168.0.1', // RFC-1918 class C
     '192.168.100.200',
-    '169.254.0.1',    // link-local (AWS metadata prefix)
+    '169.254.0.1', // link-local (AWS metadata prefix)
     '169.254.169.254', // AWS instance metadata service
-    '0.0.0.1',        // this-network
-    '100.64.0.1',     // shared address space
+    '0.0.0.1', // this-network
+    '100.64.0.1', // shared address space
     '255.255.255.255', // broadcast
   ];
 
@@ -134,9 +134,9 @@ describe('findBlockedIPv4Range', () => {
   const safeAddresses = [
     '8.8.8.8',
     '1.1.1.1',
-    '93.184.216.34',  // example.com
+    '93.184.216.34', // example.com
     '185.199.108.153', // GitHub
-    '151.101.1.69',   // fastly CDN
+    '151.101.1.69', // fastly CDN
   ];
 
   test.each(safeAddresses)('%s is allowed', (ip) => {
@@ -322,7 +322,7 @@ describe('validateWebhookDestination', () => {
         resolve4: jest.fn<Promise<string[]>, []>().mockImplementation(async () => {
           callCount += 1;
           if (callCount === 1) return ['93.184.216.34']; // First call: public
-          return ['169.254.169.254'];                    // Subsequent calls: AWS metadata (rebind!)
+          return ['169.254.169.254']; // Subsequent calls: AWS metadata (rebind!)
         }),
         resolve6: jest.fn<Promise<string[]>, []>().mockResolvedValue([]),
       };
@@ -331,7 +331,10 @@ describe('validateWebhookDestination', () => {
       expect(firstResult.safe).toBe(true);
       expect(firstResult.resolvedAddresses).toContain('93.184.216.34');
 
-      const secondResult = await validateWebhookDestination('rebind.example.com', rebindingResolver);
+      const secondResult = await validateWebhookDestination(
+        'rebind.example.com',
+        rebindingResolver,
+      );
       expect(secondResult.safe).toBe(false);
       expect(secondResult.blockedAddress).toBe('169.254.169.254');
       expect(secondResult.reason).toMatch(/link-local/i);

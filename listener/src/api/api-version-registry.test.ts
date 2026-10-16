@@ -146,7 +146,9 @@ describe('applyVersionHeaders', () => {
   function mockResponse(): http.ServerResponse {
     const headers: Record<string, string> = {};
     return {
-      setHeader: (name: string, value: string) => { headers[name] = value; },
+      setHeader: (name: string, value: string) => {
+        headers[name] = value;
+      },
       getHeader: (name: string) => headers[name],
       _headers: headers,
     } as unknown as http.ServerResponse;
@@ -197,7 +199,9 @@ describe('applyVersionHeaders', () => {
     expect((res as any)._headers['Sunset']).toBeDefined();
     expect((res as any)._headers['Link']).toContain('/api/v2/test-deprecated');
     expect((res as any)._headers['Link']).toContain('successor-version');
-    expect((res as any)._headers['X-Deprecation-Reason']).toBe('Replaced by v2 with improved pagination');
+    expect((res as any)._headers['X-Deprecation-Reason']).toBe(
+      'Replaced by v2 with improved pagination',
+    );
     expect(result.shouldReturn410).toBe(false);
   });
 
@@ -261,8 +265,9 @@ describe('buildVersionCatalog', () => {
 
   it('counts route statuses correctly', () => {
     const catalog = buildVersionCatalog();
-    expect(catalog.routes.active + catalog.routes.deprecated + catalog.routes.sunset)
-      .toBe(catalog.routes.total);
+    expect(catalog.routes.active + catalog.routes.deprecated + catalog.routes.sunset).toBe(
+      catalog.routes.total,
+    );
   });
 });
 
@@ -310,10 +315,10 @@ describe('ROUTE_CATALOG integrity', () => {
     const hasActive = (method: string, path: string) =>
       ROUTE_CATALOG.some((r) => r.method === method && r.path === path && r.status === 'active');
 
-    expect(hasActive('GET',  '/api/events')).toBe(true);
+    expect(hasActive('GET', '/api/events')).toBe(true);
     expect(hasActive('POST', '/api/webhooks')).toBe(true);
     expect(hasActive('POST', '/api/schedule')).toBe(true);
-    expect(hasActive('GET',  '/api/templates')).toBe(true);
+    expect(hasActive('GET', '/api/templates')).toBe(true);
     expect(hasActive('POST', '/api/templates')).toBe(true);
   });
 });

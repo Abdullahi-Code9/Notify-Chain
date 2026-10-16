@@ -43,11 +43,7 @@ function futureTimestamp(): string {
   return String(Math.floor(Date.now() / 1000) + 200); // 3+ minutes ahead (beyond skew tolerance)
 }
 
-function makeHeaders(
-  signature: string,
-  keyId: string,
-  timestamp: string,
-): IncomingHttpHeaders {
+function makeHeaders(signature: string, keyId: string, timestamp: string): IncomingHttpHeaders {
   return {
     'x-webhook-signature': signature,
     'x-webhook-key-id': keyId,

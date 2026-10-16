@@ -89,19 +89,23 @@ export function isInCidr(ip: string, network: string, prefixLen: number): boolea
  *
  * Defined as static data so the policy is auditable and testable in isolation.
  */
-export const BLOCKED_IPV4_RANGES: ReadonlyArray<{ network: string; prefix: number; label: string }> = [
-  { network: '0.0.0.0',   prefix: 8,  label: 'this-network (0.0.0.0/8)'      },
-  { network: '10.0.0.0',  prefix: 8,  label: 'RFC-1918 private (10/8)'       },
-  { network: '127.0.0.0', prefix: 8,  label: 'loopback (127/8)'              },
-  { network: '169.254.0.0', prefix: 16, label: 'link-local (169.254/16)'     },
+export const BLOCKED_IPV4_RANGES: ReadonlyArray<{
+  network: string;
+  prefix: number;
+  label: string;
+}> = [
+  { network: '0.0.0.0', prefix: 8, label: 'this-network (0.0.0.0/8)' },
+  { network: '10.0.0.0', prefix: 8, label: 'RFC-1918 private (10/8)' },
+  { network: '127.0.0.0', prefix: 8, label: 'loopback (127/8)' },
+  { network: '169.254.0.0', prefix: 16, label: 'link-local (169.254/16)' },
   { network: '172.16.0.0', prefix: 12, label: 'RFC-1918 private (172.16/12)' },
   { network: '192.168.0.0', prefix: 16, label: 'RFC-1918 private (192.168/16)' },
   { network: '100.64.0.0', prefix: 10, label: 'shared address space (100.64/10)' },
   { network: '192.0.0.0', prefix: 24, label: 'IETF protocol assignments (192.0.0/24)' },
   { network: '198.51.100.0', prefix: 24, label: 'TEST-NET-2 (198.51.100/24)' },
-  { network: '203.0.113.0', prefix: 24, label: 'TEST-NET-3 (203.0.113/24)'   },
-  { network: '240.0.0.0', prefix: 4,  label: 'reserved (240/4)'              },
-  { network: '255.255.255.255', prefix: 32, label: 'broadcast'               },
+  { network: '203.0.113.0', prefix: 24, label: 'TEST-NET-3 (203.0.113/24)' },
+  { network: '240.0.0.0', prefix: 4, label: 'reserved (240/4)' },
+  { network: '255.255.255.255', prefix: 32, label: 'broadcast' },
 ];
 
 /**
@@ -123,15 +127,15 @@ export function findBlockedIPv4Range(
  * Blocked IPv6 address prefixes (simple prefix matching).
  */
 export const BLOCKED_IPV6_PREFIXES: ReadonlyArray<{ prefix: string; label: string }> = [
-  { prefix: '::1',     label: 'IPv6 loopback (::1)'              },
-  { prefix: '::ffff:', label: 'IPv4-mapped (::ffff:/96)'          },
-  { prefix: 'fc',      label: 'IPv6 unique-local (fc00::/7)'      },
-  { prefix: 'fd',      label: 'IPv6 unique-local (fd00::/7)'      },
-  { prefix: 'fe80',    label: 'IPv6 link-local (fe80::/10)'       },
-  { prefix: 'fe90',    label: 'IPv6 link-local (fe80::/10)'       },
-  { prefix: 'fea0',    label: 'IPv6 link-local (fe80::/10)'       },
-  { prefix: 'feb0',    label: 'IPv6 link-local (fe80::/10)'       },
-  { prefix: '::',      label: 'IPv6 unspecified / loopback zone'  },
+  { prefix: '::1', label: 'IPv6 loopback (::1)' },
+  { prefix: '::ffff:', label: 'IPv4-mapped (::ffff:/96)' },
+  { prefix: 'fc', label: 'IPv6 unique-local (fc00::/7)' },
+  { prefix: 'fd', label: 'IPv6 unique-local (fd00::/7)' },
+  { prefix: 'fe80', label: 'IPv6 link-local (fe80::/10)' },
+  { prefix: 'fe90', label: 'IPv6 link-local (fe80::/10)' },
+  { prefix: 'fea0', label: 'IPv6 link-local (fe80::/10)' },
+  { prefix: 'feb0', label: 'IPv6 link-local (fe80::/10)' },
+  { prefix: '::', label: 'IPv6 unspecified / loopback zone' },
 ];
 
 /**
@@ -241,7 +245,10 @@ export async function validateWebhookDestination(
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== 'ENODATA' && code !== 'ENOTFOUND' && code !== 'ESERVFAIL') {
       // Unexpected DNS error — log and treat as unsafe
-      logger.warn('DNS resolution (A record) failed unexpectedly', { hostname, error: String(err) });
+      logger.warn('DNS resolution (A record) failed unexpectedly', {
+        hostname,
+        error: String(err),
+      });
     }
   }
 
@@ -252,7 +259,10 @@ export async function validateWebhookDestination(
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== 'ENODATA' && code !== 'ENOTFOUND' && code !== 'ESERVFAIL') {
-      logger.warn('DNS resolution (AAAA record) failed unexpectedly', { hostname, error: String(err) });
+      logger.warn('DNS resolution (AAAA record) failed unexpectedly', {
+        hostname,
+        error: String(err),
+      });
     }
   }
 

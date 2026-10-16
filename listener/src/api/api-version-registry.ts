@@ -77,43 +77,43 @@ export interface VersionedRoute {
  */
 export const ROUTE_CATALOG: ReadonlyArray<VersionedRoute> = [
   // ── v1 active routes ──────────────────────────────────────────────────────
-  { method: 'GET',    path: '/api/events',                          version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/status',                          version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/indexing/health',                 version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/analytics',                       version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/analytics/history',               version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/rate-limit/metrics',              version: 'v1', status: 'active' },
-  { method: 'POST',   path: '/api/webhooks',                        version: 'v1', status: 'active' },
-  { method: 'POST',   path: '/api/notifications/validate-batch',    version: 'v1', status: 'active' },
-  { method: 'POST',   path: '/api/notifications/import',            version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/notifications/history',           version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/notifications/search',            version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/notifications/health',            version: 'v1', status: 'active' },
-  { method: 'POST',   path: '/api/schedule',                        version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/stats',                  version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/execution-metrics',      version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/retry-distribution',     version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/retry-statistics',       version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/queue',                  version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/jobs',                   version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/jobs/failures',          version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/schedule/:id',                    version: 'v1', status: 'active' },
-  { method: 'DELETE', path: '/api/schedule/:id',                    version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/search/suggestions',              version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/preferences/:userId',             version: 'v1', status: 'active' },
-  { method: 'PUT',    path: '/api/preferences/:userId',             version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/templates',                       version: 'v1', status: 'active' },
-  { method: 'POST',   path: '/api/templates',                       version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/templates/:id',                   version: 'v1', status: 'active' },
-  { method: 'PUT',    path: '/api/templates/:id',                   version: 'v1', status: 'active' },
-  { method: 'DELETE', path: '/api/templates/:id',                   version: 'v1', status: 'active' },
-  { method: 'POST',   path: '/api/templates/render',                version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/templates/stats',                 version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/templates/by-key/:uniqueKey',     version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/templates/:id/audit',             version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/archive',                         version: 'v1', status: 'active' },
-  { method: 'GET',    path: '/api/archive/:id',                     version: 'v1', status: 'active' },
-  { method: 'POST',   path: '/api/archive/run',                     version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/events', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/status', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/indexing/health', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/analytics', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/analytics/history', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/rate-limit/metrics', version: 'v1', status: 'active' },
+  { method: 'POST', path: '/api/webhooks', version: 'v1', status: 'active' },
+  { method: 'POST', path: '/api/notifications/validate-batch', version: 'v1', status: 'active' },
+  { method: 'POST', path: '/api/notifications/import', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/notifications/history', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/notifications/search', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/notifications/health', version: 'v1', status: 'active' },
+  { method: 'POST', path: '/api/schedule', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/stats', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/execution-metrics', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/retry-distribution', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/retry-statistics', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/queue', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/jobs', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/jobs/failures', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/schedule/:id', version: 'v1', status: 'active' },
+  { method: 'DELETE', path: '/api/schedule/:id', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/search/suggestions', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/preferences/:userId', version: 'v1', status: 'active' },
+  { method: 'PUT', path: '/api/preferences/:userId', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/templates', version: 'v1', status: 'active' },
+  { method: 'POST', path: '/api/templates', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/templates/:id', version: 'v1', status: 'active' },
+  { method: 'PUT', path: '/api/templates/:id', version: 'v1', status: 'active' },
+  { method: 'DELETE', path: '/api/templates/:id', version: 'v1', status: 'active' },
+  { method: 'POST', path: '/api/templates/render', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/templates/stats', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/templates/by-key/:uniqueKey', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/templates/:id/audit', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/archive', version: 'v1', status: 'active' },
+  { method: 'GET', path: '/api/archive/:id', version: 'v1', status: 'active' },
+  { method: 'POST', path: '/api/archive/run', version: 'v1', status: 'active' },
 
   // ── Example deprecated route (template for future use) ───────────────────
   // When a v2 breaking change is ready, add an entry like this:
@@ -150,7 +150,7 @@ export function normaliseApiPath(pathname: string): {
 } {
   for (const version of SUPPORTED_VERSIONS) {
     const prefix = `/api/${version}/`;
-    const exact  = `/api/${version}`;
+    const exact = `/api/${version}`;
     if (pathname.startsWith(prefix)) {
       return {
         normalisedPath: pathname.replace(prefix, '/api/'),
@@ -227,10 +227,7 @@ export function applyVersionHeaders(
  * Finds the catalog entry for `method` + `canonicalPath`.
  * Supports parameterised paths like `/api/schedule/:id`.
  */
-export function findRouteEntry(
-  method: string,
-  canonicalPath: string,
-): VersionedRoute | undefined {
+export function findRouteEntry(method: string, canonicalPath: string): VersionedRoute | undefined {
   const upperMethod = method.toUpperCase();
   return ROUTE_CATALOG.find((entry) => {
     if (entry.method.toUpperCase() !== upperMethod) return false;
@@ -252,7 +249,7 @@ export function pathMatches(pattern: string, actualPath: string): boolean {
   const cleanPath = actualPath.split('?')[0] ?? actualPath;
 
   const patternSegments = pattern.split('/');
-  const actualSegments  = cleanPath.split('/');
+  const actualSegments = cleanPath.split('/');
 
   if (patternSegments.length !== actualSegments.length) return false;
 
@@ -290,9 +287,9 @@ export function buildVersionCatalog(): {
     deprecationReason?: string;
   }>;
 } {
-  const active     = ROUTE_CATALOG.filter((r) => r.status === 'active').length;
+  const active = ROUTE_CATALOG.filter((r) => r.status === 'active').length;
   const deprecated = ROUTE_CATALOG.filter((r) => r.status === 'deprecated');
-  const sunset     = ROUTE_CATALOG.filter((r) => r.status === 'sunset').length;
+  const sunset = ROUTE_CATALOG.filter((r) => r.status === 'sunset').length;
 
   return {
     currentVersion: CURRENT_API_VERSION,
