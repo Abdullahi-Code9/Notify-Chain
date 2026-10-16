@@ -148,6 +148,8 @@ failureReason: 'http_permanent',
       };
     } catch (err) {
       const durationMs = Date.now() - startMs;
+      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      const isDnsBlocked = err instanceof Error && err.name === 'DnsRebindingError';
       const isTimeout = isWebhookTimeoutError(err);
       const errorReason = isTimeout
         ? `Webhook request timed out after ${timeoutMs}ms`
@@ -155,7 +157,16 @@ failureReason: 'http_permanent',
           ? err.message
           : String(err);
 
-      if (isTimeout) {
+      if (isDnsBlocked) {
+        // DNS rebinding block is a permanent failure — retrying will not help
+        logger.error('Webhook delivery blocked by DNS rebinding guard — no retry', {
+          ...logCtx,
+          hostname: (err as { hostname?: string }).hostname,
+          blockedAddress: (err as { blockedAddress?: string }).blockedAddress,
+          error: errorReason,
+          durationMs,
+        });
+      } else if (isTimeout) {
         logger.warn('Webhook delivery timed out — will retry', {
           ...logCtx,
           timeoutMs,

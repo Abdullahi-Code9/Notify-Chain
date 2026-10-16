@@ -31,6 +31,11 @@ import { WebhookReplayCache } from '../services/webhook-replay-cache';
 import { IdempotencyKeyService, IdempotencyKeyReuseError } from '../services/idempotency-key-service';
 import { WebhookSecret, RateLimitConfig, ContractConfig } from '../types';
 import { RateLimiter } from './rate-limiter';
+import {
+  normaliseApiPath,
+  applyVersionHeaders,
+  buildVersionCatalog,
+} from './api-version-registry';
 import { getDatabase } from '../database/database';
 import {
   getNotificationAnalyticsAggregator,
@@ -508,18 +513,16 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const pathname = url.pathname;
 
-    // ── API Route Versioning (#386) ─────────────────────────────────────────
-    // Accept requests to /api/v1/* and silently rewrite the pathname to the
-    // canonical /api/* form so the rest of the handler needs no changes.
-    // The original `req.url` is preserved; only the parsed `url.pathname` is
-    // modified. Unversioned /api/* routes continue to work unchanged.
-    if (url.pathname.startsWith('/api/v1/')) {
-      url.pathname = url.pathname.replace('/api/v1/', '/api/');
-    } else if (url.pathname === '/api/v1') {
-      url.pathname = '/api';
+    // ── API Route Versioning (#386, #984) ──────────────────────────────────
+    // Normalise /api/vN/* → /api/* using the central version registry so that
+    // every route handler operates on the canonical path form.  The registry
+    // also applies X-API-Version, Deprecation, Sunset, and Link headers
+    // automatically based on the ROUTE_CATALOG lifecycle status.
+    {
+      const { normalisedPath } = normaliseApiPath(url.pathname);
+      url.pathname = normalisedPath;
     }
-    // Add X-API-Version response header so callers can inspect active version
-    res.setHeader('X-API-Version', 'v1');
+    applyVersionHeaders(req.method ?? 'GET', url.pathname, res);
 
     // Standardize response Content-Type for all API responses (#647)
     if (req.method !== 'OPTIONS') {
@@ -661,6 +664,12 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
         returned: events.length,
         durationMs: Date.now() - startTime,
       });
+      return;
+    }
+
+    // GET /api/version — version catalog and deprecation registry (#984)
+    if (req.method === 'GET' && url.pathname === '/api/version') {
+      sendOk(res, 200, buildVersionCatalog());
       return;
     }
 
