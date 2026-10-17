@@ -716,6 +716,124 @@ describe('Config validation', () => {
       expect(() => validateConfig(config)).toThrow('WEBHOOK_TIMEOUT_MS must be <= 300000 ms');
     });
   });
+
+  describe('High-volume event batching', () => {
+    it('defaults to disabled batching with conservative limits', () => {
+      delete process.env.EVENT_BATCHING_ENABLED;
+      delete process.env.EVENT_BATCHING_MAX_SIZE;
+      delete process.env.EVENT_BATCHING_WINDOW_MS;
+
+      expect(loadConfig().eventBatching).toEqual({
+        enabled: false,
+        maxBatchSize: 50,
+        windowMs: 5000,
+      });
+    });
+
+    it('loads configured batching settings', () => {
+      process.env.EVENT_BATCHING_ENABLED = 'true';
+      process.env.EVENT_BATCHING_MAX_SIZE = '10';
+      process.env.EVENT_BATCHING_WINDOW_MS = '2000';
+
+      expect(loadConfig().eventBatching).toEqual({
+        enabled: true,
+        maxBatchSize: 10,
+        windowMs: 2000,
+      });
+    });
+
+    it('rejects a non-integer batch size at parse time', () => {
+      process.env.EVENT_BATCHING_MAX_SIZE = 'many';
+
+      expect(() => loadConfig()).toThrow(
+        'EVENT_BATCHING_MAX_SIZE must be a valid integer, got "many"'
+      );
+    });
+
+    it('rejects a non-positive batch size', () => {
+      process.env.EVENT_BATCHING_MAX_SIZE = '0';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow('EVENT_BATCHING_MAX_SIZE must be >= 1');
+    });
+
+    it('rejects a negative collection window', () => {
+      process.env.EVENT_BATCHING_WINDOW_MS = '-1';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow('EVENT_BATCHING_WINDOW_MS must be >= 0');
+    });
+
+    it('rejects a non-boolean enabled flag', () => {
+      process.env.EVENT_BATCHING_ENABLED = 'yes';
+
+      expect(() => loadConfig()).toThrow(
+        'EVENT_BATCHING_ENABLED must be either "true" or "false", got "yes"'
+      );
+    });
+  });
+
+  describe('Periodic digest summaries', () => {
+    it('defaults to disabled with an hourly interval', () => {
+      delete process.env.DIGEST_ENABLED;
+      delete process.env.DIGEST_INTERVAL_MS;
+      delete process.env.DIGEST_MAX_EVENTS;
+
+      expect(loadConfig().digest).toEqual({
+        enabled: false,
+        intervalMs: 3600000,
+        maxEventsPerDigest: 100,
+      });
+    });
+
+    it('loads a daily digest interval', () => {
+      process.env.DIGEST_ENABLED = 'true';
+      process.env.DIGEST_INTERVAL_MS = '86400000';
+      process.env.DIGEST_MAX_EVENTS = '500';
+
+      expect(loadConfig().digest).toEqual({
+        enabled: true,
+        intervalMs: 86400000,
+        maxEventsPerDigest: 500,
+      });
+    });
+
+    it('rejects a digest interval below one second', () => {
+      process.env.DIGEST_INTERVAL_MS = '500';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow('DIGEST_INTERVAL_MS must be >= 1000 ms');
+    });
+
+    it('rejects a non-positive max events per digest', () => {
+      process.env.DIGEST_MAX_EVENTS = '0';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow('DIGEST_MAX_EVENTS must be >= 1');
+    });
+  });
+
+  describe('Localization', () => {
+    it('defaults to the English locale', () => {
+      delete process.env.DEFAULT_LOCALE;
+
+      expect(loadConfig().localization).toEqual({ defaultLocale: 'en' });
+    });
+
+    it('normalises a configured supported locale', () => {
+      process.env.DEFAULT_LOCALE = 'ES';
+
+      expect(loadConfig().localization).toEqual({ defaultLocale: 'es' });
+    });
+
+    it('rejects an unsupported locale during validation', () => {
+      process.env.DEFAULT_LOCALE = 'de';
+
+      const config = loadConfig();
+      expect(() => validateConfig(config)).toThrow(ConfigError);
+      expect(() => validateConfig(config)).toThrow('DEFAULT_LOCALE must be one of: en, es');
+    });
+  });
 });
 });
 
