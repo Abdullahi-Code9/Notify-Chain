@@ -260,4 +260,17 @@ export const APP_CONFIG_SCHEMA: ConfigSchema = {
     eventRetentionMs: { type: 'number', min: 60000 },
     executionLogRetentionMs: { type: 'number', min: 60000 },
   },
+  eventBatching: {
+    enabled: { type: 'boolean' },
+    maxBatchSize: { type: 'number', min: 1 },
+    windowMs: { type: 'number', min: 0 },
+  },
+  digest: {
+    enabled: { type: 'boolean' },
+    intervalMs: { type: 'number', min: 1000 },
+    maxEventsPerDigest: { type: 'number', min: 1 },
+  },
+  localization: {
+    defaultLocale: { type: 'string' },
+  },
 };

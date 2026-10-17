@@ -2,6 +2,7 @@ import * as StellarSDK from '@stellar/stellar-sdk';
 import { ContractConfig } from '../types';
 import logger from '../utils/logger';
 import { generateCorrelationId } from '../utils/request-id';
+import { getCorrelationId, runWithCorrelationId } from '../utils/correlation-context';
 import {
   RetryFailureType,
   RetryPolicy,
@@ -102,7 +103,9 @@ export class EventProcessingQueue {
     requestId?: string,
     priority: Priority = Priority.Medium
   ): boolean {
-    const correlationId = requestId ?? generateCorrelationId();
+    // Inherit the enqueuing request's correlation ID (#986) so the background
+    // processing of this event is traceable back to the call that queued it.
+    const correlationId = requestId ?? getCorrelationId() ?? generateCorrelationId();
     const fingerprint = buildEventFingerprint(event, contractConfig.address);
 
     if (this.queuedFingerprints.has(fingerprint)) {
@@ -233,7 +236,11 @@ export class EventProcessingQueue {
     const attempt = item.retryCount + 1;
 
     try {
-      const success = await this.processor(item.event, item.contractConfig, item.requestId);
+      // The queue drains on its own timer, outside the enqueuing request's
+      // async chain, so restore the item's correlation context explicitly.
+      const success = await runWithCorrelationId(item.requestId, () =>
+        this.processor(item.event, item.contractConfig, item.requestId),
+      );
       const duration = Date.now() - startTime;
 
       if (success) {

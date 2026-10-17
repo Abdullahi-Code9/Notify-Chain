@@ -93,10 +93,46 @@ export interface Config {
   backfill?: BackfillConfig;
   logging?: LoggingConfig;
   api?: ApiConfig;
+  /** High-volume event batching settings (feature: batched delivery). */
+  eventBatching?: EventBatchingConfig;
+  /** Periodic digest summary settings (feature: digest delivery). */
+  digest?: DigestConfig;
+  /** Localization (i18n) settings (feature: template separation). */
+  localization?: LocalizationConfig;
   /** Dry-run mode: parse and validate events without persisting or delivering notifications. */
   dryRun?: boolean;
   /** Circuit breaker configuration for RPC failure handling. */
   circuitBreaker?: CircuitBreakerConfig;
+}
+
+/**
+ * High-volume event batching configuration.
+ *
+ * When enabled, selected event groups are coalesced into a single batched
+ * message once either `maxBatchSize` events accumulate or `windowMs` elapses.
+ */
+export interface EventBatchingConfig {
+  enabled: boolean;
+  maxBatchSize: number;
+  windowMs: number;
+}
+
+/**
+ * Periodic digest summary configuration.
+ *
+ * When enabled, recipients receive a periodic summary of accumulated event
+ * activity instead of one delivery per event.
+ */
+export interface DigestConfig {
+  enabled: boolean;
+  intervalMs: number;
+  maxEventsPerDigest: number;
+}
+
+/** Localization (i18n) configuration. */
+export interface LocalizationConfig {
+  /** Initial/default locale, used when a translation is missing. */
+  defaultLocale: string;
 }
 
 /** Observability settings, sourced from LOG_LEVEL / LOG_FORMAT. */

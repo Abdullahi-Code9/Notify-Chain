@@ -12,14 +12,15 @@
  *   "meta": <optional – pagination / extra context>
  * }
  *
- * Error
+ * Error  (#987)
  * -----
  * {
  *   "success": false,
  *   "error": {
- *     "code":    "<SCREAMING_SNAKE_CASE>",
- *     "message": "<human readable>",
- *     "details": <optional – validation errors, extra context>
+ *     "code":           "<SCREAMING_SNAKE_CASE>",   – stable, see errors/api-error-codes.ts
+ *     "message":        "<human readable>",
+ *     "details":        <validation errors / extra context; [] when none>,
+ *     "correlation_id": "<request correlation id>"  – present when known
  *   }
  * }
  *
@@ -34,6 +35,11 @@
  */
 
 import http from 'http';
+import { ErrorCode, type ErrorCodeValue } from '../errors/api-error-codes';
+import { getCorrelationId } from './correlation-context';
+
+export { ErrorCode, ERROR_CODE_CATALOG, isKnownErrorCode } from '../errors/api-error-codes';
+export type { ErrorCodeValue } from '../errors/api-error-codes';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,7 +54,8 @@ export interface ApiSuccess<T = unknown> {
 export interface ApiErrorBody {
   code: string;
   message: string;
-  details?: unknown;
+  details: unknown;
+  correlation_id?: string;
 }
 
 export interface ApiError {
@@ -57,27 +64,6 @@ export interface ApiError {
 }
 
 export type ApiResponse<T = unknown> = ApiSuccess<T> | ApiError;
-
-// ---------------------------------------------------------------------------
-// Well-known error codes
-// ---------------------------------------------------------------------------
-
-export const ErrorCode = {
-  BAD_REQUEST: 'BAD_REQUEST',
-  UNAUTHORIZED: 'UNAUTHORIZED',
-  FORBIDDEN: 'FORBIDDEN',
-  NOT_FOUND: 'NOT_FOUND',
-  CONFLICT: 'CONFLICT',
-  UNPROCESSABLE: 'UNPROCESSABLE',
-  PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
-  RATE_LIMITED: 'RATE_LIMITED',
-  INTERNAL_ERROR: 'INTERNAL_ERROR',
-  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
-  PARSE_ERROR: 'PARSE_ERROR',
-  UNSUPPORTED_MEDIA_TYPE: 'UNSUPPORTED_MEDIA_TYPE',
-} as const;
-
-export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 // ---------------------------------------------------------------------------
 // Builders
@@ -97,15 +83,18 @@ export function ok<T>(data: T, meta?: Record<string, unknown>): ApiSuccess<T> {
  *
  * @param message  Human-readable description forwarded to the client.
  * @param code     Machine-readable code; defaults to `INTERNAL_ERROR`.
- * @param details  Optional extra context (validation errors, field names, …).
+ * @param details  Optional extra context (validation errors, field names, …);
+ *                 defaults to `[]` so clients can always iterate it.
+ * @param correlationId  Defaults to the active request's correlation ID.
  */
 export function err(
   message: string,
   code: ErrorCodeValue | string = ErrorCode.INTERNAL_ERROR,
   details?: unknown,
+  correlationId: string | undefined = getCorrelationId(),
 ): ApiError {
-  const body: ApiErrorBody = { code, message };
-  if (details !== undefined) body.details = details;
+  const body: ApiErrorBody = { code, message, details: details ?? [] };
+  if (correlationId) body.correlation_id = correlationId;
   return { success: false, error: body };
 }
 
@@ -150,6 +139,7 @@ export function sendErr(
   message: string,
   code: ErrorCodeValue | string = ErrorCode.INTERNAL_ERROR,
   details?: unknown,
+  correlationId?: string,
 ): void {
-  sendJson(res, statusCode, err(message, code, details));
+  sendJson(res, statusCode, err(message, code, details, correlationId ?? getCorrelationId()));
 }

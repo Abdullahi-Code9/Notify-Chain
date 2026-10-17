@@ -33,6 +33,7 @@ import { SecretValidationError } from './config/validate-secrets';
 import { NotificationHealthMonitor } from './services/notification-health-monitor';
 import { getWorkerManager } from './services/worker-manager';
 import { DeliveryReceiptRepository } from './services/delivery-receipt-repository';
+import { ApiCredentialService } from './services/api-credential-service';
 
 dotenv.config();
 
@@ -179,6 +180,7 @@ async function main() {
     schedulerTemplateService: legacyTemplateService,
     webhookSecrets: config.webhookSecrets,
     apiKeys: config.apiKeys,
+    credentialService: new ApiCredentialService(),
     rateLimit: config.rateLimit,
     archiveStore,
     archiveService,
