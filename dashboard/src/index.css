@@ -8426,3 +8426,378 @@ textarea {
   border-color: rgba(0, 0, 0, 0.12);
   color: #4b5563;
 }
+
+/* ── Issue #973: Contract Detail Page ───────────────────────────────────────── */
+
+.contract-detail-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 28px;
+}
+
+.contract-detail__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.contract-detail__eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #9aa0a6;
+}
+
+.contract-detail__title {
+  margin: 0 0 12px;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #e8eaed;
+}
+
+.contract-detail__address-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contract-detail__address {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  color: #b0b8c2;
+  word-break: break-all;
+}
+
+.contract-detail__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  min-width: 280px;
+}
+
+.contract-detail__stat-card {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.contract-detail__stat-label {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.contract-detail__stat-value {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #e8eaed;
+}
+
+.contract-detail__section-title {
+  margin: 0 0 16px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #e8eaed;
+}
+
+.contract-detail__event-types {
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.contract-detail__event-type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.contract-detail__event-type-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.contract-detail__event-type-name {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  color: #b0b8c2;
+}
+
+.contract-detail__event-type-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e8eaed;
+  background: rgba(91, 125, 255, 0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.contract-detail__activity {
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.contract-detail__activity-list {
+  display: grid;
+  gap: 12px;
+}
+
+.contract-detail__activity-item {
+  cursor: pointer;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.contract-detail__activity-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.contract-detail__activity-item:focus {
+  outline: 2px solid rgba(91, 125, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.contract-detail__tx-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5b7dff;
+  text-decoration: none;
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  transition: color 0.15s;
+}
+
+.contract-detail__tx-link:hover {
+  color: #7b9dff;
+  text-decoration: underline;
+}
+
+.contract-detail__tx-link-icon {
+  font-size: 0.9rem;
+}
+
+/* Skeleton loading states */
+.contract-detail__skeleton {
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.contract-detail__skeleton-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.contract-detail__skeleton-title {
+  height: 32px;
+  width: 60%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+  border-radius: 8px;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+.contract-detail__skeleton-address {
+  height: 24px;
+  width: 80%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+  border-radius: 6px;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+.contract-detail__skeleton-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.contract-detail__skeleton-stat {
+  height: 80px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+  border-radius: 12px;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .contract-detail-page {
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .contract-detail__header {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .contract-detail__stats {
+    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+  }
+
+  .contract-detail__event-type-list {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .contract-detail__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-detail__title {
+    font-size: 1.4rem;
+  }
+}
+
+/* Light theme overrides */
+[data-theme="light"] .contract-detail__header {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .contract-detail__title {
+  color: #1a1a2e;
+}
+
+[data-theme="light"] .contract-detail__address {
+  background: rgba(0, 0, 0, 0.05);
+  color: #4b5563;
+}
+
+[data-theme="light"] .contract-detail__stat-card {
+  background: #f9fafb;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .contract-detail__stat-label {
+  color: #6b7280;
+}
+
+[data-theme="light"] .contract-detail__stat-value {
+  color: #1a1a2e;
+}
+
+[data-theme="light"] .contract-detail__section-title {
+  color: #1a1a2e;
+}
+
+[data-theme="light"] .contract-detail__event-types {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .contract-detail__event-type-item {
+  background: #f9fafb;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .contract-detail__event-type-name {
+  color: #4b5563;
+}
+
+[data-theme="light"] .contract-detail__event-type-count {
+  color: #1a1a2e;
+  background: rgba(91, 125, 255, 0.1);
+}
+
+[data-theme="light"] .contract-detail__activity {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .contract-detail__activity-item {
+  background: #f9fafb;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .contract-detail__activity-item:hover {
+  background: #f3f4f6;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .contract-detail__tx-link {
+  color: #3b82f6;
+}
+
+[data-theme="light"] .contract-detail__tx-link:hover {
+  color: #2563eb;
+}
+
+[data-theme="light"] .contract-detail__skeleton {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .contract-detail__skeleton-title,
+[data-theme="light"] .contract-detail__skeleton-address,
+[data-theme="light"] .contract-detail__skeleton-stat {
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+}
+
+/* Contract link styling in event explorer */
+.event-explorer__contract-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #5b7dff;
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.event-explorer__contract-link:hover {
+  color: #7b9dff;
+  text-decoration: underline;
+}
+
+[data-theme="light"] .event-explorer__contract-link {
+  color: #3b82f6;
+}
+
+[data-theme="light"] .event-explorer__contract-link:hover {
+  color: #2563eb;
+}

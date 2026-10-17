@@ -23,7 +23,8 @@ export type Tab =
   | 'preferences'
   | 'templates'
   | 'channels'
-  | 'rpc-benchmark';
+  | 'rpc-benchmark'
+  | 'contract-detail';
 
 export interface NavItem {
   id: Tab;
