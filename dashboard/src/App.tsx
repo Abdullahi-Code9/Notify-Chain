@@ -13,6 +13,7 @@ import { NotificationPreferencesPage } from './pages/NotificationPreferencesPage
 import { TemplatesPage } from './pages/TemplatesPage';
 import { ChannelDetailsPage } from './pages/ChannelDetailsPage';
 import { RpcBenchmarkPage } from './pages/RpcBenchmarkPage';
+import { ContractDetailPage } from './pages/ContractDetailPage';
 
 import { ThemeToggle } from './components/ThemeToggle';
 import { MobileNavDrawer, NAV_ITEMS, type Tab } from './components/MobileNavDrawer';
@@ -26,10 +27,16 @@ import { useEventStore } from './store/eventStore';
 import { SyncStatus } from './components/SyncStatus';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DashboardLayout } from './layouts/DashboardLayout';
+import { EmptyState } from './components/EmptyState';
 
 export function App() {
   const [tab, setTab] = useState<Tab>(() => {
     const hash = window.location.hash.slice(1);
+
+    // Handle contract-detail route with address parameter
+    if (hash.startsWith('contract-detail?')) {
+      return 'contract-detail';
+    }
 
     if (NAV_ITEMS.some((item) => item.id === hash)) {
       return hash as Tab;
@@ -301,6 +308,36 @@ function renderPanel(tab: Tab, events: any[]) {
           <RpcBenchmarkPage />
         </ErrorBoundary>
       );
+
+    case 'contract-detail': {
+      const hash = window.location.hash.slice(1);
+      const params = new URLSearchParams(hash.split('?')[1] || '');
+      const contractAddress = params.get('address');
+      
+      if (!contractAddress) {
+        return (
+          <ErrorBoundary section="Contract Details">
+            <EmptyState
+              icon="📄"
+              title="Contract address required"
+              message="Please provide a contract address to view its details."
+              action={{
+                label: 'Go to Event Explorer',
+                onClick: () => {
+                  window.location.hash = 'explorer';
+                },
+              }}
+            />
+          </ErrorBoundary>
+        );
+      }
+
+      return (
+        <ErrorBoundary section="Contract Details">
+          <ContractDetailPage contractAddress={contractAddress} />
+        </ErrorBoundary>
+      );
+    }
 
     default:
       return null;

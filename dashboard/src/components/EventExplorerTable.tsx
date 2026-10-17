@@ -28,6 +28,7 @@ interface EventExplorerTableProps {
   events: BlockchainEvent[];
   onSelectEvent?: (event: BlockchainEvent) => void;
   contractStatuses?: unknown[];
+  onContractClick?: (contractAddress: string) => void;
 }
 
 export function loadColumnWidths(): number[] {
@@ -100,6 +101,7 @@ async function syncCopyText(text: string) {
 export const EventExplorerTable = memo(function EventExplorerTable({
   events,
   onSelectEvent,
+  onContractClick,
 }: EventExplorerTableProps) {
   const [columnWidths, setColumnWidths] = useState<number[]>(
     loadColumnWidths,
@@ -243,6 +245,7 @@ export const EventExplorerTable = memo(function EventExplorerTable({
             onCopyContract={handleCopyContract}
             isCopied={isCopied(event.contractAddress)}
             onSelectEvent={handleSelectEvent}
+            onContractClick={onContractClick}
           />
         ))}
       </div>
