@@ -17,12 +17,8 @@
  */
 
 import logger from '../utils/logger';
-import {
-  sendWebhook,
-  WebhookSendOptions,
-  WebhookFailureReason,
-  isWebhookTimeoutError,
-} from './webhook-sender';
+import { sendWebhook, WebhookSendOptions, WebhookFailureReason } from './webhook-sender';
+import { classifyError, RetryFailureType } from './retry-policy';
 
 /**
  * Default timeout applied to an outbound webhook request when the operator has
@@ -52,7 +48,7 @@ export interface WebhookDeliveryResult {
   statusCode?: number;
   /** Human-readable failure reason for logging. */
   errorReason?: string;
-providerMessageId?: string;
+  providerMessageId?: string;
   providerResponse?: Record<string, unknown>;
   errorCode?: string;
   /**
@@ -124,7 +120,7 @@ export class WebhookDeliveryService {
           success: false,
           statusCode: response.status,
           errorReason: `HTTP ${response.status}`,
-errorCode: `HTTP_${response.status}`,
+          errorCode: `HTTP_${response.status}`,
           providerMessageId,
           providerResponse,
           failureReason: 'http_retryable',
@@ -141,16 +137,15 @@ errorCode: `HTTP_${response.status}`,
         success: false,
         statusCode: response.status,
         errorReason: `HTTP ${response.status}`,
-failureReason: 'http_permanent',
+        failureReason: 'http_permanent',
         errorCode: `HTTP_${response.status}`,
         providerMessageId,
         providerResponse,
       };
     } catch (err) {
       const durationMs = Date.now() - startMs;
-      const isTimeout = err instanceof Error && err.name === 'AbortError';
       const isDnsBlocked = err instanceof Error && err.name === 'DnsRebindingError';
-      const isTimeout = isWebhookTimeoutError(err);
+      const isTimeout = classifyError(err) === RetryFailureType.Timeout;
       const errorReason = isTimeout
         ? `Webhook request timed out after ${timeoutMs}ms`
         : err instanceof Error
@@ -180,7 +175,7 @@ failureReason: 'http_permanent',
         });
       }
 
-return {
+      return {
         success: false,
         errorReason,
         failureReason: isTimeout ? 'timeout' : 'network',

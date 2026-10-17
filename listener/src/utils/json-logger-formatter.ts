@@ -6,7 +6,7 @@
  */
 
 import winston from 'winston';
-import { redactSensitiveData, redactString } from './redact';
+import { redactObject, redactValue, redactString } from './redact';
 
 export interface StructuredLogRecord {
   timestamp: string;
@@ -39,7 +39,7 @@ export function createStructuredJsonFormat(options: JsonFormatterOptions = {}) {
     const sanitizedMessage = typeof message === 'string' ? redactString(message) : String(message);
 
     // Sanitize extra metadata
-    const sanitizedMetadata = redactSensitiveData(rest) as Record<string, unknown>;
+    const sanitizedMetadata = redactObject(rest) as Record<string, unknown>;
 
     const record: StructuredLogRecord = {
       timestamp: (timestamp as string) || new Date().toISOString(),
@@ -49,7 +49,7 @@ export function createStructuredJsonFormat(options: JsonFormatterOptions = {}) {
       environment,
       ...(requestId ? { requestId: String(requestId) } : {}),
       ...(durationMs !== undefined ? { durationMs: Number(durationMs) } : {}),
-      ...(error ? { error: redactSensitiveData(error) as Record<string, unknown> } : {}),
+      ...(error ? { error: redactValue(error) as Record<string, unknown> } : {}),
       ...sanitizedMetadata,
     };
 

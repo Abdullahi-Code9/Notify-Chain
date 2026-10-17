@@ -1,0 +1,42 @@
+﻿
+> listener@1.0.0 typecheck
+> node ./node_modules/typescript/bin/tsc --noEmit
+
+src/api/events-server.ts(2124,4): error TS1128: Declaration or statement expected.
+src/middleware/security-headers.ts(21,1): error TS1359: Identifier expected. 'const' is a reserved word that cannot be used here.
+src/middleware/security-headers.ts(21,7): error TS1005: ',' expected.
+src/middleware/security-headers.ts(22,77): error TS1005: ',' expected.
+src/middleware/security-headers.ts(24,8): error TS1359: Identifier expected. 'function' is a reserved word that cannot be used here.
+src/middleware/security-headers.ts(63,1): error TS1005: '}' expected.
+src/schema/compatibility-check.ts(275,1): error TS1005: '}' expected.
+src/services/webhook-sender.ts(28,2): error TS1109: Expression expected.
+src/services/webhook-sender.ts(28,19): error TS1005: ';' expected.
+src/services/webhook-sender.ts(28,22): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(28,25): error TS1435: Unknown keyword or identifier. Did you mean 'out bound'?
+src/services/webhook-sender.ts(28,34): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(29,2): error TS1003: Identifier expected.
+src/services/webhook-sender.ts(30,2): error TS1109: Expression expected.
+src/services/webhook-sender.ts(30,9): error TS1005: ';' expected.
+src/services/webhook-sender.ts(30,22): error TS1435: Unknown keyword or identifier. Did you mean 'case'?
+src/services/webhook-sender.ts(30,29): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(30,32): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(30,37): error TS1435: Unknown keyword or identifier. Did you mean 'try'?
+src/services/webhook-sender.ts(30,43): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(30,53): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(30,57): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(30,71): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,6): error TS1005: ';' expected.
+src/services/webhook-sender.ts(31,14): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,22): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,28): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,33): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,35): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,43): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,51): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,57): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(31,60): error TS1434: Unexpected keyword or identifier.
+src/services/webhook-sender.ts(32,12): error TS1005: ';' expected.
+src/services/webhook-sender.ts(32,36): error TS1005: ';' expected.
+src/services/webhook-sender.ts(33,2): error TS1003: Identifier expected.
+src/services/webhook-sender.ts(33,3): error TS1161: Unterminated regular expression literal.
+src/services/webhook-verifier.ts(469,1): error TS1005: '}' expected.

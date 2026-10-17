@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS notification_execution_log (
   scheduled_notification_id INTEGER NOT NULL,
   execution_attempt INTEGER NOT NULL CHECK (execution_attempt > 0),
   execution_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  status VARCHAR(20) NOT NULL CHECK (status IN ('SUCCESS', 'FAILED', 'RETRY')),
+  status VARCHAR(20) NOT NULL CHECK (status IN ('SUCCESS', 'FAILED', 'RETRY', 'DEAD_LETTERED')),
   error_message TEXT,
   response_data TEXT,                       -- JSON response from notification service
   duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),

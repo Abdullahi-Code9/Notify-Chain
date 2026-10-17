@@ -1,0 +1,60 @@
+﻿ts-jest[ts-compiler] (WARN) [96msrc/services/webhook-verifier.test.ts[0m:[93m537[0m:[93m11[0m - 
+[91merror[0m[90m TS7022: [0m'outcome' implicitly has type 'any' because it does not have a type annotation and is 
+referenced directly or indirectly in its own initializer.
+
+[7m537[0m     const outcome = verifyWebhookRequest({
+[96msrc/services/webhook-verifier.test.ts[0m:[93m539[0m:[93m5[0m - [91merror[0m[90m TS2353: [0mObject 
+literal may only specify known properties, and 'const' does not exist in type 'WebhookVerificationContext'.
+
+[7m539[0m     const sig = computeWebhookSignature(payload, SECRETS[1].secret);
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m539[0m:[93m11[0m - [91merror[0m[90m TS2588: [0mCannot 
+assign to 'sig' because it is a constant.
+
+[7m539[0m     const sig = computeWebhookSignature(payload, SECRETS[1].secret);
+[7m   [0m [91m          ~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m540[0m:[93m11[0m - [91merror[0m[90m TS2448: [0mBlock-scoped 
+variable 'outcome' used before its declaration.
+
+[7m540[0m     const outcome = await verifyWebhookRequest({
+[7m   [0m [91m          ~~~~~~~[0m
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m537[0m:[93m11[0m
+    [7m537[0m     const outcome = verifyWebhookRequest({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'outcome' is declared here.
+[96msrc/services/webhook-verifier.test.ts[0m:[93m540[0m:[93m11[0m - [91merror[0m[90m TS2588: [0mCannot 
+[96msrc/services/webhook-verifier.test.ts[0m:[93m540[0m:[93m11[0m - [91merror[0m[90m TS2588: [0mCannot 
+assign to 'outcome' because it is a constant.
+
+[7m540[0m     const outcome = await verifyWebhookRequest({
+[7m   [0m [91m          ~~~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m550[0m:[93m12[0m - [91merror[0m[90m TS7006: [0mParameter 
+'outcome' implicitly has an 'any' type.
+
+[7m550[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m           ~~~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m550[0m:[93m35[0m - [91merror[0m[90m TS2339: [0mProperty 
+'toBe' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m550[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                                  ~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m604[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m604[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m604[0m:[93m20[0m
+    [7m604[0m     expect(outcome.authenticated).toBe(false);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m605[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+[96msrc/services/webhook-verifier.test.ts[0m:[93m605[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'statusCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m605[0m     expect(outcome.statusCode).toBe(401);
+[7m   [0m [91m                   ~~~~~~~~~~[0m
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m605[0m:[93m20[0m
+    [7m605[0m     expect(outcome.statusCode).toBe(401);
+    [7m   [0m [96m                   ~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m606[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 

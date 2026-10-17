@@ -32,17 +32,10 @@ describe('Notification Template System', () => {
     db = new Database(testDbPath);
     await db.initialize();
 
-    // Run template schema migration
+    // Run template schema (exec handles multi-statement scripts incl. triggers)
     const schemaPath = path.join(__dirname, '../database/template-schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf-8');
-    const statements = schema
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    for (const statement of statements) {
-      await db.run(statement);
-    }
+    await db.exec(schema);
 
     repository = new TemplateRepository(db);
     service = new TemplateService(repository);
@@ -57,7 +50,7 @@ describe('Notification Template System', () => {
 
   beforeEach(async () => {
     await db.run('DELETE FROM template_usage_log');
-    await db.run('DELETE FROM notification_templates');
+    await db.run('DELETE FROM channel_templates');
   });
 
   describe('TemplateRenderer', () => {

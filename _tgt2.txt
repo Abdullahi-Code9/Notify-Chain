@@ -1,0 +1,513 @@
+﻿node : ts-jest[ts-compiler] (WARN) [96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m171[0m:[93m11[0m - 
+[91merror[0m[90m TS2304: [0mCannot find name 'scheduler'.
+At line:15 char:3417
++ ... pgrep\bin'; node ./node_modules/jest/bin/jest.js --maxWorkers=1 src/_ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ts-jest[ts-comp...me 'scheduler'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[7m171[0m     await scheduler.stop();
+[7m   [0m [91m          ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m247[0m:[93m13[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'scheduler'.
+
+[7m247[0m       await scheduler.start();
+[7m   [0m [91m            ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m341[0m:[93m47[0m - [91merror[0m[90m TS2349: [0mThis 
+expression is not callable.
+  Type '{ payload: { message: string; }; notificationType: NotificationType; targetRecipient: string; executeAt: Date; 
+it(: any, async: any): any; }' has no call signatures.
+
+[7m341[0m     const id = await api.scheduleNotification({
+[7m   [0m [91m                                              ~[0m
+[7m342[0m       payload: { message: 'deliver me' },
+[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[7m...[0m 
+[7m345[0m       executeAt: new Date('2026-06-24T12:00:02.000Z'),
+[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[7m346[0m     it('should log execution attempts for audit trail', async () => {
+[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m346[0m:[93m8[0m - [91merror[0m[90m TS7006: 
+[0mParameter '(Missing)' implicitly has an 'any' type.
+
+[7m346[0m     it('should log execution attempts for audit trail', async () => {
+[7m   [0m [91m       [0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m346[0m:[93m57[0m - [91merror[0m[90m TS7006: 
+[0mParameter 'async' implicitly has an 'any' type.
+
+[7m346[0m     it('should log execution attempts for audit trail', async () => {
+[7m   [0m [91m                                                        ~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m368[0m:[93m11[0m - [91merror[0m[90m TS2454: 
+[0mVariable 'scheduler' is used before being assigned.
+
+[7m368[0m     await scheduler.start();
+[7m   [0m [91m          ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m371[0m:[93m23[0m - [91merror[0m[90m TS2454: 
+[0mVariable 'repository' is used before being assigned.
+
+[7m371[0m     const row = await repository.getById(id);
+[7m   [0m [91m                      ~~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m371[0m:[93m42[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'id'.
+
+[7m371[0m     const row = await repository.getById(id);
+[7m   [0m [91m                                         ~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m373[0m:[93m12[0m - [91merror[0m[90m TS2454: 
+[0mVariable 'sendMock' is used before being assigned.
+
+[7m373[0m     expect(sendMock).toHaveBeenCalledTimes(1);
+[7m   [0m [91m           ~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m389[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'scheduler'.
+
+[7m389[0m     await scheduler.start();
+[7m   [0m [91m          ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m394[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'sendMock'.
+
+[7m394[0m     expect(sendMock).not.toHaveBeenCalled();
+[7m   [0m [91m           ~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m405[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'scheduler'.
+
+[7m405[0m     await scheduler.start();
+[7m   [0m [91m          ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m416[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'sendMock'.
+
+[7m416[0m     expect(sendMock).toHaveBeenCalledTimes(1);
+[7m   [0m [91m           ~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m427[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'scheduler'.
+
+[7m427[0m     await scheduler.start();
+[7m   [0m [91m          ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m455[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'scheduler'.
+
+[7m455[0m     await scheduler.start();
+[7m   [0m [91m          ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m461[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'sendMock'.
+
+[7m461[0m     expect(sendMock).toHaveBeenCalledTimes(3);
+[7m   [0m [91m           ~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m476[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'scheduler'.
+
+[7m476[0m     await scheduler.start();
+[7m   [0m [91m          ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m479[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'sendMock'.
+
+[7m479[0m     expect(sendMock).toHaveBeenCalledWith(
+[7m   [0m [91m           ~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m501[0m:[93m53[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'idempotencyKey'.
+
+[7m501[0m         [new Date(Date.now() - 1000).toISOString(), idempotencyKey]
+[7m   [0m [91m                                                    ~~~~~~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m507[0m:[93m7[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'stats'.
+
+[7m507[0m       stats = await idempotencyRepo.getStats();
+[7m   [0m [91m      ~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m508[0m:[93m14[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'stats'.
+
+[7m508[0m       expect(stats.expired).toBeGreaterThanOrEqual(0);
+[7m   [0m [91m             ~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m907[0m:[93m13[0m - [91merror[0m[90m TS2304: [0mCannot 
+find name 'scheduler'.
+
+[7m907[0m       await scheduler.start();
+[7m   [0m [91m            ~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m346[0m:[93m8[0m - [91merror[0m[90m TS1003: 
+[0mIdentifier expected.
+
+[7m346[0m     it('should log execution attempts for audit trail', async () => {
+[7m   [0m [91m       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m346[0m:[93m55[0m - [91merror[0m[90m TS1138: 
+[0mParameter declaration expected.
+
+[7m346[0m     it('should log execution attempts for audit trail', async () => {
+[7m   [0m [91m                                                      ~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m346[0m:[93m63[0m - [91merror[0m[90m TS1005: [0m',' 
+expected.
+
+[7m346[0m     it('should log execution attempts for audit trail', async () => {
+[7m   [0m [91m                                                              ~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m346[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' 
+expected.
+
+[7m346[0m     it('should log execution attempts for audit trail', async () => {
+[7m   [0m [91m                                                                 ~~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m366[0m:[93m6[0m - [91merror[0m[90m TS1128: 
+[0mDeclaration or statement expected.
+
+[7m366[0m     });
+[7m   [0m [91m     ~[0m
+[96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m985[0m:[93m1[0m - [91merror[0m[90m TS1005: [0m'}' 
+expected.
+
+[7m985[0m 
+[7m   [0m [91m[0m
+
+  [96msrc/__tests__/notification-flow-e2e.test.ts[0m:[93m857[0m:[93m63[0m
+    [7m857[0m describe('5. Backpressure and idempotency integration', () => {
+    [7m   [0m [96m                                                              ~[0m
+    The parser expected to find a '}' to match the '{' token here.
+FAIL src/__tests__/notification-flow-e2e.test.ts
+  ● Test suite failed to run
+
+    Jest encountered an unexpected token
+
+    Jest failed to parse a file. This happens e.g. when your code or its dependencies use non-standard JavaScript 
+syntax, or when Jest is not configured to support such syntax.
+
+    Out of the box Jest supports Babel, which will be used to transform your files into valid JS based on your Babel 
+configuration.
+
+    By default "node_modules" folder is ignored by transformers.
+
+    Here's what you can do:
+     • If you are trying to use TypeScript, see https://jestjs.io/docs/getting-started#using-typescript
+     • To have some of your "node_modules" files transformed, you can specify a custom "transformIgnorePatterns" in 
+your config.
+     • If you need a custom transformation, specify a "transform" option in your config.
+     • If you simply want to mock your non-JS modules (e.g. binary assets) you can stub them out with the 
+"moduleNameMapper" config option.
+
+    You'll find more details and examples of these config options in the docs:
+    https://jestjs.io/docs/configuration
+    For information about custom transformations, see:
+    https://jestjs.io/docs/code-transformation
+
+    Details:
+
+    C:\Users\NEW OWNER\Documents\drips\core foundry 
+941\Notify-Chain\listener\src\__tests__\notification-flow-e2e.test.ts:302
+                        it(, async) { }
+                           ^
+
+    SyntaxError: Unexpected token ','
+
+      at ModuleExecutor.compile (node_modules/jest-runtime/build/index.js:3081:44)
+
+ts-jest[ts-compiler] (WARN) [96msrc/services/webhook-verifier.test.ts[0m:[93m537[0m:[93m11[0m - 
+[91merror[0m[90m TS7022: [0m'outcome' implicitly has type 'any' because it does not have a type annotation and is 
+referenced directly or indirectly in its own initializer.
+
+[7m537[0m     const outcome = verifyWebhookRequest({
+[7m   [0m [91m          ~~~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m539[0m:[93m5[0m - [91merror[0m[90m TS2353: [0mObject 
+literal may only specify known properties, and 'const' does not exist in type 'WebhookVerificationContext'.
+
+[7m539[0m     const sig = computeWebhookSignature(payload, SECRETS[1].secret);
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m539[0m:[93m11[0m - [91merror[0m[90m TS2588: [0mCannot 
+assign to 'sig' because it is a constant.
+
+[7m539[0m     const sig = computeWebhookSignature(payload, SECRETS[1].secret);
+[7m   [0m [91m          ~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m540[0m:[93m11[0m - [91merror[0m[90m TS2448: [0mBlock-scoped 
+variable 'outcome' used before its declaration.
+
+[7m540[0m     const outcome = await verifyWebhookRequest({
+[7m   [0m [91m          ~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m537[0m:[93m11[0m
+    [7m537[0m     const outcome = verifyWebhookRequest({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'outcome' is declared here.
+[96msrc/services/webhook-verifier.test.ts[0m:[93m540[0m:[93m11[0m - [91merror[0m[90m TS2588: [0mCannot 
+assign to 'outcome' because it is a constant.
+
+[7m540[0m     const outcome = await verifyWebhookRequest({
+[7m   [0m [91m          ~~~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m550[0m:[93m12[0m - [91merror[0m[90m TS7006: [0mParameter 
+'outcome' implicitly has an 'any' type.
+
+[7m550[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m           ~~~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m550[0m:[93m35[0m - [91merror[0m[90m TS2339: [0mProperty 
+'toBe' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m550[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                                  ~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m604[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m604[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m604[0m:[93m20[0m
+    [7m604[0m     expect(outcome.authenticated).toBe(false);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m605[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'statusCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m605[0m     expect(outcome.statusCode).toBe(401);
+[7m   [0m [91m                   ~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m605[0m:[93m20[0m
+    [7m605[0m     expect(outcome.statusCode).toBe(401);
+    [7m   [0m [96m                   ~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m606[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'errorCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m606[0m     expect(outcome.errorCode).toBe('AUTH_MISSING_TIMESTAMP');
+[7m   [0m [91m                   ~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m606[0m:[93m20[0m
+    [7m606[0m     expect(outcome.errorCode).toBe('AUTH_MISSING_TIMESTAMP');
+    [7m   [0m [96m                   ~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m616[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m616[0m     expect(outcome.authenticated).toBe(true);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m616[0m:[93m20[0m
+    [7m616[0m     expect(outcome.authenticated).toBe(true);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m631[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m631[0m       expect(first.authenticated).toBe(true);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m631[0m:[93m20[0m
+    [7m631[0m       expect(first.authenticated).toBe(true);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m642[0m:[93m21[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m642[0m       expect(replay.authenticated).toBe(false);
+[7m   [0m [91m                    ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m642[0m:[93m21[0m
+    [7m642[0m       expect(replay.authenticated).toBe(false);
+    [7m   [0m [96m                    ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m643[0m:[93m21[0m - [91merror[0m[90m TS2339: [0mProperty 
+'errorCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m643[0m       expect(replay.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+[7m   [0m [91m                    ~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m643[0m:[93m21[0m
+    [7m643[0m       expect(replay.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+    [7m   [0m [96m                    ~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m660[0m:[93m18[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m660[0m     expect(first.authenticated).toBe(true);
+[7m   [0m [91m                 ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m660[0m:[93m18[0m
+    [7m660[0m     expect(first.authenticated).toBe(true);
+    [7m   [0m [96m                 ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m671[0m:[93m19[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m671[0m     expect(second.authenticated).toBe(false);
+[7m   [0m [91m                  ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m671[0m:[93m19[0m
+    [7m671[0m     expect(second.authenticated).toBe(false);
+    [7m   [0m [96m                  ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m672[0m:[93m19[0m - [91merror[0m[90m TS2339: [0mProperty 
+'statusCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m672[0m     expect(second.statusCode).toBe(409);
+[7m   [0m [91m                  ~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m672[0m:[93m19[0m
+    [7m672[0m     expect(second.statusCode).toBe(409);
+    [7m   [0m [96m                  ~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m673[0m:[93m19[0m - [91merror[0m[90m TS2339: [0mProperty 
+'errorCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m673[0m     expect(second.errorCode).toBe('AUTH_REPLAY_DETECTED');
+[7m   [0m [91m                  ~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m673[0m:[93m19[0m
+    [7m673[0m     expect(second.errorCode).toBe('AUTH_REPLAY_DETECTED');
+    [7m   [0m [96m                  ~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m698[0m:[93m14[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m698[0m     expect(a.authenticated).toBe(true);
+[7m   [0m [91m             ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m698[0m:[93m14[0m
+    [7m698[0m     expect(a.authenticated).toBe(true);
+    [7m   [0m [96m             ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m699[0m:[93m14[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m699[0m     expect(b.authenticated).toBe(true);
+[7m   [0m [91m             ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m699[0m:[93m14[0m
+    [7m699[0m     expect(b.authenticated).toBe(true);
+    [7m   [0m [96m             ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m712[0m:[93m16[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m712[0m     expect(bad.authenticated).toBe(false);
+[7m   [0m [91m               ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m712[0m:[93m16[0m
+    [7m712[0m     expect(bad.authenticated).toBe(false);
+    [7m   [0m [96m               ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m721[0m:[93m17[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m721[0m     expect(good.authenticated).toBe(true);
+[7m   [0m [91m                ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m721[0m:[93m17[0m
+    [7m721[0m     expect(good.authenticated).toBe(true);
+    [7m   [0m [96m                ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m732[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m732[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m732[0m:[93m20[0m
+    [7m732[0m     expect(outcome.authenticated).toBe(false);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m733[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'errorCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m733[0m     expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+[7m   [0m [91m                   ~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m733[0m:[93m20[0m
+    [7m733[0m     expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+    [7m   [0m [96m                   ~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m743[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m743[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m743[0m:[93m20[0m
+    [7m743[0m     expect(outcome.authenticated).toBe(false);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m744[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'errorCode' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m744[0m     expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+[7m   [0m [91m                   ~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m744[0m:[93m20[0m
+    [7m744[0m     expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
+    [7m   [0m [96m                   ~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m759[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m759[0m     expect(outcome.authenticated).toBe(true);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m759[0m:[93m20[0m
+    [7m759[0m     expect(outcome.authenticated).toBe(true);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m773[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 
+'authenticated' does not exist on type 'Promise<WebhookVerificationOutcome>'.
+
+[7m773[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                   ~~~~~~~~~~~~~[0m
+
+  [96msrc/services/webhook-verifier.test.ts[0m:[93m773[0m:[93m20[0m
+    [7m773[0m     expect(outcome.authenticated).toBe(false);
+    [7m   [0m [96m                   ~~~~~~~~~~~~~[0m
+    Did you forget to use 'await'?
+[96msrc/services/webhook-verifier.test.ts[0m:[93m539[0m:[93m11[0m - [91merror[0m[90m TS1005: [0m':' expected.
+
+[7m539[0m     const sig = computeWebhookSignature(payload, SECRETS[1].secret);
+[7m   [0m [91m          ~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m539[0m:[93m68[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m539[0m     const sig = computeWebhookSignature(payload, SECRETS[1].secret);
+[7m   [0m [91m                                                                   ~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m540[0m:[93m11[0m - [91merror[0m[90m TS1005: [0m':' expected.
+
+[7m540[0m     const outcome = await verifyWebhookRequest({
+[7m   [0m [91m          ~~~~~~~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m549[0m:[93m7[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m549[0m     });
+[7m   [0m [91m      ~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m550[0m:[93m19[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m550[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                  ~[0m
+[96msrc/services/webhook-verifier.test.ts[0m:[93m550[0m:[93m33[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m550[0m     expect(outcome.authenticated).toBe(false);
+[7m   [0m [91m                                ~[0m
+FAIL src/services/webhook-verifier.test.ts
+  ● Test suite failed to run
+
+    Jest encountered an unexpected token
+
+    Jest failed to parse a file. This happens e.g. when your code or its dependencies use non-standard JavaScript 
+syntax, or when Jest is not configured to support such syntax.
+
+    Out of the box Jest supports Babel, which will be used to transform your files into valid JS based on your Babel 
+configuration.
+
+    By default "node_modules" folder is ignored by transformers.
+
+    Here's what you can do:
+     • If you are trying to use TypeScript, see https://jestjs.io/docs/getting-started#using-typescript
+     • To have some of your "node_modules" files transformed, you can specify a custom "transformIgnorePatterns" in 
+your config.
+     • If you need a custom transformation, specify a "transform" option in your config.
+     • If you simply want to mock your non-JS modules (e.g. binary assets) you can stub them out with the 
+"moduleNameMapper" config option.
+
+    You'll find more details and examples of these config options in the docs:
+    https://jestjs.io/docs/configuration
+    For information about custom transformations, see:
+    https://jestjs.io/docs/code-transformation
+
+    Details:
+
+    C:\Users\NEW OWNER\Documents\drips\core foundry 941\Notify-Chain\listener\src\services\webhook-verifier.test.ts:458
+                expect(outcome) { }, : .authenticated
+                                     ^
+
+    SyntaxError: Unexpected token ':'
+
+      at ModuleExecutor.compile (node_modules/jest-runtime/build/index.js:3081:44)
+
+Test Suites: 2 failed, 2 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        17.391 s
+Ran all test suites matching src/__tests__/notification-flow-e2e.test.ts|src/services/webhook-verifier.test.ts.

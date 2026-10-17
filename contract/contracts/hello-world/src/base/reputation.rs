@@ -58,8 +58,11 @@ pub fn calculate_reputation_score(successful: u32, failed: u32) -> i64 {
         return INITIAL_REPUTATION_SCORE;
     }
 
-    let success_rate = (successful as f64 / total as f64) * 100.0;
-    let score = (success_rate / 2.0) as i64 + 25;
+    // Weight the score by the squared success rate so a perfect record reaches
+    // the maximum, a balanced record lands well below it, and a record with no
+    // successful deliveries bottoms out at the minimum.
+    let success_rate = successful as f64 / total as f64;
+    let score = (success_rate * success_rate * MAX_REPUTATION_SCORE as f64) as i64;
 
     // Clamp score to valid range
     if score > MAX_REPUTATION_SCORE {

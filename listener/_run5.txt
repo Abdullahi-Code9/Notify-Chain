@@ -1,0 +1,133 @@
+﻿2026-10-16T13:04:22.404Z [32minfo[39m: Handling GET /api/events {"requestId":"035b50f4","correlationId":"71b855e8-90c7-4bac-a3bf-8a99011ff209","limit":20}
+2026-10-16T13:04:22.436Z [32minfo[39m: GET /api/events complete {"requestId":"035b50f4","correlationId":"71b855e8-90c7-4bac-a3bf-8a99011ff209","returned":0,"durationMs":37}
+2026-10-16T13:04:22.459Z [32minfo[39m: Handling GET /api/events {"requestId":"54552f5d","correlationId":"my-trace-abc123","limit":20}
+2026-10-16T13:04:22.461Z [32minfo[39m: GET /api/events complete {"requestId":"54552f5d","correlationId":"my-trace-abc123","returned":0,"durationMs":3}
+2026-10-16T13:04:22.471Z [32minfo[39m: Handling GET /api/events {"requestId":"af8df546","correlationId":"d5ad6291-39e9-4e79-92ba-df6433059b05","limit":20}
+2026-10-16T13:04:22.473Z [32minfo[39m: GET /api/events complete {"requestId":"af8df546","correlationId":"d5ad6291-39e9-4e79-92ba-df6433059b05","returned":0,"durationMs":1}
+2026-10-16T13:04:22.484Z [33mwarn[39m: Unhandled request {"requestId":"886893b3","correlationId":"trace-404-test","method":"GET","url":"/no-such-route"}
+2026-10-16T13:04:22.486Z [32minfo[39m: Request completed {"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":3,"requestId":"886893b3"}
+2026-10-16T13:04:22.513Z [33mwarn[39m: Unhandled request {"requestId":"d891f625","correlationId":"cf829d79-28d4-4305-9a39-b4d69c026e35","method":"GET","url":"/no-such-route"}
+2026-10-16T13:04:22.514Z [32minfo[39m: Request completed {"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":2,"requestId":"d891f625"}
+2026-10-16T13:04:22.586Z [33mwarn[39m: Unhandled request {"requestId":"ae2962df","correlationId":"84e66bba-c05d-45e5-b647-5a25c3871e95","method":"GET","url":"/no-such-route"}
+2026-10-16T13:04:22.587Z [32minfo[39m: Request completed {"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":2,"requestId":"ae2962df"}
+2026-10-16T13:04:22.603Z [32minfo[39m: Handling GET /api/events {"requestId":"70109a26","correlationId":"d768b037-d668-4e4b-857f-7d34b8408e07","limit":20}
+2026-10-16T13:04:22.605Z [32minfo[39m: GET /api/events complete {"requestId":"70109a26","correlationId":"d768b037-d668-4e4b-857f-7d34b8408e07","returned":20,"durationMs":1}
+2026-10-16T13:04:22.674Z [32minfo[39m: Handling GET /api/events {"requestId":"38c0c97f","correlationId":"2136985e-29e8-466e-93a2-575936822344","limit":50}
+2026-10-16T13:04:22.677Z [32minfo[39m: GET /api/events complete {"requestId":"38c0c97f","correlationId":"2136985e-29e8-466e-93a2-575936822344","returned":50,"durationMs":2}
+2026-10-16T13:04:22.687Z [32minfo[39m: Handling GET /api/events {"requestId":"2515fb14","correlationId":"d68aacbc-ca65-4ec7-a21e-11f9d1268e17","limit":100}
+2026-10-16T13:04:22.688Z [32minfo[39m: GET /api/events complete {"requestId":"2515fb14","correlationId":"d68aacbc-ca65-4ec7-a21e-11f9d1268e17","returned":100,"durationMs":1}
+2026-10-16T13:04:22.697Z [32minfo[39m: Handling GET /api/events {"requestId":"b455295f","correlationId":"91d29512-effc-489a-b340-ab6d9b70322a","limit":1}
+2026-10-16T13:04:22.698Z [32minfo[39m: GET /api/events complete {"requestId":"b455295f","correlationId":"91d29512-effc-489a-b340-ab6d9b70322a","returned":1,"durationMs":1}
+2026-10-16T13:04:22.705Z [32minfo[39m: Handling GET /api/events {"requestId":"89c19a1d","correlationId":"a9622938-a7d8-4128-93fe-81a34b2bba42","limit":20}
+2026-10-16T13:04:22.706Z [32minfo[39m: GET /api/events complete {"requestId":"89c19a1d","correlationId":"a9622938-a7d8-4128-93fe-81a34b2bba42","returned":20,"durationMs":2}
+node : FAIL src/tests/events-server.test.ts (8.83 s)
+At line:15 char:3417
++ ... pgrep\bin'; node ./node_modules/jest/bin/jest.js --maxWorkers=1 src/t ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL src/tests/...est.ts (8.83 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  correlation ID propagation
+    √ generates a correlation ID when none is provided (93 ms)
+    √ echoes back the caller-supplied correlation ID (14 ms)
+    √ always includes x-request-id alongside correlation ID (11 ms)
+    √ correlation ID flows through on 404 responses (12 ms)
+  security headers
+    √ sets baseline headers on preflight responses without changing cache policy (8 ms)
+    √ sets baseline headers on not-found responses (11 ms)
+    √ sets HSTS only when production is explicitly enabled (71 ms)
+  GET /api/events pagination
+    × defaults to 20 items when limit is not provided (12 ms)
+    × respects limit when provided within bounds (13 ms)
+    × caps excessively large limit at 100 (10 ms)
+    × handles negative limits by falling back to minimum (1) (6 ms)
+    × handles invalid limit by falling back to default (7 ms)
+
+  ● GET /api/events pagination › defaults to 20 items when limit is not provided
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 168 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events'[39m)[33m;[39m
+     [90m 169 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 170 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m20[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 171 |[39m     expect(body[33m.[39mcount)[33m.[39mtoBeGreaterThanOrEqual([35m150[39m)[33m;[39m
+     [90m 172 |[39m   })[33m;[39m
+     [90m 173 |[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:170:24)
+
+  ● GET /api/events pagination › respects limit when provided within bounds
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 175 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=50'[39m)[33m;[39m
+     [90m 176 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 177 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m50[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 178 |[39m   })[33m;[39m
+     [90m 179 |[39m
+     [90m 180 |[39m   test([32m'caps excessively large limit at 100'[39m[33m,[39m [36masync[39m () 
+[33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:177:24)
+
+  ● GET /api/events pagination › caps excessively large limit at 100
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 181 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=200'[39m)[33m;[39m
+     [90m 182 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 183 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m100[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 184 |[39m   })[33m;[39m
+     [90m 185 |[39m
+     [90m 186 |[39m   test([32m'handles negative limits by falling back to minimum (1)'[39m[33m,[39m 
+[36masync[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:183:24)
+
+  ● GET /api/events pagination › handles negative limits by falling back to minimum (1)
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 187 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=-10'[39m)[33m;[39m
+     [90m 188 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 189 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m1[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 190 |[39m   })[33m;[39m
+     [90m 191 |[39m
+     [90m 192 |[39m   test([32m'handles invalid limit by falling back to default'[39m[33m,[39m [36masync[39m 
+() [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:189:24)
+
+  ● GET /api/events pagination › handles invalid limit by falling back to default
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 193 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=invalid'[39m)[33m;[39m
+     [90m 194 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 195 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m20[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 196 |[39m   })[33m;[39m
+     [90m 197 |[39m })[33m;[39m
+     [90m 198 |[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:195:24)
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 7 passed, 12 total
+Snapshots:   0 total
+Time:        10.104 s, estimated 16 s
+Ran all test suites matching src/tests/events-server.test.ts.

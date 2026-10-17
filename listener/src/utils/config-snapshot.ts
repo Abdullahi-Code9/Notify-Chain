@@ -5,7 +5,7 @@
  * and environment configurations for operator diagnostics and troubleshooting.
  */
 
-import { redactSensitiveData, redactString } from './redact';
+import { redactString } from './redact';
 
 export interface DiagnosticConfigSnapshot {
   system: {

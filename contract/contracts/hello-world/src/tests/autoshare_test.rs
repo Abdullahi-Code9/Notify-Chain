@@ -1620,10 +1620,10 @@ fn test_reduce_usage_fails_no_usages_remaining() {
     );
 
     // Reduce once (should work)
-    client.reduce_usage(&id);
+    client.reduce_usage(&id, &creator);
 
     // Reduce again (should panic)
-    client.reduce_usage(&id);
+    client.reduce_usage(&id, &creator);
 }
 
 #[test]
@@ -1892,7 +1892,7 @@ fn test_create_group_with_payment() {
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "NameTooLong")]
+#[should_panic(expected = "Error(Contract, #21)")]
 fn test_name_too_long_rejected() {
     let test_env = setup_test_env();
     let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);
@@ -1925,7 +1925,7 @@ fn test_name_at_max_length_succeeds() {
 }
 
 #[test]
-#[should_panic(expected = "TooManyMembers")]
+#[should_panic(expected = "Error(Contract, #22)")]
 fn test_too_many_members_rejected() {
     let test_env = setup_test_env();
     let client = AutoShareContractClient::new(&test_env.env, &test_env.autoshare_contract);

@@ -44,7 +44,7 @@ async function auditLegacyRows(db: sqlite3.Database): Promise<void> {
       table: 'notification_execution_log',
       sql: `SELECT COUNT(*) AS count FROM notification_execution_log l
         WHERE l.scheduled_notification_id IS NULL OR l.execution_attempt <= 0
-          OR l.execution_time IS NULL OR l.status NOT IN ('SUCCESS', 'FAILED', 'RETRY')
+          OR l.execution_time IS NULL OR l.status NOT IN ('SUCCESS', 'FAILED', 'RETRY', 'DEAD_LETTERED')
           OR (l.duration_ms IS NOT NULL AND l.duration_ms < 0)
           OR NOT EXISTS (SELECT 1 FROM scheduled_notifications n WHERE n.id = l.scheduled_notification_id)`,
     },
@@ -168,7 +168,7 @@ const migration = {
         scheduled_notification_id INTEGER NOT NULL,
         execution_attempt INTEGER NOT NULL CHECK (execution_attempt > 0),
         execution_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        status VARCHAR(20) NOT NULL CHECK (status IN ('SUCCESS', 'FAILED', 'RETRY')),
+        status VARCHAR(20) NOT NULL CHECK (status IN ('SUCCESS', 'FAILED', 'RETRY', 'DEAD_LETTERED')),
         error_message TEXT,
         response_data TEXT,
         duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),

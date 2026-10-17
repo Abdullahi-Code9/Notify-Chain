@@ -1,0 +1,874 @@
+﻿node : FAIL src/tests/notification-scheduler-refactored.test.ts (33.046 s)
+At line:15 char:3417
++ ... pgrep\bin'; node ./node_modules/jest/bin/jest.js --maxWorkers=2 --wor ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL src/tests/...t.ts (33.046 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  ● Console
+
+    console.log
+      2026-10-16T12:51:42.227Z [32minfo[39m: Connected to SQLite database 
+{"path":"./data/test-notifications-refactored.db"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:43.478Z [31merror[39m: Database run error {"sql":"ALTER TABLE scheduled_notifications ADD 
+COLUMN next_retry_at DATETIME","params":[],"error":"{\"errno\":1,\"code\":\"SQLITE_ERROR\"}"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:43.483Z [32minfo[39m: Database migrations completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:43.497Z [32minfo[39m: Database initialized successfully 
+{"path":"./data/test-notifications-refactored.db"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:43.571Z [32minfo[39m: Scheduled notification created {"id":1,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:43.948Z [32minfo[39m: Scheduled notification created {"id":2,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:43.979Z [32minfo[39m: Scheduled notification created {"id":3,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:44.184Z [32minfo[39m: Fetched and locked pending notifications 
+{"count":2,"processorId":"test-processor-1"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:44.405Z [32minfo[39m: Scheduled notification created {"id":4,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:44.485Z [32minfo[39m: Fetched and locked pending notifications 
+{"count":1,"processorId":"processor-1"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:44.581Z [32minfo[39m: Scheduled notification created {"id":5,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:44.632Z [32minfo[39m: Fetched and locked pending notifications 
+{"count":1,"processorId":"processor-1"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:44.834Z [33mwarn[39m: Recovered stale locks {"count":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:45.811Z [32minfo[39m: Scheduled notification created {"id":6,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:46.190Z [32minfo[39m: Notification marked as completed {"id":6}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:46.850Z [32minfo[39m: Scheduled notification created {"id":7,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:46.917Z [32minfo[39m: Notification marked for retry or failed 
+{"id":7,"newStatus":"PENDING","retryCount":1,"maxRetries":3}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.017Z [32minfo[39m: Scheduled notification created {"id":8,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.114Z [33mwarn[39m: Notification moved to dead letter queue 
+{"id":8,"notificationType":"discord","failureReason":"Test error"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.132Z [32minfo[39m: Notification marked for retry or failed 
+{"id":8,"newStatus":"DEAD_LETTERED","retryCount":4,"maxRetries":3}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.282Z [32minfo[39m: Scheduled notification created {"id":9,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.317Z [32minfo[39m: Notification cancelled {"id":9}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.487Z [32minfo[39m: Scheduled notification created {"id":10,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.537Z [32minfo[39m: Scheduled notification created {"id":11,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.818Z [32minfo[39m: Scheduled notification created {"id":12,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:47.899Z [32minfo[39m: Fetched and locked pending notifications 
+{"count":1,"processorId":"processor-1"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.197Z [33mwarn[39m: Recovered stale locks {"count":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.432Z [32minfo[39m: Scheduled notification created {"id":13,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.485Z [32minfo[39m: Fetched and locked pending notifications 
+{"count":1,"processorId":"processor-1"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.530Z [31merror[39m: Database run error {"sql":"\n      INSERT INTO 
+notification_execution_log (\n        scheduled_notification_id, execution_attempt, status,\n        error_message, 
+response_data, duration_ms\n      ) VALUES (?, ?, ?, ?, ?, ?)\n    ","params":[13,1,"DEAD_LETTERED","Lock 
+expired/Processor timeout",null,null],"error":"{\"errno\":19,\"code\":\"SQLITE_CONSTRAINT\"}"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.540Z [31merror[39m: Transaction rolled back 
+{"error":"{\"errno\":19,\"code\":\"SQLITE_CONSTRAINT\"}"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.601Z [32minfo[39m: Scheduled notification created {"id":14,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.635Z [32minfo[39m: Scheduled notification created {"id":15,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.680Z [32minfo[39m: Fetched and locked pending notifications 
+{"count":1,"processorId":"processor-1"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.728Z [32minfo[39m: Scheduled notification created {"id":16,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.789Z [32minfo[39m: Scheduling new notification 
+{"type":"discord","executeAt":{},"recipient":"https://discord.com/api/webhooks/[REDACTED]","version":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.925Z [32minfo[39m: Scheduled notification created {"id":17,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:48.970Z [32minfo[39m: Scheduling new notification 
+{"type":"discord","executeAt":{},"recipient":"https://discord.com/api/webhooks/[REDACTED]","version":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.014Z [32minfo[39m: Scheduled notification created {"id":18,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.062Z [32minfo[39m: Scheduling new notification 
+{"type":"discord","executeAt":{},"recipient":"https://discord.com/api/webhooks/[REDACTED]","version":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.088Z [32minfo[39m: Scheduled notification created {"id":19,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.107Z [32minfo[39m: Scheduling new notification 
+{"type":"email","executeAt":{},"recipient":"https://discord.com/api/webhooks/[REDACTED]","version":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.135Z [32minfo[39m: Scheduled notification created {"id":20,"executeAt":{},"type":"email"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.147Z [32minfo[39m: Scheduling new notification 
+{"type":"webhook","executeAt":{},"recipient":"https://discord.com/api/webhooks/[REDACTED]","version":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.185Z [32minfo[39m: Scheduled notification created {"id":21,"executeAt":{},"type":"webhook"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.197Z [32minfo[39m: Scheduling new notification 
+{"type":"sms","executeAt":{},"recipient":"https://discord.com/api/webhooks/[REDACTED]","version":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.234Z [32minfo[39m: Scheduled notification created {"id":22,"executeAt":{},"type":"sms"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.274Z [32minfo[39m: Scheduling new notification 
+{"type":"discord","executeAt":{},"recipient":"https://discord.com/api/webhooks/[REDACTED]","version":1}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.303Z [32minfo[39m: Scheduled notification created {"id":23,"executeAt":{},"type":"discord"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:49.320Z [32minfo[39m: Database connection closed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+  ● NotificationScheduler (Refactored) › ScheduledNotificationRepository › should mark as failed after max retries
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "FAILED"
+    Received: "DEAD_LETTERED"
+
+    [0m [90m 182 |[39m
+     [90m 183 |[39m       [36mconst[39m notification [33m=[39m [36mawait[39m 
+repository[33m.[39mgetById(id)[33m;[39m
+    [31m[1m>[22m[39m[90m 184 |[39m       expect(notification[33m![39m[33m.[39mstatus)[33m.[39mtoBe([33mNot
+ificationStatus[39m[33m.[39m[33mFAILED[39m)[33m;[39m
+     [90m     |[39m                                    [31m[1m^[22m[39m
+     [90m 185 |[39m       expect(notification[33m![39m[33m.[39mretryCount)[33m.[39mtoBe([35m4[39m)[33m;[39m
+     [90m 186 |[39m     })[33m;[39m
+     [90m 187 |[39m[0m
+
+      at Object.<anonymous> (src/tests/notification-scheduler-refactored.test.ts:184:36)
+
+  ● NotificationScheduler (Refactored) › ScheduledNotificationRepository › should mark as failed if retry_count 
+reaches max_retries on lock recovery
+
+    SQLITE_CONSTRAINT: CHECK constraint failed: status IN ('SUCCESS', 'FAILED', 'RETRY')
+
+FAIL src/__tests__/notification-flow-e2e.test.ts (45.888 s)
+  ● Console
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: Initiating graceful shutdown {"activeJobs":0}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: No active jobs - proceeding with shutdown
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: All jobs have completed - shutdown can proceed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:51.237Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: Initiating graceful shutdown {"activeJobs":0}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: No active jobs - proceeding with shutdown
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: All jobs have completed - shutdown can proceed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:51.356Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:05:01.400Z [32minfo[39m: Initiating graceful shutdown {"activeJobs":0}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:05:01.400Z [32minfo[39m: No active jobs - proceeding with shutdown
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:05:01.400Z [32minfo[39m: All jobs have completed - shutdown can proceed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:51.539Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: Initiating graceful shutdown {"activeJobs":0}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: No active jobs - proceeding with shutdown
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: All jobs have completed - shutdown can proceed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:51.641Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: Initiating graceful shutdown {"activeJobs":0}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: No active jobs - proceeding with shutdown
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: All jobs have completed - shutdown can proceed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:51.798Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: Initiating graceful shutdown {"activeJobs":0}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: No active jobs - proceeding with shutdown
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-06-24T12:00:00.250Z [32minfo[39m: All jobs have completed - shutdown can proceed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:51.939Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:55.548Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:56.087Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:56.435Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:58.636Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:59.203Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:59.634Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:51:59.817Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:00.515Z [32minfo[39m: Worker manager force shutdown completed
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+  ● 1. Notification creation › rejects a duplicate idempotency key used with a different payload
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected substring: "Idempotency key reused with different request body"
+    Received message:   "Idempotency key reused with a different request body"
+
+        [0m [90m 131 |[39m       [36mif[39m ([33m![39misValidRequest) {
+         [90m 132 |[39m         logger[33m.[39mwarn([32m'Idempotency key reused with different request body 
+(replay suspected)'[39m[33m,[39m logMeta)[33m;[39m
+        [31m[1m>[22m[39m[90m 133 |[39m         [36mthrow[39m [36mnew[39m 
+[33mIdempotencyKeyReuseError[39m()[33m;[39m
+         [90m     |[39m               [31m[1m^[22m[39m
+         [90m 134 |[39m       }
+         [90m 135 |[39m
+         [90m 136 |[39m       logger[33m.[39minfo([32m'Replay intercepted: returning cached idempotent 
+response'[39m[33m,[39m {[0m
+
+      at IdempotencyKeyService.processWithIdempotency (src/services/idempotency-key-service.ts:133:15)
+      at NotificationAPI.scheduleNotification (src/services/notification-api.ts:168:9)
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:253:5)
+      at Object.toThrow (node_modules/expect/build/index.js:2155:20)
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:259:15)
+
+  ● 2. Delivery workflows › processes a due notification and transitions it to COMPLETED
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "COMPLETED"
+    Received: "PENDING"
+
+    [0m [90m 343 |[39m
+     [90m 344 |[39m     [36mconst[39m row [33m=[39m [36mawait[39m repository[33m.[39mgetById(id)[33m;[39m
+    [31m[1m>[22m[39m[90m 345 |[39m     expect(row[33m![39m[33m.[39mstatus)[33m.[39mtoBe([33mNotificationSt
+atus[39m[33m.[39m[33mCOMPLETED[39m)[33m;[39m
+     [90m     |[39m                         [31m[1m^[22m[39m
+     [90m 346 |[39m     expect(sendMock)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+     [90m 347 |[39m   })[33m;[39m
+     [90m 348 |[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:345:25)
+
+  ● 2. Delivery workflows › delivers once executeAt elapses mid-run
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "COMPLETED"
+    Received: "PENDING"
+
+    [0m [90m 377 |[39m     [36mawait[39m jest[33m.[39madvanceTimersByTimeAsync([35m400[39m)[33m;[39m
+     [90m 378 |[39m
+    [31m[1m>[22m[39m[90m 379 |[39m     expect(([36mawait[39m repository[33m.[39mgetById(id))[33m![39m[33m.
+[39mstatus)[33m.[39mtoBe([33mNotificationStatus[39m[33m.[39m[33mCOMPLETED[39m)[33m;[39m
+     [90m     |[39m                                                    [31m[1m^[22m[39m
+     [90m 380 |[39m     expect(sendMock)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+     [90m 381 |[39m   })[33m;[39m
+     [90m 382 |[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:379:52)
+
+  ● 2. Delivery workflows › writes a SUCCESS execution log entry after delivery
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 1
+    Received length: 0
+    Received array:  []
+
+    [0m [90m 396 |[39m       [id]
+     [90m 397 |[39m     )[33m;[39m
+    [31m[1m>[22m[39m[90m 398 |[39m     expect(logs)[33m.[39mtoHaveLength([35m1[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 399 |[39m     expect(logs[[35m0[39m][33m.[39mstatus)[33m.[39mtoBe([32m'SUCCESS'[39m)[33m;[39m
+     [90m 400 |[39m     expect(logs[[35m0[39m][33m.[39mexecution_attempt)[33m.[39mtoBe([35m1[39m)[33m;[39m
+     [90m 401 |[39m   })[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:398:18)
+
+  ● 2. Delivery workflows › processes a batch of multiple due notifications
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "COMPLETED"
+    Received: "PENDING"
+
+    [0m [90m 418 |[39m
+     [90m 419 |[39m     [36mfor[39m ([36mconst[39m id [36mof[39m ids) {
+    [31m[1m>[22m[39m[90m 420 |[39m       expect(([36mawait[39m repository[33m.[39mgetById(id))[33m![39m[33
+m.[39mstatus)[33m.[39mtoBe([33mNotificationStatus[39m[33m.[39m[33mCOMPLETED[39m)[33m;[39m
+     [90m     |[39m                                                      [31m[1m^[22m[39m
+     [90m 421 |[39m     }
+     [90m 422 |[39m     expect(sendMock)[33m.[39mtoHaveBeenCalledTimes([35m3[39m)[33m;[39m
+     [90m 423 |[39m   })[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:420:54)
+
+  ● 2. Delivery workflows › forwards the event and contract config to the Discord service
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: ObjectContaining {"id": "deliver-evt-1"}, ObjectContaining {"address": 
+"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"}, Any<String>
+
+    Number of calls: 0
+
+    [0m [90m 438 |[39m     [36mawait[39m jest[33m.[39madvanceTimersByTimeAsync([35m250[39m)[33m;[39m
+     [90m 439 |[39m
+    [31m[1m>[22m[39m[90m 440 |[39m     expect(sendMock)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                      [31m[1m^[22m[39m
+     [90m 441 |[39m       expect[33m.[39mobjectContaining({ id[33m:[39m [32m'deliver-evt-1'[39m })[33m,[39m
+     [90m 442 |[39m       expect[33m.[39mobjectContaining({ address[33m:[39m contractConfig[33m.[39maddress 
+})[33m,[39m
+     [90m 443 |[39m       expect[33m.[39many([33mString[39m)[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:440:22)
+
+  ● 3. Retry scenarios › prevents concurrent duplicate processing via distributed lock
+
+    expect(jest.fn()).toHaveBeenCalledTimes(expected)
+
+    Expected number of calls: 1
+    Received number of calls: 0
+
+    [0m [90m 587 |[39m     [36mawait[39m p1[33m;[39m
+     [90m 588 |[39m
+    [31m[1m>[22m[39m[90m 589 |[39m     expect(sendMock)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+     [90m     |[39m                      [31m[1m^[22m[39m
+     [90m 590 |[39m     [36mconst[39m row [33m=[39m [36mawait[39m db[33m.[39m[36mget[39m[33m<[39m{ 
+status[33m:[39m string }[33m>[39m(
+     [90m 591 |[39m       [32m'SELECT status FROM scheduled_notifications WHERE id = ?'[39m[33m,[39m [id]
+     [90m 592 |[39m     )[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:589:22)
+
+  ● 3. Retry scenarios › retries a failed delivery on the next scheduler poll cycle
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "COMPLETED"
+    Received: "PENDING"
+
+    [0m [90m 620 |[39m
+     [90m 621 |[39m     [36mconst[39m row [33m=[39m [36mawait[39m repository[33m.[39mgetById(id)[33m;[39m
+    [31m[1m>[22m[39m[90m 622 |[39m     expect(row[33m![39m[33m.[39mstatus)[33m.[39mtoBe([33mNotificationSt
+atus[39m[33m.[39m[33mCOMPLETED[39m)[33m;[39m
+     [90m     |[39m                         [31m[1m^[22m[39m
+     [90m 623 |[39m     expect(sendMock)[33m.[39mtoHaveBeenCalledTimes([35m2[39m)[33m;[39m
+     [90m 624 |[39m
+     [90m 625 |[39m     [36mawait[39m scheduler[33m.[39mstop()[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:622:25)
+
+  ● 4. Failure handling › marks a notification FAILED after exhausting all retries
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "FAILED"
+    Received: "DEAD_LETTERED"
+
+    [0m [90m 664 |[39m       [32m'SELECT status, retry_count FROM scheduled_notifications WHERE id = 
+?'[39m[33m,[39m [id]
+     [90m 665 |[39m     )[33m;[39m
+    [31m[1m>[22m[39m[90m 666 |[39m     expect(row[33m![39m[33m.[39mstatus)[33m.[39mtoBe([33mNotificationSt
+atus[39m[33m.[39m[33mFAILED[39m)[33m;[39m
+     [90m     |[39m                         [31m[1m^[22m[39m
+     [90m 667 |[39m   })[33m;[39m
+     [90m 668 |[39m
+     [90m 669 |[39m   it([32m'logs a permanent-failure error after max retries are exhausted'[39m[33m,[39m 
+[36masync[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:666:25)
+
+  ● 4. Failure handling › logs a permanent-failure error after max retries are exhausted
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "Notification permanently failed after max retries", ObjectContaining {"id": 2, "totalAttempts": 3}
+    Received: "Notification permanently failed after max retries", {"failureType": "unknown", "id": 2, "requestId": 
+"e2e-req-id", "totalAttempts": 4}
+
+    Number of calls: 1
+
+    [0m [90m 677 |[39m     [36mawait[39m retryScheduler[33m.[39mrunOnce()[33m;[39m
+     [90m 678 |[39m
+    [31m[1m>[22m[39m[90m 679 |[39m     expect(logger[33m.[39merror)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 680 |[39m       [32m'Notification permanently failed after max retries'[39m[33m,[39m
+     [90m 681 |[39m       expect[33m.[39mobjectContaining({ id[33m,[39m totalAttempts[33m:[39m [35m3[39m })
+     [90m 682 |[39m     )[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:679:26)
+
+  ● 4. Failure handling › handles a delivery that throws (network error) and schedules a retry
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "PENDING"
+    Received: "PROCESSING"
+
+    [0m [90m 713 |[39m     )[33m;[39m
+     [90m 714 |[39m     [90m// Still pending — will be retried later[39m
+    [31m[1m>[22m[39m[90m 715 |[39m     expect(row[33m![39m[33m.[39mstatus)[33m.[39mtoBe([33mNotificationSt
+atus[39m[33m.[39m[33mPENDING[39m)[33m;[39m
+     [90m     |[39m                         [31m[1m^[22m[39m
+     [90m 716 |[39m     expect(row[33m![39m[33m.[39mretry_count)[33m.[39mtoBe([35m2[39m)[33m;[39m
+     [90m 717 |[39m     expect(row[33m![39m[33m.[39mnext_retry_at)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+     [90m 718 |[39m   })[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:715:25)
+
+  ● 4. Failure handling › transitions scheduler-dispatched notification to FAILED when retries run out
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "FAILED"
+    Received: "PROCESSING"
+
+    [0m [90m 738 |[39m
+     [90m 739 |[39m     [36mconst[39m row [33m=[39m [36mawait[39m repository[33m.[39mgetById(id)[33m;[39m
+    [31m[1m>[22m[39m[90m 740 |[39m     expect(row[33m![39m[33m.[39mstatus)[33m.[39mtoBe([33mNotificationSt
+atus[39m[33m.[39m[33mFAILED[39m)[33m;[39m
+     [90m     |[39m                         [31m[1m^[22m[39m
+     [90m 741 |[39m
+     [90m 742 |[39m     [36mawait[39m scheduler[33m.[39mstop()[33m;[39m
+     [90m 743 |[39m     jest[33m.[39museRealTimers()[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/notification-flow-e2e.test.ts:740:25)
+
+  ● 4. Failure handling › recovers stale PROCESSING locks left by crashed schedulers
+
+    SQLITE_ERROR: cannot commit - no transaction is active
+
+FAIL src/tests/events-server.test.ts (14.343 s)
+  ● Console
+
+    console.log
+      2026-10-16T12:52:05.866Z [32minfo[39m: Handling GET /api/events 
+{"requestId":"4af6acaa","correlationId":"06652c5d-151d-40b7-9931-daf06f13625a","limit":20}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:05.914Z [32minfo[39m: GET /api/events complete 
+{"requestId":"4af6acaa","correlationId":"06652c5d-151d-40b7-9931-daf06f13625a","returned":0,"durationMs":56}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:05.942Z [32minfo[39m: Handling GET /api/events 
+{"requestId":"8be9632d","correlationId":"my-trace-abc123","limit":20}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:05.947Z [32minfo[39m: GET /api/events complete 
+{"requestId":"8be9632d","correlationId":"my-trace-abc123","returned":0,"durationMs":6}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:05.955Z [32minfo[39m: Handling GET /api/events 
+{"requestId":"23fee04e","correlationId":"15b916da-75dc-4312-8de7-e8e762f8db28","limit":20}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:05.966Z [32minfo[39m: GET /api/events complete 
+{"requestId":"23fee04e","correlationId":"15b916da-75dc-4312-8de7-e8e762f8db28","returned":0,"durationMs":11}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:05.976Z [33mwarn[39m: Unhandled request 
+{"requestId":"1ecd85ea","correlationId":"trace-404-test","method":"GET","url":"/no-such-route"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:05.980Z [32minfo[39m: Request completed 
+{"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":6,"requestId":"1ecd85ea"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:06.021Z [33mwarn[39m: Unhandled request 
+{"requestId":"f17c60e0","correlationId":"7fefaee7-a664-4f15-87aa-8790bea6150f","method":"GET","url":"/no-such-route"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:06.026Z [32minfo[39m: Request completed 
+{"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":5,"requestId":"f17c60e0"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:06.100Z [33mwarn[39m: Unhandled request 
+{"requestId":"a5effff1","correlationId":"6a538acd-1c2f-4c7b-bace-8b555887f5ed","method":"GET","url":"/no-such-route"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      2026-10-16T12:52:06.103Z [32minfo[39m: Request completed 
+{"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":3,"requestId":"a5effff1"}
+
+      at Console.log (node_modules/winston/lib/winston/transports/console.js:87:23)
+
+  ● security headers › sets baseline headers on preflight responses without changing cache policy
+
+    read ECONNRESET
+
+  ● GET /api/events pagination › defaults to 20 items when limit is not provided
+
+    TypeError: eventRegistry.addEvent is not a function
+
+    [0m [90m 147 |[39m     [36mconst[39m { eventRegistry } [33m=[39m 
+require([32m'../store/event-registry'[39m)[33m;[39m
+     [90m 148 |[39m     [36mfor[39m ([36mlet[39m i [33m=[39m [35m0[39m[33m;[39m i [33m<[39m 
+[35m150[39m[33m;[39m i[33m++[39m) {
+    [31m[1m>[22m[39m[90m 149 |[39m       eventRegistry[33m.[39maddEvent({
+     [90m     |[39m                     [31m[1m^[22m[39m
+     [90m 150 |[39m         eventId[33m:[39m [32m`0000000000000000-${i}`[39m[33m,[39m
+     [90m 151 |[39m         contractAddress[33m:[39m 
+[32m'CCEMX6JKPEUGYAOU4YZP3WBXGPWK7AEFDEDLRXFIDIJPQFMRXTHUVIO'[39m[33m,[39m
+     [90m 152 |[39m         eventName[33m:[39m [32m'autoshare_created'[39m[33m,[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:149:21)
+
+  ● GET /api/events pagination › respects limit when provided within bounds
+
+    TypeError: eventRegistry.addEvent is not a function
+
+    [0m [90m 147 |[39m     [36mconst[39m { eventRegistry } [33m=[39m 
+require([32m'../store/event-registry'[39m)[33m;[39m
+     [90m 148 |[39m     [36mfor[39m ([36mlet[39m i [33m=[39m [35m0[39m[33m;[39m i [33m<[39m 
+[35m150[39m[33m;[39m i[33m++[39m) {
+    [31m[1m>[22m[39m[90m 149 |[39m       eventRegistry[33m.[39maddEvent({
+     [90m     |[39m                     [31m[1m^[22m[39m
+     [90m 150 |[39m         eventId[33m:[39m [32m`0000000000000000-${i}`[39m[33m,[39m
+     [90m 151 |[39m         contractAddress[33m:[39m 
+[32m'CCEMX6JKPEUGYAOU4YZP3WBXGPWK7AEFDEDLRXFIDIJPQFMRXTHUVIO'[39m[33m,[39m
+     [90m 152 |[39m         eventName[33m:[39m [32m'autoshare_created'[39m[33m,[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:149:21)
+
+  ● GET /api/events pagination › caps excessively large limit at 100
+
+    TypeError: eventRegistry.addEvent is not a function
+
+    [0m [90m 147 |[39m     [36mconst[39m { eventRegistry } [33m=[39m 
+require([32m'../store/event-registry'[39m)[33m;[39m
+     [90m 148 |[39m     [36mfor[39m ([36mlet[39m i [33m=[39m [35m0[39m[33m;[39m i [33m<[39m 
+[35m150[39m[33m;[39m i[33m++[39m) {
+    [31m[1m>[22m[39m[90m 149 |[39m       eventRegistry[33m.[39maddEvent({
+     [90m     |[39m                     [31m[1m^[22m[39m
+     [90m 150 |[39m         eventId[33m:[39m [32m`0000000000000000-${i}`[39m[33m,[39m
+     [90m 151 |[39m         contractAddress[33m:[39m 
+[32m'CCEMX6JKPEUGYAOU4YZP3WBXGPWK7AEFDEDLRXFIDIJPQFMRXTHUVIO'[39m[33m,[39m
+     [90m 152 |[39m         eventName[33m:[39m [32m'autoshare_created'[39m[33m,[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:149:21)
+
+  ● GET /api/events pagination › handles negative limits by falling back to minimum (1)
+
+    TypeError: eventRegistry.addEvent is not a function
+
+    [0m [90m 147 |[39m     [36mconst[39m { eventRegistry } [33m=[39m 
+require([32m'../store/event-registry'[39m)[33m;[39m
+     [90m 148 |[39m     [36mfor[39m ([36mlet[39m i [33m=[39m [35m0[39m[33m;[39m i [33m<[39m 
+[35m150[39m[33m;[39m i[33m++[39m) {
+    [31m[1m>[22m[39m[90m 149 |[39m       eventRegistry[33m.[39maddEvent({
+     [90m     |[39m                     [31m[1m^[22m[39m
+     [90m 150 |[39m         eventId[33m:[39m [32m`0000000000000000-${i}`[39m[33m,[39m
+     [90m 151 |[39m         contractAddress[33m:[39m 
+[32m'CCEMX6JKPEUGYAOU4YZP3WBXGPWK7AEFDEDLRXFIDIJPQFMRXTHUVIO'[39m[33m,[39m
+     [90m 152 |[39m         eventName[33m:[39m [32m'autoshare_created'[39m[33m,[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:149:21)
+
+  ● GET /api/events pagination › handles invalid limit by falling back to default
+
+    TypeError: eventRegistry.addEvent is not a function
+
+    [0m [90m 147 |[39m     [36mconst[39m { eventRegistry } [33m=[39m 
+require([32m'../store/event-registry'[39m)[33m;[39m
+     [90m 148 |[39m     [36mfor[39m ([36mlet[39m i [33m=[39m [35m0[39m[33m;[39m i [33m<[39m 
+[35m150[39m[33m;[39m i[33m++[39m) {
+    [31m[1m>[22m[39m[90m 149 |[39m       eventRegistry[33m.[39maddEvent({
+     [90m     |[39m                     [31m[1m^[22m[39m
+     [90m 150 |[39m         eventId[33m:[39m [32m`0000000000000000-${i}`[39m[33m,[39m
+     [90m 151 |[39m         contractAddress[33m:[39m 
+[32m'CCEMX6JKPEUGYAOU4YZP3WBXGPWK7AEFDEDLRXFIDIJPQFMRXTHUVIO'[39m[33m,[39m
+     [90m 152 |[39m         eventName[33m:[39m [32m'autoshare_created'[39m[33m,[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:149:21)
+
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due 
+to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure 
+that .unref() was called on them.
+Test Suites: 3 failed, 3 total
+Tests:       21 failed, 44 passed, 65 total
+Snapshots:   0 total
+Time:        52.98 s
+Ran all test suites matching src/tests/events-server.test.ts|src/tests/notification-scheduler-refactored.test.ts|src/__
+tests__/notification-flow-e2e.test.ts.

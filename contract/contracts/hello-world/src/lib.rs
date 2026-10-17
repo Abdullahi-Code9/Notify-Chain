@@ -1,4 +1,10 @@
 #![no_std]
+
+// The Soroban runtime is `no_std`, but the test harness runs on the host and
+// relies on `std` (panics, formatting, allocations). Link it back in for tests.
+#[cfg(test)]
+extern crate std;
+
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
 
 // 1. Declare the foundational modules (Requirement: Modular Structure)
@@ -50,13 +56,13 @@ impl AutoShareContract {
     }
 
     /// Pauses the contract. Only admin can call.
-    pub fn pause(env: Env, admin: Address) {
-        autoshare_logic::pause(env, admin).unwrap();
+    pub fn pause(env: Env, admin: Address) -> Result<(), base::errors::Error> {
+        autoshare_logic::pause(env, admin)
     }
 
     /// Unpauses the contract. Only admin can call.
-    pub fn unpause(env: Env, admin: Address) {
-        autoshare_logic::unpause(env, admin).unwrap();
+    pub fn unpause(env: Env, admin: Address) -> Result<(), base::errors::Error> {
+        autoshare_logic::unpause(env, admin)
     }
 
     /// Returns the current pause status.
@@ -98,9 +104,8 @@ impl AutoShareContract {
         creator: Address,
         usage_count: u32,
         payment_token: Address,
-    ) {
+    ) -> Result<(), base::errors::Error> {
         autoshare_logic::create_autoshare(env, id, name, creator, usage_count, payment_token)
-            .unwrap();
     }
 
     /// Update members of an existing AutoShare plan.
@@ -110,8 +115,8 @@ impl AutoShareContract {
         id: BytesN<32>,
         caller: Address,
         new_members: Vec<base::types::GroupMember>,
-    ) {
-        autoshare_logic::update_members(env, id, caller, new_members).unwrap();
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::update_members(env, id, caller, new_members)
     }
 
     /// Retrieves an existing AutoShare plan.
@@ -153,15 +158,19 @@ impl AutoShareContract {
         caller: Address,
         address: Address,
         percentage: u32,
-    ) {
-        autoshare_logic::add_group_member(env, id, caller, address, percentage).unwrap();
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::add_group_member(env, id, caller, address, percentage)
     }
 
     /// Deactivates a channel (group). Callable by the creator or the contract
     /// admin. Historical membership and payment history remain visible; new
     /// subscriptions (top-ups) are blocked until reactivated.
-    pub fn deactivate_group(env: Env, id: BytesN<32>, caller: Address) {
-        autoshare_logic::deactivate_group(env, id, caller).unwrap();
+    pub fn deactivate_group(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::deactivate_group(env, id, caller)
     }
 
     /// Activates a group. Only the creator can activate.
@@ -181,8 +190,12 @@ impl AutoShareContract {
 
     /// Transfers admin rights to a new address. Only current admin can call.
     /// Rejects transfers where new_admin == current_admin.
-    pub fn transfer_admin(env: Env, current_admin: Address, new_admin: Address) {
-        autoshare_logic::transfer_admin(env, current_admin, new_admin).unwrap();
+    pub fn transfer_admin(
+        env: Env,
+        current_admin: Address,
+        new_admin: Address,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::transfer_admin(env, current_admin, new_admin)
     }
 
     // ============================================================================
@@ -284,9 +297,8 @@ impl AutoShareContract {
         additional_usages: u32,
         payment_token: Address,
         payer: Address,
-    ) {
+    ) -> Result<(), base::errors::Error> {
         autoshare_logic::topup_subscription(env, id, additional_usages, payment_token, payer)
-            .unwrap();
     }
 
     /// Cancels an active notification subscription for a group.
@@ -327,9 +339,8 @@ impl AutoShareContract {
         autoshare_logic::get_total_usages_paid(env, id).unwrap()
     }
 
-    /// Reduces the usage count by 1.
-    pub fn reduce_usage(env: Env, id: BytesN<32>) {
-        let caller = env.current_contract_address();
+    /// Reduces the usage count by 1. Only the group's creator may call this.
+    pub fn reduce_usage(env: Env, id: BytesN<32>, caller: Address) {
         autoshare_logic::reduce_usage(env, id, caller).unwrap();
     }
 
@@ -455,6 +466,16 @@ impl AutoShareContract {
         autoshare_logic::get_notification(env, notification_id).unwrap()
     }
 
+    /// Returns the stored details for a scheduled notification, restricted to
+    /// the notification's creator or the contract admin.
+    pub fn get_notification_for(
+        env: Env,
+        notification_id: BytesN<32>,
+        caller: Address,
+    ) -> base::types::ScheduledNotification {
+        autoshare_logic::get_notification_for(env, notification_id, caller).unwrap()
+    }
+
     /// Returns whether a scheduled notification has expired.
     pub fn is_notification_expired(env: Env, notification_id: BytesN<32>) -> bool {
         autoshare_logic::is_notification_expired(env, notification_id).unwrap()
@@ -561,6 +582,16 @@ impl AutoShareContract {
     /// Returns whether a scheduled notification has been revoked.
     pub fn is_notification_revoked(env: Env, notification_id: BytesN<32>) -> bool {
         autoshare_logic::is_notification_revoked(env, notification_id).unwrap()
+    }
+
+    /// Returns whether a scheduled notification has been revoked, restricted to
+    /// the notification's creator or the contract admin.
+    pub fn is_notification_revoked_for(
+        env: Env,
+        notification_id: BytesN<32>,
+        caller: Address,
+    ) -> bool {
+        autoshare_logic::is_notification_revoked_for(env, notification_id, caller).unwrap()
     }
 
     /// Acknowledges multiple scheduled notifications in a single batch.
@@ -822,6 +853,58 @@ impl AutoShareContract {
     pub fn is_idempotency_key_used(env: Env, idempotency_key: BytesN<32>) -> bool {
         idempotency_logic::is_idempotency_key_used(env, idempotency_key)
     }
+
+    // ============================================================================
+    // Notification Channels
+    // ============================================================================
+
+    /// Creates a new notification channel owned by `creator`.
+    pub fn create_channel(env: Env, id: BytesN<32>, name: String, creator: Address) {
+        channel_logic::create_channel(env, id, name, creator).unwrap();
+    }
+
+    /// Returns channel metadata including creator and subscriber count.
+    pub fn get_channel(env: Env, id: BytesN<32>) -> base::channel::NotificationChannel {
+        channel_logic::get_channel(env, id).unwrap()
+    }
+
+    /// Returns the wallet address that originally created the channel.
+    pub fn get_channel_creator(env: Env, id: BytesN<32>) -> Result<Address, base::errors::Error> {
+        channel_logic::get_channel_creator(env, id)
+    }
+
+    /// Read-only view of the active subscriber count for a channel.
+    pub fn get_subscriber_count(env: Env, id: BytesN<32>) -> Result<u32, base::errors::Error> {
+        channel_logic::get_subscriber_count(env, id)
+    }
+
+    /// Returns whether `subscriber` is currently subscribed to the channel.
+    pub fn is_channel_subscriber(env: Env, id: BytesN<32>, subscriber: Address) -> bool {
+        channel_logic::is_channel_subscriber(env, id, subscriber)
+    }
+
+    /// Subscribes an address to a channel.
+    pub fn subscribe(
+        env: Env,
+        channel_id: BytesN<32>,
+        subscriber: Address,
+    ) -> Result<(), base::errors::Error> {
+        channel_logic::subscribe(env, channel_id, subscriber)
+    }
+
+    /// Unsubscribes an address from a channel.
+    pub fn unsubscribe(env: Env, channel_id: BytesN<32>, subscriber: Address) {
+        channel_logic::unsubscribe(env, channel_id, subscriber).unwrap();
+    }
+
+    /// Subscribes an address to multiple channels in a single transaction.
+    pub fn batch_subscribe(
+        env: Env,
+        channel_ids: Vec<BytesN<32>>,
+        subscriber: Address,
+    ) -> Result<base::channel::BatchSubscribeResult, base::errors::Error> {
+        channel_logic::batch_subscribe(env, channel_ids, subscriber)
+    }
 }
 
 #[cfg(test)]
@@ -830,177 +913,36 @@ pub mod test_utils;
 
 #[cfg(test)]
 mod tests {
-    // Preexisting broken suites temporarily excluded so new feature tests can compile.
-    // mod test_utils_test;
-    // mod storage_optimization_test;
-    // mod preferences_test;
-    // mod autoshare_test;
-    // mod pause_test;
-    // mod mock_token_test;
-    mod version_test;
-    // mod notification_test;
-    // mod expiration_test;
-    // mod revocation_test;
-    // mod ownership_transfer_test;
-    // mod notification_validation_test;
-    // mod category_registry_test;
-    // mod batch_notification_test;
-    // mod audit_log_test;
-    // mod payload_validation_test;
-    // mod batch_ack_test;
-    // mod fuzz_test;
-    mod schema_version_test;
-    // mod access_log_test;
-    // mod subscription_cancellation_test;
-    mod channel_metadata_test;
-    mod notification_version_test;
-    mod metadata_validation_test;
+    mod access_control_test;
+    mod access_log_test;
     mod archive_notification_test;
-    mod idempotency_test;
-
-    // ============================================================================
-    // Notification Channel Subscriptions
-    // ============================================================================
-
-    /// Creates a notification channel and permanently stores the creator address.
-    pub fn create_channel(env: Env, id: BytesN<32>, name: String, creator: Address) {
-        channel_logic::create_channel(env, id, name, creator).unwrap();
-    }
-
-    /// Returns full channel metadata (creator, name, subscriber_count, etc.).
-    pub fn get_channel(env: Env, id: BytesN<32>) -> base::channel::NotificationChannel {
-        channel_logic::get_channel(env, id).unwrap()
-    }
-
-    /// Returns the wallet address that originally created the channel.
-    pub fn get_channel_creator(env: Env, id: BytesN<32>) -> Address {
-        channel_logic::get_channel_creator(env, id).unwrap()
-    }
-
-    /// Read-only view of the active subscriber count for a channel.
-    pub fn get_subscriber_count(env: Env, id: BytesN<32>) -> u32 {
-        channel_logic::get_subscriber_count(env, id).unwrap()
-    }
-
-    /// Returns whether `subscriber` is currently subscribed to the channel.
-    pub fn is_channel_subscriber(env: Env, id: BytesN<32>, subscriber: Address) -> bool {
-        channel_logic::is_channel_subscriber(env, id, subscriber)
-    }
-
-    /// Subscribe to a single notification channel.
-    pub fn subscribe(env: Env, channel_id: BytesN<32>, subscriber: Address) {
-        channel_logic::subscribe(env, channel_id, subscriber).unwrap();
-    }
-
-    /// Unsubscribe from a notification channel.
-    pub fn unsubscribe(env: Env, channel_id: BytesN<32>, subscriber: Address) {
-        channel_logic::unsubscribe(env, channel_id, subscriber).unwrap();
-    }
-
-    /// Subscribe to multiple channels in one transaction.
-    ///
-    /// Individual failures are skipped without corrupting successful subscriptions.
-    /// See `docs/BATCH_SUBSCRIBE_GAS.md` for gas documentation.
-    pub fn batch_subscribe(
-        env: Env,
-        channel_ids: Vec<BytesN<32>>,
-        subscriber: Address,
-    ) -> base::channel::BatchSubscribeResult {
-        channel_logic::batch_subscribe(env, channel_ids, subscriber).unwrap()
-    }
-}
-
-#[cfg(test)]
-pub mod test_utils {
-    #[path = "../tests/test_utils.rs"]
-    mod inner;
-    pub use inner::*;
-}
-
-#[cfg(test)]
-mod tests {
-    #[path = "tests/test_utils_test.rs"]
-    mod test_utils_test;
-    #[path = "tests/storage_optimization_test.rs"]
-    mod storage_optimization_test;
-    #[path = "tests/preferences_test.rs"]
-    mod preferences_test;
-    #[path = "tests/autoshare_test.rs"]
+    mod audit_log_test;
     mod autoshare_test;
-    #[path = "tests/pause_test.rs"]
-    mod pause_test;
-    #[path = "tests/mock_token_test.rs"]
-    mod mock_token_test;
-    #[path = "tests/version_test.rs"]
-    mod version_test;
-    #[path = "tests/notification_test.rs"]
-    mod notification_test;
-    #[path = "tests/expiration_test.rs"]
-    mod expiration_test;
-    #[path = "tests/revocation_test.rs"]
-    mod revocation_test;
-    #[path = "tests/ownership_transfer_test.rs"]
-    mod ownership_transfer_test;
-    #[path = "tests/notification_validation_test.rs"]
-    mod notification_validation_test;
-    #[path = "tests/category_registry_test.rs"]
-    mod category_registry_test;
-    #[path = "tests/batch_notification_test.rs"]
-    mod batch_notification_test;
-    #[path = "tests/audit_log_test.rs"]
-    mod audit_log_test;
-    #[path = "tests/payload_validation_test.rs"]
-    mod payload_validation_test;
-    #[path = "tests/batch_ack_test.rs"]
     mod batch_ack_test;
-    #[path = "tests/fuzz_test.rs"]
-    mod fuzz_test;
-    #[path = "tests/schema_version_test.rs"]
-    mod schema_version_test;
-    #[path = "tests/access_log_test.rs"]
-    mod access_log_test;
-    #[path = "tests/subscription_cancellation_test.rs"]
-    mod subscription_cancellation_test;
-    #[path = "tests/extended_coverage_test.rs"]
-    mod extended_coverage_test;
-
-    #[path = "tests/notification_validation_test.rs"]
-    mod notification_validation_test;
-
-    #[path = "tests/category_registry_test.rs"]
-    mod category_registry_test;
-
-    #[path = "tests/batch_notification_test.rs"]
-    mod batch_notification_test;
-
-    #[path = "tests/batch_event_test.rs"]
     mod batch_event_test;
-
-    #[path = "tests/audit_log_test.rs"]
-    mod audit_log_test;
-
-    #[path = "tests/payload_validation_test.rs"]
-    mod payload_validation_test;
-
-    #[path = "tests/batch_ack_test.rs"]
-    mod batch_ack_test;
-
-    #[path = "tests/fuzz_test.rs"]
-    mod fuzz_test;
-
-    #[path = "tests/schema_version_test.rs"]
-    mod schema_version_test;
-
-    #[path = "tests/access_log_test.rs"]
-    mod access_log_test;
-
-    #[path = "../tests/template_registry_test.rs"]
-    mod template_registry_test;
-    #[path = "tests/subscription_cancellation_test.rs"]
-    mod subscription_cancellation_test;
-
-    #[path = "../tests/channel_subscription_test.rs"]
+    mod batch_notification_test;
+    mod category_registry_test;
+    mod channel_metadata_test;
     mod channel_subscription_test;
-    #[path = "tests/notification_lifetime_test.rs"]
+    mod event_regression_test;
+    mod expiration_test;
+    mod extended_coverage_test;
+    mod fuzz_test;
+    mod metadata_validation_test;
+    mod mock_token_test;
     mod notification_lifetime_test;
+    mod notification_test;
+    mod notification_validation_test;
+    mod notification_version_test;
+    mod ownership_transfer_test;
+    mod pause_test;
+    mod payload_validation_test;
+    mod preferences_test;
+    mod revocation_test;
+    mod schema_version_test;
+    mod storage_optimization_test;
+    mod subscription_cancellation_test;
+    mod template_registry_test;
+    mod test_utils_test;
+    mod version_test;
 }

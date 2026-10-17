@@ -1,0 +1,299 @@
+﻿
+Count Name                                                                                                             
+----- ----                                                                                                             
+   54 ● Console                                                                                                        
+   27 ●  Cannot log after tests are done. Did you forget to wait for something async in your test?                     
+   10 ● Test suite failed to run                                                                                       
+    4 ● concurrent event processing › EventSubscriber end to end › two listener instances polling the same events no...
+    4 ● concurrent event processing › EventSubscriber end to end › overlapping poll cycles in one instance notify each 
+    4 ● Notification Pipeline Smoke Test › End-to-End Pipeline › should process event with complex data payload        
+    2 ● Template API Integration Tests › POST /api/templates/render - Render Template › should handle XSS attempts with
+    2 ● Template API Integration Tests › Edge Cases and Security › should handle nested property rendering             
+    2 ● Template API Integration Tests › GET /api/templates/stats - Overview Statistics › should return overview sta...
+    2 ● Template API Integration Tests › POST /api/templates/render - Render Template › should return 400 for missing  
+    2 ● Template API Integration Tests › GET /api/templates/:id/stats - Template Usage Statistics › should return usage
+    2 ● Template API Integration Tests › POST /api/templates/render - Render Template › should return 400 for inactive 
+    2 ● Template API Integration Tests › DELETE /api/templates/:id - Delete Template › should soft delete (deactivate) 
+    2 ● Template API Integration Tests › DELETE /api/templates/:id - Delete Template › should hard delete when hard=...
+    2 ● Template API Integration Tests › PUT /api/templates/:id - Update Template › should reject invalid template u...
+    2 ● Template API Integration Tests › PUT /api/templates/:id - Update Template › should return 404 for non-existent 
+    2 ● Template API Integration Tests › PUT /api/templates/:id - Update Template › should update template successfully
+    2 ● Template API Integration Tests › POST /api/templates/render - Render Template › should reject rendering with   
+    2 ● Template API Integration Tests › DELETE /api/templates/:id - Delete Template › should return 404 for non-exi...
+    2 ● Template API Integration Tests › POST /api/templates/render - Render Template › should render template with all
+    2 ● Template API Integration Tests › Edge Cases and Security › should handle default values                        
+    2 ● WebhookDeliveryService › 5xx server errors (retryable) › returns success: false for HTTP 503                   
+    2 ● WebhookDeliveryService › 5xx server errors (retryable) › returns success: false for HTTP 504                   
+    2 ● WebhookDeliveryService › 5xx server errors (retryable) › returns success: false for HTTP 500                   
+    2 ● WebhookDeliveryService › 5xx server errors (retryable) › returns success: false for HTTP 502                   
+    2 ● WebhookDeliveryService › 5xx server errors (retryable) › logs a warn (not error) for 5xx so the caller knows to
+    2 ● WebhookDeliveryService › 4xx client errors (permanent failure) › returns success: false for HTTP 403           
+    2 ● WebhookDeliveryService › 4xx client errors (permanent failure) › returns success: false for HTTP 404           
+    2 ● WebhookDeliveryService › 4xx client errors (permanent failure) › returns success: false for HTTP 400           
+    2 ● WebhookDeliveryService › 4xx client errors (permanent failure) › returns success: false for HTTP 401           
+    2 ● WebhookDeliveryService › successful delivery (2xx) › passes the payload and options to sendWebhook             
+    2 ● Template API Integration Tests › Edge Cases and Security › should handle special characters in context         
+    2 ● Template API Integration Tests › Edge Cases and Security › should handle empty context gracefully              
+    2 ● Template API Integration Tests › Edge Cases and Security › should reject prototype pollution attempts          
+    2 ● Template API Integration Tests › Edge Cases and Security › should validate channel-specific requirements       
+    2 ● Template API Integration Tests › Performance and Scalability › should handle large template body               
+    2 ● WebhookDeliveryService › successful delivery (2xx) › returns success: true for a 201 response                  
+    2 ● WebhookDeliveryService › successful delivery (2xx) › logs an info message on successful delivery               
+    2 ● Template API Integration Tests › Performance and Scalability › should handle many variables                    
+    2 ● WebhookDeliveryService › successful delivery (2xx) › returns success: true for a 200 response                  
+    2 ● template-routes validation › POST /api/templates › rejects an invalid channelType                              
+    2 ● template-routes validation › POST /api/templates › rejects malformed JSON with a 400, not a 500                
+    2 ● archive-api validation › POST /api/archive/run › runs the archive cycle when the service is configured         
+    2 ● template-routes validation › POST /api/templates › rejects a request missing required fields without calling...
+    2 ● template-routes validation › POST /api/templates › returns 400 when the service reports the template failed    
+    2 ● template-routes validation › PUT /api/templates/:id › returns 404 when the service reports the template does...
+    2 ● template-routes validation › PUT /api/templates/:id › returns 400 (not 200) when the service rejects the update
+    2 ● template-routes validation › POST /api/templates › returns 201 when the service accepts the template           
+    2 ● template-routes validation › GET /api/templates › rejects an invalid channelType query param                   
+    2 ● Notification Template System › Template Rendering Integration › should log template usage                      
+    2 ● Notification Template System › Security Tests › should prevent XSS via HTML escaping                           
+    2 ● Notification Template System › Template Rendering Integration › should render template via service             
+    2 ● Notification Template System › Template Rendering Integration › should reject rendering with missing variables 
+    2 ● Notification Template System › Security Tests › should reject script tags in template                          
+    2 ● API Route Versioning (#386) › /api/v1/events?limit=5 honours the limit parameter                               
+    2 ● NotificationAPI.scheduleWebhookNotification › forwards the payload to the repository                           
+    2 ● Notification Template System › Security Tests › should prevent prototype pollution                             
+    2 ● API Route Versioning (#386) › /api/v1/events response has events array                                         
+    2 ● template-routes validation › PUT /api/templates/:id › returns 200 when the service accepts the update          
+    2 ● Template API Integration Tests › GET /api/templates - List Templates › should list all templates               
+    2 ● Template API Integration Tests › GET /api/templates - List Templates › should filter by channel type           
+    2 ● Template API Integration Tests › POST /api/templates - Create Template › should reject missing required fields 
+    2 ● Template API Integration Tests › POST /api/templates - Create Template › should reject script injection in t...
+    2 ● Template API Integration Tests › GET /api/templates - List Templates › should filter by active status          
+    2 ● Template API Integration Tests › GET /api/templates/:id - Get Template › should return 404 for non-existent    
+    2 ● Template API Integration Tests › GET /api/templates/:id - Get Template › should reject invalid ID              
+    2 ● Template API Integration Tests › GET /api/templates - List Templates › should support pagination               
+    2 ● Template API Integration Tests › GET /api/templates/:id - Get Template › should get template by ID             
+    2 ● template-routes validation › POST /api/templates/render › surfaces missing variables from the service as a 400 
+    2 ● template-routes validation › GET /api/templates/stats › rejects a non-numeric templateId query param           
+    2 ● template-routes validation › POST /api/templates/render › rejects a non-object context                         
+    2 ● template-routes validation › POST /api/templates/render › rejects a request missing both templateId and uniq...
+    2 ● template-routes validation › GET /api/templates/stats › falls back to overview stats when no templateId is g...
+    2 ● Template API Integration Tests › POST /api/templates - Create Template › should reject template with invalid...
+    2 ● Template API Integration Tests › POST /api/templates - Create Template › should reject duplicate unique key    
+    2 ● events server logging paths › webhook signature failures never log the secret or signature                     
+    2 ● Template API Integration Tests › POST /api/templates - Create Template › should create valid template          
+    2 ● WebhookDeliveryService › 4xx client errors (permanent failure) › returns success: false for HTTP 422           
+    2 ● Notification Pipeline Smoke Test › Smoke Test Meta-Validation › should run deterministically (same input = same
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects missing credentials (no signature) with 401                 
+    2 ● Notification Pipeline Smoke Test › Smoke Test Meta-Validation › should execute in under 2 seconds              
+    2 ● Notification Pipeline Smoke Test › Smoke Test Meta-Validation › should make zero external network calls        
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects an unknown key id with 401                                  
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects a malformed signature with 401                              
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects a signature without a key id with 401                       
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects invalid credentials (wrong secret) with 401                 
+    2 ● Notification Pipeline Smoke Test › Performance and Resource Management › should clean up resources properly    
+    2 ● Notification Pipeline Smoke Test › Notification Deduplication › should prevent duplicate notifications         
+    2 ● Notification Pipeline Smoke Test › Notification Deduplication › should allow same event from different contr...
+    2 ● Notification Pipeline Smoke Test › Event Routing and Filtering › should reject event not matching filter       
+    2 ● Notification Pipeline Smoke Test › Event Routing and Filtering › should extract event name from topic          
+    2 ● Notification Pipeline Smoke Test › Performance and Resource Management › should process events quickly (< 100ms
+    2 ● Notification Pipeline Smoke Test › Performance and Resource Management › should handle registry size limits    
+    2 ● Notification Pipeline Smoke Test › Error Handling › should handle notification failure gracefully              
+    2 ● Notification Pipeline Smoke Test › Error Handling › should continue processing after individual event failure  
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects expired credentials (stale timestamp) with 401              
+    2 ● NotificationExpirationService › isExpired() › should return false for events at exact expiration boundary      
+    2 ● handleArchiveRequest › GET /api/archive returns paginated results                                              
+    2 ● DiscordNotificationProvider › returns success:false when webhook returns 4xx                                   
+    2 ● DiscordNotificationProvider › lists unsupported features in degradedCapabilities but still delivers            
+    2 ● sendWebhookWithRetry › classifyWebhookFailure › does not treat a message mentioning "timeout" as a timeout     
+    2 ● query performance indexes (migration 002) › uses an indexed plan for pending claim queries                     
+    2 ● handleArchiveRequest › GET /api/archive/:id returns the record when it exists                                  
+    2 ● handleArchiveRequest › POST /api/archive/run triggers cycle when service is provided                           
+    2 ● DiscordNotificationProvider › delivers successfully when webhook returns 2xx                                   
+    2 ● POST /api/webhooks (HMAC signature auth) › unauthorized access attempts › rejects a tampered body signed for   
+    2 ● POST /api/webhooks (HMAC signature auth) › unauthorized access attempts › rejects replaying a signature with a 
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects timestamps too far in the future with 401                   
+    2 ● POST /api/webhooks (HMAC signature auth) › rejects a non-numeric timestamp with 401                            
+    2 ● ScheduledNotificationRepository.markAsFailedOrRetry() — partial-state documentation › commits the status change
+    2 ● ScheduledNotificationRepository.markAsFailedOrRetry() — partial-state documentation › documents that the status
+    2 ● POST /api/webhooks (HMAC signature auth) › unauthorized access attempts › rejects stripping the timestamp fr...
+    2 ● POST /api/webhooks (HMAC signature auth) › unauthorized access attempts › rejects an API key presented inste...
+    2 ● Notification Pipeline Smoke Test › Event Routing and Filtering › should accept event matching specific filter  
+    2 ● WebhookDeliveryService › failure classification › labels a generic network error as "network"                  
+    2 ● WebhookDeliveryService › failure classification › labels a 5xx response as "http_retryable"                    
+    2 ● WebhookDeliveryService › failure classification › labels a request timeout as "timeout"                        
+    2 ● WebhookDeliveryService › failure classification › labels a TimeoutError as "timeout"                           
+    2 ● CleanupService › calling start twice does not create duplicate intervals                                       
+    2 ● Startup Configuration Validation Integration › Invalid configuration prevents startup › prevents service       
+    2 ● WebhookDeliveryService › failure classification › labels a 4xx response as "http_permanent"                    
+    2 ● WebhookDeliveryService › failure classification › leaves failureReason undefined on success                    
+    2 ● WebhookDeliveryService › default options › merges instance headers with per-call headers                       
+    2 ● WebhookDeliveryService › request timeout (AbortError) › logs a warn for timeouts so the caller knows to retry  
+    2 ● WebhookDeliveryService › request timeout (AbortError) › includes the configured timeout in the errorReason     
+    2 ● WebhookDeliveryService › 4xx client errors (permanent failure) › logs an error (not warn) for 4xx to signal    
+    2 ● WebhookDeliveryService › request timeout (AbortError) › returns success: false when the request times out      
+    2 ● WebhookDeliveryService › network / unexpected errors (retryable) › handles non-Error thrown values gracefully  
+    2 ● WebhookDeliveryService › default options › uses the instance-level timeout when none provided per-call         
+    2 ● WebhookDeliveryService › network / unexpected errors (retryable) › returns success: false on a generic network 
+    2 ● WebhookDeliveryService › network / unexpected errors (retryable) › logs an error for non-timeout network fai...
+    2 ● Startup Configuration Validation Integration › Multiple configuration errors reported together › collects and  
+    2 ● Notification Pipeline Smoke Test › End-to-End Pipeline › should process event from ingestion to notification   
+    2 ● Notification Pipeline Smoke Test › End-to-End Pipeline › should handle multiple events in sequence             
+    2 ● Config validation › loads default values when optional environment variables are omitted                       
+    2 ● EventSubscriber › notification expiration (Task 3: Requirements 2.1, 2.2, 2.3) › logs expiration with timestamp
+    2 ● Notification Pipeline Smoke Test › Event Validation › should reject event with missing topic                   
+    2 ● Notification Pipeline Smoke Test › Event Routing and Filtering › should accept event matching wildcard filter  
+    2 ● Notification Pipeline Smoke Test › Event Validation › should reject event with missing id                      
+    2 ● Notification Pipeline Smoke Test › Event Validation › should reject event with invalid ledger                  
+    2 ● NotificationRetryQueue — retry policy (#842) › honours a narrowed eligible failure set                         
+    2 ● EventSubscriber — backfill safety limit (#628) › RPC error during tip resolution › falls back to ledger 1 an...
+    2 ● API Request Duration Logging (Issue #687) › redacts sensitive secrets in query strings before logging          
+    2 ● Startup Configuration Validation Integration › Validation prevents event processing › ensures invalid config is
+    2 ● Startup Configuration Validation Integration › Specific listener configuration requirements › requires at least
+    2 ● NotificationRetryQueue — retry policy (#842) › keeps requeueing an item whose delivery threw a transient fai...
+    2 ● NotificationRetryQueue — retry policy (#842) › honours a policy attempt ceiling that is lower than maxRetries  
+    2 ● RetryScheduler — retry policy (#842) › permanent failures retire the row end-to-end › marks a 404 FAILED and...
+    2 ● NotificationRetryQueue — retry policy (#842) › does not requeue an item whose delivery threw a permanent fai...
+    2 ● concurrent event processing › EventSubscriber end to end › re-polling already-processed events sends nothing...
+    2 ● Execution Metrics Deduplication › should correctly count multiple notifications with different retry patterns  
+    2 ● concurrent event processing › EventDeduplicationService.claimEvent › lets exactly one worker take over a claim 
+    2 ● concurrent event processing › EventDeduplicationService.claimEvent › honours an active claim within its lease  
+    2 ● Execution Metrics Deduplication › should return retry distribution breakdown                                   
+    2 ● Retry Deduplication - Edge Cases › should handle success on final retry attempt correctly                      
+    2 ● Retry Deduplication - Edge Cases › should accurately deduplicate in high-volume mixed-outcome scenario         
+    2 ● Execution Metrics Deduplication › should calculate accurate average durations                                  
+    2 ● Retry Deduplication - Edge Cases › should count max-retry exhausted notification as exactly 1 failure          
+    2 ● Notification delivery lifecycle (e2e) › multi-channel independent queues › each channel maintains its own retry
+    2 ● RetryScheduler integration › marks notification FAILED when max retries exhausted                              
+    2 ● Notification delivery lifecycle (e2e) › network errors › returns false and logs error when fetch throws        
+    2 ● Notification delivery lifecycle (e2e) › network errors › returns false on timeout (abort)                      
+    2 ● concurrent event processing › EventDeduplicationService.claimEvent › grants exactly one claim when 50 tasks ...
+    2 ● concurrent event processing › EventDeduplicationService.claimEvent › does not let redetections overwrite the...
+    2 ● concurrent event processing › EventDeduplicationService.claimEvent › does not count in-flight duplicates as ...
+    2 ● concurrent event processing › EventDeduplicationService.claimEvent › grants exactly one claim across two lis...
+    2 ● concurrent event processing › EventDeduplicationService.claimEvent › claims every distinct event exactly once  
+    2 ● NotificationRetryQueue (Refactored) › exponential backoff › doubles the delay on each successive failure       
+    2 ● NotificationRetryQueue (Refactored) › exponential backoff › logs a warning with the next retry delay on failure
+    2 ● NotificationRetryQueue (Refactored) › processQueue › removes the item from the queue on success                
+    2 ● NotificationRetryQueue (Refactored) › processQueue › logs success on a successful retry                        
+    2 ● NotificationRetryQueue (Refactored) › max retries › stops retrying after maxRetries attempts                   
+    2 ● NotificationRetryQueue (Refactored) › multiple events with different characteristics › processes events with   
+    2 ● event & notification query indexes (migration 003) › creates the new indexes on a fresh database via schema.sql
+    2 ● NotificationRetryQueue (Refactored) › max retries › logs an error when the notification permanently fails      
+    2 ● NotificationRetryQueue (Refactored) › start / stop › calling start twice does not double-process items         
+    2 ● Retry Deduplication - Edge Cases › should handle concurrent retry patterns without cross-contamination         
+    2 ● Retry Deduplication - Edge Cases › should accurately track notifications with high retry counts                
+    2 ● Retry Deduplication - Edge Cases › should exclude CANCELLED notifications from metrics                         
+    2 ● Retry Deduplication - Edge Cases › should handle notifications without execution log entries                   
+    2 ● Retry Deduplication - Edge Cases › should provide accurate retry distribution without double-counting          
+    2 ● DiscordNotificationService › formatEventMessage › should handle exact field value length boundary              
+    2 ● NotificationRetryQueue (Refactored) › processQueue › retries a notification after the base delay               
+    2 ● payload integrity — repository and scheduler integration › stored hash matches the payload                     
+    2 ● Execution Metrics API Integration › GET /api/schedule/retry-distribution should return retry breakdown         
+    2 ● DiscordNotificationService (Refactored) › formatEventMessage › should preserve short messages without trunca...
+    2 ● DiscordNotificationService (Refactored) › formatEventMessage › should truncate oversized embed titles          
+    2 ● DiscordNotificationService (Refactored) › formatEventMessage › should truncate long string values              
+    2 ● DiscordNotificationService (Refactored) › formatEventMessage › should handle symbol type values                
+    2 ● DiscordNotificationService (Refactored) › formatEventMessage › should enforce total embed size limit           
+    2 ● Multi-channel notification delivery (e2e) › fan-out delivery › routes each channel its own payload at its own  
+    2 ● Multi-channel notification delivery (e2e) › channel-specific payloads › builds a Discord embed payload carrying
+    2 ● DiscordNotificationService (Refactored) › formatEventMessage › should handle exact field value length boundary 
+    2 ● Multi-channel notification delivery (e2e) › fan-out delivery › delivers a single event to every configured c...
+    2 ● DiscordNotificationService (Refactored) › sendEventNotification › should handle network error                  
+    2 ● DiscordNotificationService (Refactored) › duplicate detection › skips the webhook call for a duplicate event   
+    2 ● DiscordNotificationService (Refactored) › sendEventNotification › should send event notification successfully  
+    2 ● DiscordNotificationService (Refactored) › sendEventNotification › should handle webhook failure                
+    2 ● DiscordNotificationService (Refactored) › duplicate detection › logs a duplicate detection event               
+    2 ● DiscordNotificationService (Refactored) › duplicate detection › accepts an injected deduplicator               
+    2 ● DiscordNotificationService (Refactored) › formatEventMessage › should format event with string value correctly 
+    2 ● DiscordNotificationService (Refactored) › duplicate detection › allows the same event id on a different cont...
+    2 ● DiscordNotificationService (Refactored) › duplicate detection › does not mark an event as sent when the webhook
+    2 ● Stress Test Suite: Notification Processing › 7. Error Recovery Under Stress › should gracefully handle failures
+    2 ● Notification Queue Operational Metrics (#797) › Repository & Service Layer Metrics › correctly tracks failed   
+    2 ● Scheduler worker concurrency › concurrency larger than the batch is clamped to the batch size                  
+    2 ● Stress Test Suite: Notification Processing › 6. Discord Notification Service Under Load › should handle 500    
+    2 ● Notification Queue Operational Metrics (#797) › Observability API Endpoints › GET /api/schedule/queue/metrics —
+    2 ● Notification delivery lifecycle (e2e) › failure and retry › logs permanent failure after retry exhaustion      
+    2 ● Notification delivery lifecycle (e2e) › event topic rendering › handles numeric values in event payload        
+    2 ● Durable notification queue › retains the terminal processing state of a permanently failed job                 
+    2 ● Notification delivery lifecycle (e2e) › failure and retry › enqueues to retry queue when immediate delivery ...
+    2 ● Multi-channel notification delivery (e2e) › partial delivery failure › logs a meaningful error identifying the 
+    2 ● Multi-channel notification delivery (e2e) › partial delivery failure › logs a meaningful error when a channel  
+    2 ● Multi-channel notification delivery (e2e) › channel-specific payloads › reflects the event type in the payload 
+    2 ● Multi-channel notification delivery (e2e) › partial delivery failure › delivers to healthy channels even whe...
+    2 ● Multi-channel notification delivery (e2e) › retry behaviour › retries only the failed channel and recovers w...
+    2 ● Stage 6 – NotificationScheduler delivers scheduled notifications › multiple due notifications in a batch are...
+    2 ● Stage 7 – Full pipeline integration: blockchain event → delivered notification › multiple events from different
+    2 ● Multi-channel notification delivery (e2e) › retry behaviour › escalates to a permanent-failure log after       
+    2 ● Multi-channel notification delivery (e2e) › retry behaviour › keeps retry queues independent per channel       
+    2 ● event & notification query indexes (migration 003) › migration down() removes and up() restores the indexes,   
+    2 ● NotificationRetryQueue › max retries › logs an error when the notification permanently fails                   
+    2 ● NotificationRetryQueue › start / stop › calling start twice does not double-process items                      
+    2 ● NotificationRetryQueue › exponential backoff › logs a warning with the next retry delay on failure             
+    2 ● NotificationRetryQueue › max retries › stops retrying after maxRetries attempts                                
+    2 ● NotificationRetryQueue › analytics success counter (regression: no duplicate-counting) › increments success    
+    2 ● Notification Template System › TemplateRenderer › should render nested properties                              
+    2 ● Notification Template System › TemplateRenderer › should handle missing variables gracefully                   
+    2 ● Notification Template System › TemplateRenderer › should render simple variable                                
+    2 ● Notification Template System › TemplateRenderer › should render multiple variables                             
+    2 ● NotificationDeduplicator › duplicate prevention across repeated events › allows notifications for unique events
+    2 ● NotificationDeduplicator › duplicate prevention across repeated events › treats same event id on different     
+    2 ● NotificationDeduplicator › size › returns the correct count after multiple unique fingerprints                 
+    2 ● NotificationDeduplicator › duplicate prevention across repeated events › prevents a second notification for the
+    2 ● EventSubscriber with EventDeduplicationService - Reorg Scenarios › Reorg detection and handling › detects and  
+    2 ● NotificationRetryQueue › processQueue › logs success on a successful retry                                     
+    2 ● NotificationRetryQueue › exponential backoff › doubles the delay on each successive failure                    
+    2 ● NotificationRetryQueue › processQueue › retries a notification after the base delay                            
+    2 ● NotificationRetryQueue › processQueue › removes the item from the queue on success                             
+    2 ● Notification Template System › TemplateValidator › should validate channel-specific requirements               
+    2 ● Notification Template System › TemplateService - CRUD Operations › should create template successfully         
+    2 ● Notification Template System › TemplateValidator › should detect script injection                              
+    2 ● Notification Template System › TemplateValidator › should validate unique key format                           
+    2 ● Notification Template System › TemplateService - CRUD Operations › should reject invalid template              
+    2 ● Notification Template System › TemplateService - CRUD Operations › should list templates with filters          
+    2 ● Notification Template System › TemplateService - CRUD Operations › should deactivate template                  
+    2 ● Notification Template System › TemplateService - CRUD Operations › should reject duplicate unique key          
+    2 ● Notification Template System › TemplateService - CRUD Operations › should update template                      
+    2 ● Notification Template System › TemplateRenderer › should extract variables from template                       
+    2 ● Notification Template System › TemplateRenderer › should use default values                                    
+    2 ● Notification Template System › TemplateRenderer › should escape HTML by default                                
+    2 ● Notification Template System › TemplateRenderer › should throw in strict mode for missing variables            
+    2 ● Notification Template System › TemplateRenderer › should validate context                                      
+    2 ● Notification Template System › TemplateValidator › should reject empty variable                                
+    2 ● Notification Template System › TemplateValidator › should reject invalid variable name                         
+    2 ● Notification Template System › TemplateValidator › should validate correct template                            
+    2 ● Notification Template System › TemplateValidator › should detect unclosed brackets                             
+    2 ● GET /health › returns the configured network without exposing sensitive configuration                          
+    2 ● POST /api/webhooks › rejects a legacy signature when a timestamp IS provided (anti-replay: timestamp binding)  
+    2 ● Notification Failure Scenarios (#793) › 4. Permanent Provider Failure › marks notification failed permanentl...
+    2 ● NotificationClaimLease › serialises renewals so a slow heartbeat cannot overlap itself                         
+    2 ● POST /api/webhooks › rejects a timestamp-bound signature when the timestamp header is removed (anti-replay)    
+    2 ● POST /api/webhooks › rejects a webhook with an invalid signature (wrong secret)                                
+    2 ● POST /api/webhooks › rejects when signature header is missing                                                  
+    2 ● POST /api/webhooks › rejects a webhook with an expired timestamp                                               
+    2 ● POST /api/webhooks › rejects a webhook with a forged timestamp (signed for ts=A, header claims ts=B)           
+    2 ● event & notification query indexes (migration 003) › processed-event search by type uses the LOWER(event_type) 
+    2 ● event & notification query indexes (migration 003) › returns identical results with and without the new indexes
+    2 ● event & notification query indexes (migration 003) › archival batch query uses the archivable index without ...
+    2 ● event & notification query indexes (migration 003) › notification search by type uses the LOWER(notification...
+    2 ● Notification Failure Scenarios (#793) › 1. Provider Timeout › handles provider timeout in WebhookDeliverySer...
+    2 ● Notification Failure Scenarios (#793) › 3. Temporary Provider Failure › identifies 5xx as temporary failure    
+    2 ● Notification Failure Scenarios (#793) › 4. Permanent Provider Failure › classifies HTTP 404/401 client error...
+    2 ● Notification Failure Scenarios (#793) › 2. Invalid Response › handles corrupted/empty HTTP responses gracefully
+    2 ● Notification Failure Scenarios (#793) › 2. Invalid Response › handles network-level disconnect or DNS resolu...
+    2 ● NotificationDeduplicator › markSent › does not increment size when marking the same fingerprint twice          
+    2 ● NotificationDeduplicator › markSent › evicts the oldest entry when the cache is full                           
+    2 ● NotificationDeduplicator › isDuplicate › returns false for a different fingerprint after another is marked sent
+    2 ● NotificationDeduplicator › markSent › increments size after marking a new fingerprint                          
+    2 ● NotificationDeduplicator › markSent › logs a warning when evicting due to full cache                           
+    2 ● NotificationDeduplicator › time window and metrics › reports skipped duplicate metrics accurately              
+    2 ● NotificationDeduplicator › time window and metrics › counts evicted and expired entries in metrics             
+    2 ● NotificationDeduplicator › markSent › does not evict when cache has room                                       
+    2 ● NotificationDeduplicator › time window and metrics › allows the same fingerprint after the deduplication window
+    2 ● POST /api/webhooks › rejects when no webhook secrets are configured                                            
+    2 ● POST /api/webhooks › logs authentication failures with structured context                                      
+    2 ● POST /api/webhooks › rejects when key-id header is missing                                                     
+    2 ● POST /api/webhooks › rejects when key-id is unknown                                                            
+    2 ● REPLAY ATTACK PROTECTION — /api/webhooks with Idempotency-Key › REPLAY #1 — exact same request sent twice re...
+    2 ● generateFingerprint › combines contractAddress and eventId                                                     
+    2 ● NotificationDeduplicator › isDuplicate › returns true for a fingerprint that has been marked sent              
+    2 ● REPLAY ATTACK PROTECTION — /api/webhooks with Idempotency-Key › REPLAY #3 — three identical requests → #1=202, 
+    2 ● REPLAY ATTACK PROTECTION — /api/webhooks with Idempotency-Key › REPLAY #4 — Layer 2 timestamp binding rejects a
+
+

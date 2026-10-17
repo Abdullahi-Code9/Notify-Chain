@@ -1,0 +1,65 @@
+﻿
+Count Name                                                                                                       
+----- ----                                                                                                       
+  130 expect(received).toBe(expected) // Object.is equality                                                      
+  120 thrown: "Exceeded timeout of N ms for a test.                                                              
+  100 COLUMN next_retry_at DATETIME","params":[],"error":"{\"errno\":N,\"code\":\"SQLITE_ERROR\"}"}              
+   92 Expected: N                                                                                                
+   82 Received: N                                                                                                
+   66 SQLITE_ERROR: no such table: template_usage_log                                                            
+   58 TypeError: (N , webhook_sender_N.isWebhookTimeoutError) is not a function                                  
+   56 SQLITE_ERROR: no such column: unique_key                                                                   
+   40 TypeError: deduplicator.clear is not a function                                                            
+   34 Received number of calls: N                                                                                
+   34 expect(jest.fn()).toHaveBeenCalledTimes(expected)                                                          
+   34 Expected number of calls: N                                                                                
+   33 template_usage_log","params":[],"error":"{\"errno\":N,\"code\":\"SQLITE_ERROR\"}"}                         
+   28 TypeError: logger_N.default.debug is not a function                                                        
+   28 expect(notificationFn)[Nm.[NmtoHaveBeenCalledTimes([NmN[Nm)[Nm;[Nm                                   
+   22 TypeError: Cannot read properties of undefined (reading 'content-length')                                  
+   18 expect(jest.fn()).toHaveBeenCalledWith(...expected)                                                        
+   14 Received: undefined                                                                                        
+   12 Received length: N                                                                                         
+   12 Received: "DEAD_LETTERED"                                                                                  
+   12 SQLITE_CONSTRAINT: CHECK constraint failed: notification_type IN ('discord', 'email', 'webhook', 'sms')    
+   12 Expected length: N                                                                                         
+   12 Expected: false                                                                                            
+   12 Expected: "FAILED"                                                                                         
+   12 expect(received).toHaveLength(expected)                                                                    
+   10 Received: true                                                                                             
+    8 Jest encountered an unexpected token                                                                       
+    8 thrown: "Exceeded timeout of N ms for a hook.                                                              
+    8 + Received  + N                                                                                            
+    6 expect(received).toHaveProperty(path)                                                                      
+    6 [Nm[Nm>[Nm[Nm[Nm N |[Nm       expect(mockLogger[Nm.[Nmwarn)[Nm.[NmtoHaveBeenCalledWith(          
+    6 TypeError: res.setHeader is not a function                                                                 
+    6 - Expected  - N                                                                                            
+    6 Received array:  [{"alreadySeen": false, "claimed": true}, {"alreadySeen": false, "claimed": true},        
+    6 Received path: []                                                                                          
+    6 expect(received).toEqual(expected) // deep equality                                                        
+    5 {"error":"{\"errno\":N,\"code\":\"SQLITE_CANTOPEN\"}","path":"./data/no-such-dir-xyz/db.sqlite"}           
+    4 [Nm[Nm>[Nm[Nm[Nm N |[Nm       expect(logger[Nm.[Nmwarn)[Nm.[NmtoHaveBeenCalledWith(              
+    4 [Nm N |[Nm       expect(logger[Nm.[Nmerror)[Nm.[NmtoHaveBeenCalledWith(                              
+    4 Expected: "Retry failed, scheduling next attempt", ObjectContaining {"attempt": N, "delayMs": N, "eventId":
+    4 Expected: "Retry succeeded", ObjectContaining {"attempt": N, "eventId": "evt-ok"}                          
+    4 [Nm[Nm>[Nm[Nm[Nm N |[Nm       expect(logger[Nm.[Nminfo)[Nm.[NmtoHaveBeenCalledWith(              
+    4 Received                                                                                                   
+    4 Received value: {"data": {"count": N, "events": []}, "success": true}                                      
+    4 {"sql":"END","params":[],"error":"{\"errno\":N,\"code\":\"SQLITE_ERROR\"}"}                                
+    4 expect(received).toContain(expected) // indexOf                                                            
+    4 Expected: "Notification permanently failed after max retries", ObjectContaining {"eventId": "evt-dead",    
+    4 [Nm[Nm>[Nm[Nm[Nm N |[Nm       expect(logger[Nm.[Nmerror)[Nm.[NmtoHaveBeenCalledWith(             
+    4 Expected path: "events"                                                                                    
+    4 Received array:  []                                                                                        
+    4 Received: false                                                                                            
+    4 expect(fetchMock)[Nm.[NmtoHaveBeenCalledTimes([NmN[Nm)[Nm;[Nm                                        
+    4 Expected: true                                                                                             
+    4 SyntaxError: Unexpected token ':'                                                                          
+    3 statement expected.                                                                                        
+    3 [Nmsrc/tests/events-server.test.ts[Nm:[NmN[Nm:[NmN[Nm - [Nmerror[Nm[Nm TSN: [Nm',' expected.     
+    2 Expected path: "records"                                                                                   
+    2 RAISE(ABORT, 'Audit records are immutable')","params":[],"error":"{\"errno\":N,\"code\":\"SQLITE_ERROR\"}"}
+    2 TypeError: Cannot read properties of undefined (reading 'fromString')                                      
+    2 Received string:    "Cannot read properties of undefined (reading 'get')"                                  
+
+

@@ -1,0 +1,385 @@
+﻿/**
+ * End-to-end tests for the complete notification flow:
+ * creation → idempotency checking → processing → delivery → audit logging
+ * Also covers backpressure handling under load.
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import { Database } from '../database/database';
+import { ScheduledNotificationRepository } from '../services/scheduled-notification-repository';
+import { IdempotencyKeyRepository } from '../services/idempotency-key-repository';
+import { IdempotencyKeyService } from '../services/idempotency-key-service';
+import { NotificationAPI } from '../services/notification-api';
+import { NotificationScheduler } from '../services/notification-scheduler';
+import { DiscordNotificationService } from '../services/discord-notification';
+import { BackpressureController } from '../services/backpressure-controller';
+import { BackpressureMonitor } from '../services/backpressure-monitor';
+import { resetWorkerManager } from '../services/worker-manager';
+import { NotificationStatus, NotificationType } from '../types/scheduled-notification';
+
+describe('Notification flow end-to-end (e2e)', () => {
+  const testDbPath = './data/test-notification-flow-e2e.db';
+  let db: Database;
+  let repository: ScheduledNotificationRepository;
+  let idempotencyRepo: IdempotencyKeyRepository;
+  let idempotencyService: IdempotencyKeyService;
+  let api: NotificationAPI;
+  let scheduler: NotificationScheduler;
+  let backpressureController: BackpressureController;
+  let backpressureMonitor: BackpressureMonitor;
+  let sendEventMock: jest.Mock;
+
+  const schedulerConfig = {
+    enabled: true,
+    pollIntervalMs: 100,
+    lockTimeoutMs: 30000,
+    batchSize: 10,
+    timingBufferMs: 0,
+    processorId: 'e2e-processor',
+  };
+
+  beforeAll(async () => {
+    const dbDir = path.dirname(testDbPath);
+    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+
+    db = new Database(testDbPath);
+    await db.initialize();
+    repository = new ScheduledNotificationRepository(db);
+    idempotencyRepo = new IdempotencyKeyRepository(db);
+    idempotencyService = new IdempotencyKeyService(idempotencyRepo);
+    api = new NotificationAPI(repository, idempotencyService);
+    backpressureController = new BackpressureController({
+      saturationThreshold: 100,
+      recoveryThreshold: 50,
+      normalThroughputPerSec: 100,
+      backpressureThroughputPerSec: 10,
+    });
+    backpressureMonitor = new BackpressureMonitor(db);
+  });
+
+  afterAll(async () => {
+    await scheduler?.stop();
+    await db.close();
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+  });
+
+  beforeEach(async () => {
+    resetWorkerManager();
+    jest.clearAllMocks();
+
+    // Clear tables
+    await db.run('DELETE FROM notification_execution_log');
+    await db.run('DELETE FROM scheduled_notifications');
+    await db.run('DELETE FROM idempotency_keys');
+    await db.run('DELETE FROM backpressure_events');
+
+    sendEventMock = jest.fn().mockResolvedValue(true);
+    const discordService = {
+      sendEventNotification: sendEventMock,
+    } as unknown as DiscordNotificationService;
+
+    scheduler = new NotificationScheduler(repository, schedulerConfig, discordService);
+    backpressureController.reset();
+  });
+
+  afterEach(async () => {
+    await scheduler.stop();
+  });
+
+  async function waitForSchedulerPolls(ms = 300): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function futureExecuteAt(offsetMs = 10000): Date {
+    return new Date(Date.now() + offsetMs);
+  }
+
+  describe('Complete notification lifecycle', () => {
+    it('should create, process, and deliver a notification', async () => {
+      const executeAt = futureExecuteAt(50);
+
+      const id = await api.scheduleNotification({
+        payload: { message: 'Test notification' },
+        notificationType: NotificationType.DISCORD,
+        targetRecipient: 'https://discord.com/webhook',
+        executeAt,
+        maxRetries: 2,
+      });
+
+      expect(id).toBeGreaterThan(0);
+
+      let notification = await repository.getById(id);
+      expect(notification).toBeTruthy();
+      expect(notification!.status).toBe(NotificationStatus.PENDING);
+
+      await scheduler.start();
+      await waitForSchedulerPolls(400);
+
+      notification = await repository.getById(id);
+      expect(notification!.status).toBe(NotificationStatus.COMPLETED);
+      expect(sendEventMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should log execution attempts for audit trail', async () => {
+      const id = await api.scheduleNotification({
+        payload: { message: 'Test notification' },
+        notificationType: NotificationType.DISCORD,
+        targetRecipient: 'https://discord.com/webhook',
+        executeAt: futureExecuteAt(50),
+      });
+
+      await scheduler.start();
+      await waitForSchedulerPolls(400);
+
+      const logs = await db.all(
+        'SELECT * FROM notification_execution_log WHERE scheduled_notification_id = ?',
+        [id]
+      );
+
+      expect(logs).toHaveLength(1);
+      expect(logs[0].status).toBe('SUCCESS');
+      expect(logs[0].execution_attempt).toBe(1);
+      expect(logs[0].scheduled_notification_id).toBe(id);
+    });
+  });
+
+  describe('Idempotency handling', () => {
+    it('should return cached response for duplicate requests with same idempotency key', async () => {
+      const executeAt = futureExecuteAt();
+      const payload = { message: 'Unique message' };
+      const idempotencyKey = 'test-idempotency-key-1';
+
+      const id1 = await api.scheduleNotification(
+        {
+          payload,
+          notificationType: NotificationType.DISCORD,
+          targetRecipient: 'https://discord.com/webhook',
+          executeAt,
+        },
+        undefined,
+        idempotencyKey
+      );
+
+      // Second request with same idempotency key should return cached response
+      const id2 = await api.scheduleNotification(
+        {
+          payload,
+          notificationType: NotificationType.DISCORD,
+          targetRecipient: 'https://discord.com/webhook',
+          executeAt,
+        },
+        undefined,
+        idempotencyKey
+      );
+
+      expect(id1).toBe(id2);
+
+      // Verify only one notification was created
+      const stats = await repository.getStats();
+      expect(stats.pending).toBe(1);
+    });
+
+    it('should reject duplicate requests with different payload', async () => {
+      const executeAt = futureExecuteAt();
+      const idempotencyKey = 'test-idempotency-key-2';
+
+      await api.scheduleNotification(
+        {
+          payload: { message: 'Original' },
+          notificationType: NotificationType.DISCORD,
+          targetRecipient: 'https://discord.com/webhook',
+          executeAt,
+        },
+        undefined,
+        idempotencyKey
+      );
+
+      // Different payload with same key should fail
+      await expect(
+        api.scheduleNotification(
+          {
+            payload: { message: 'Different' },
+            notificationType: NotificationType.DISCORD,
+            targetRecipient: 'https://discord.com/webhook',
+            executeAt,
+          },
+          undefined,
+          idempotencyKey
+        )
+      ).rejects.toThrow('Idempotency key reused with different request body');
+    });
+
+    it('should clean up expired idempotency keys', async () => {
+      const executeAt = futureExecuteAt();
+      const idempotencyKey = 'test-idempotency-key-3';
+
+      await api.scheduleNotification(
+        {
+          payload: { message: 'Test' },
+          notificationType: NotificationType.DISCORD,
+          targetRecipient: 'https://discord.com/webhook',
+          executeAt,
+        },
+        undefined,
+        idempotencyKey
+      );
+
+      let stats = await idempotencyRepo.getStats();
+      expect(stats.processed).toBe(1);
+
+      await db.run(
+        'UPDATE idempotency_keys SET expires_at = ? WHERE idempotency_key = ?',
+        [new Date(Date.now() - 1000).toISOString(), idempotencyKey]
+      );
+
+      const cleanupCount = await idempotencyService.cleanupExpiredKeys();
+      expect(cleanupCount).toBeGreaterThanOrEqual(1);
+
+      stats = await idempotencyRepo.getStats();
+      expect(stats.expired).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('Backpressure handling', () => {
+    it('should detect queue saturation and activate backpressure', async () => {
+      const saturationThreshold = 100;
+      const isActive = backpressureController.checkAndApplyBackpressure(saturationThreshold + 1);
+
+      expect(isActive).toBe(true);
+      expect(backpressureController.isActive()).toBe(true);
+
+      const metrics = backpressureController.getMetrics(saturationThreshold + 1);
+      expect(metrics.isActive).toBe(true);
+      expect(metrics.totalBackpressureEvents).toBe(1);
+    });
+
+    it('should calculate appropriate processing delay under backpressure', async () => {
+      backpressureController.checkAndApplyBackpressure(101);
+
+      const delay = backpressureController.calculateProcessingDelay();
+      expect(delay).toBeGreaterThan(0);
+
+      const metrics = backpressureController.getMetrics(101);
+      expect(metrics.targetThroughputPerSec).toBe(10);
+    });
+
+    it('should recover from backpressure when queue shrinks', async () => {
+      // Activate
+      backpressureController.checkAndApplyBackpressure(101);
+      expect(backpressureController.isActive()).toBe(true);
+
+      // Recover
+      backpressureController.checkAndApplyBackpressure(49);
+      expect(backpressureController.isActive()).toBe(false);
+
+      const metrics = backpressureController.getMetrics(49);
+      expect(metrics.targetThroughputPerSec).toBe(100);
+    });
+
+    it('should record backpressure events for audit trail', async () => {
+      await backpressureMonitor.recordEvent({
+        event_type: 'ACTIVATED',
+        queue_size: 101,
+        target_throughput_per_sec: 10,
+        reason: 'Queue saturation detected',
+        timestamp: new Date().toISOString(),
+      });
+
+      const recent = await backpressureMonitor.getRecentEvents(10);
+      expect(recent).toHaveLength(1);
+      expect(recent[0].event_type).toBe('ACTIVATED');
+      expect(recent[0].queue_size).toBe(101);
+
+      const stats = await backpressureMonitor.getStatistics();
+      expect(stats.totalActivations).toBe(1);
+    });
+
+    it('should get backpressure statistics', async () => {
+      await backpressureMonitor.recordEvent({
+        event_type: 'ACTIVATED',
+        queue_size: 101,
+        target_throughput_per_sec: 10,
+        timestamp: new Date().toISOString(),
+      });
+
+      await backpressureMonitor.recordEvent({
+        event_type: 'DEACTIVATED',
+        queue_size: 49,
+        target_throughput_per_sec: 100,
+        duration_ms: 5000,
+        timestamp: new Date().toISOString(),
+      });
+
+      const stats = await backpressureMonitor.getStatistics();
+      expect(stats.totalActivations).toBe(1);
+      expect(stats.totalDeactivations).toBe(1);
+      expect(stats.averageDurationMs).toBe(5000);
+    });
+  });
+
+  describe('Integration tests', () => {
+    it('should handle high-volume notification creation with idempotency', async () => {
+      const executeAt = futureExecuteAt();
+      const payload = { message: 'Batch test' };
+      const idempotencyKey = 'batch-idempotency-1';
+
+      // Create multiple notifications
+      const id1 = await api.scheduleNotification(
+        {
+          payload,
+          notificationType: NotificationType.DISCORD,
+          targetRecipient: 'https://discord.com/webhook',
+          executeAt,
+        },
+        undefined,
+        idempotencyKey
+      );
+
+      // Duplicate request
+      const id2 = await api.scheduleNotification(
+        {
+          payload,
+          notificationType: NotificationType.DISCORD,
+          targetRecipient: 'https://discord.com/webhook',
+          executeAt,
+        },
+        undefined,
+        idempotencyKey
+      );
+
+      expect(id1).toBe(id2);
+
+      const stats = await repository.getStats();
+      expect(stats.pending).toBe(1);
+    });
+
+    it('should maintain audit trail through complete lifecycle', async () => {
+      const executeAt = futureExecuteAt(50);
+
+      const id = await api.scheduleNotification({
+        payload: { message: 'Audit test' },
+        notificationType: NotificationType.DISCORD,
+        targetRecipient: 'https://discord.com/webhook',
+        executeAt,
+      });
+
+      await scheduler.start();
+      await waitForSchedulerPolls(400);
+
+      // Check execution log
+      const executionLogs = await db.all(
+        'SELECT * FROM notification_execution_log WHERE scheduled_notification_id = ?',
+        [id]
+      );
+
+      expect(executionLogs).toHaveLength(1);
+      expect(executionLogs[0].status).toBe('SUCCESS');
+
+      // Check final notification state
+      const notification = await repository.getById(id);
+      expect(notification!.status).toBe(NotificationStatus.COMPLETED);
+    });
+  });
+});

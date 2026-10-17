@@ -3,7 +3,7 @@ use crate::AutoShareContractClient;
 use crate::base::events::NotificationCategory;
 use crate::base::events::NotificationPriority;
 use soroban_sdk::testutils::Events;
-use soroban_sdk::{BytesN, Symbol, Val};
+use soroban_sdk::{BytesN, Symbol, TryFromVal, Val};
 
 #[test]
 fn test_emit_batch_processing_completed_event() {

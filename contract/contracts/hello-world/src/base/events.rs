@@ -130,7 +130,17 @@ pub struct CategoryRegistered {
 }
 
 /// Emitted when the contract is paused by the admin.
-#[contractevent]
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct ContractPaused {
+    #[topic]
+    pub admin: Address,
+    #[topic]
+    pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
+}
+
 /// Emitted when a recipient updates a delivery channel preference.
 ///
 /// Off-chain consumers can filter on `recipient` and inspect `channel` /
@@ -151,18 +161,6 @@ pub struct ChannelPreferenceUpdated {
     pub enabled: bool,
     /// Ledger timestamp when the preference was updated.
     pub updated_at: u64,
-}
-
-/// Emitted when an AutoShare group is deactivated by its creator.
-#[contractevent(data_format = "single-value")]
-#[derive(Clone)]
-pub struct ContractPaused {
-    #[topic]
-    pub admin: Address,
-    #[topic]
-    pub category: NotificationCategory,
-    #[topic]
-    pub priority: NotificationPriority,
 }
 
 /// Emitted when the contract is unpaused by the admin.

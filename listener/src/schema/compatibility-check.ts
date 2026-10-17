@@ -172,14 +172,6 @@ export function checkSchemaCompatibility(
     breakingChanges.push('Consumer event schema is empty or malformed');
   }
 
-  // Check 4: Topic structure changes
-  // Topics are appended as trailing topics - existing consumers ignore them
-  // Breaking change only if the core topic (event name) changes position
-  if (consumer.expectedTopics && contractEvent.topics.length < consumer.expectedTopics.length) {
-    const missingTopics = consumer.expectedTopics.filter(
-      (t) => !contractEvent.topics.includes(t)
-    );
-    if (missingTopics.length > 0) {
   for (const consumerEvent of consumerSchema.events) {
     const contractEvent = contractEvents.get(consumerEvent.eventName);
     if (!contractEvent) {
@@ -193,20 +185,6 @@ export function checkSchemaCompatibility(
     safeAdditions.push(...result.safeAdditions);
   }
 
-  // Check 5: New data fields are safe (backward compatible)
-  // Any new data fields in the contract that weren't expected by the consumer
-  // are simply ignored - this is the Soroban trailing-topic pattern
-  const newDataFields = contractEvent.dataFields.filter(
-    (f) => !consumer.expectedFields.includes(f.name)
-  );
-  safeAdditions.push(
-    ...newDataFields.map(
-      (f) => `Safe addition: New data field '${f.name}' in '${contractEvent.name}' (ignored by existing consumers)`
-    )
-  );
-
-  // Determine compatibility
-  const compatible = breakingChanges.length === 0;
   for (const eventName of contractEvents.keys()) {
     if (!consumerNames.has(eventName)) {
       safeAdditions.push(`Safe addition: New event '${eventName}' is ignored by existing consumers`);

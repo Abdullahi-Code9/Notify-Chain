@@ -24,7 +24,7 @@ export class TemplateRepository {
    */
   async create(input: CreateTemplateInput): Promise<number> {
     const sql = `
-      INSERT INTO notification_templates (
+      INSERT INTO channel_templates (
         unique_key, name, description, channel_type,
         subject_template, body_template, variables, default_values,
         is_active, created_by
@@ -59,7 +59,7 @@ export class TemplateRepository {
    * Get template by ID
    */
   async getById(id: number): Promise<ChannelNotificationTemplate | null> {
-    const sql = 'SELECT * FROM notification_templates WHERE id = ?';
+    const sql = 'SELECT * FROM channel_templates WHERE id = ?';
     const row = await this.db.get<ChannelNotificationTemplateRow>(sql, [id]);
 
     return row ? this.rowToModel(row) : null;
@@ -69,7 +69,7 @@ export class TemplateRepository {
    * Get template by unique key
    */
   async getByUniqueKey(uniqueKey: string): Promise<ChannelNotificationTemplate | null> {
-    const sql = 'SELECT * FROM notification_templates WHERE unique_key = ?';
+    const sql = 'SELECT * FROM channel_templates WHERE unique_key = ?';
     const row = await this.db.get<ChannelNotificationTemplateRow>(sql, [uniqueKey]);
 
     return row ? this.rowToModel(row) : null;
@@ -84,7 +84,7 @@ export class TemplateRepository {
     limit?: number;
     offset?: number;
   }): Promise<ChannelNotificationTemplate[]> {
-    let sql = 'SELECT * FROM notification_templates WHERE 1=1';
+    let sql = 'SELECT * FROM channel_templates WHERE 1=1';
     const params: any[] = [];
 
     if (filters?.channelType) {
@@ -169,7 +169,7 @@ export class TemplateRepository {
     params.push(id);
 
     const sql = `
-      UPDATE notification_templates 
+      UPDATE channel_templates 
       SET ${updates.join(', ')} 
       WHERE id = ?
     `;
@@ -188,7 +188,7 @@ export class TemplateRepository {
    * Delete template (soft delete by marking inactive)
    */
   async deactivate(id: number): Promise<boolean> {
-    const sql = 'UPDATE notification_templates SET is_active = 0 WHERE id = ?';
+    const sql = 'UPDATE channel_templates SET is_active = 0 WHERE id = ?';
     const result = await this.db.run(sql, [id]);
 
     if (result.changes > 0) {
@@ -203,7 +203,7 @@ export class TemplateRepository {
    * Hard delete template (permanent deletion)
    */
   async delete(id: number): Promise<boolean> {
-    const sql = 'DELETE FROM notification_templates WHERE id = ?';
+    const sql = 'DELETE FROM channel_templates WHERE id = ?';
     const result = await this.db.run(sql, [id]);
 
     if (result.changes > 0) {
@@ -218,7 +218,7 @@ export class TemplateRepository {
    * Check if unique key exists
    */
   async exists(uniqueKey: string): Promise<boolean> {
-    const sql = 'SELECT COUNT(*) as count FROM notification_templates WHERE unique_key = ?';
+    const sql = 'SELECT COUNT(*) as count FROM channel_templates WHERE unique_key = ?';
     const result = await this.db.get<{ count: number }>(sql, [uniqueKey]);
     return (result?.count || 0) > 0;
   }
@@ -282,7 +282,7 @@ export class TemplateRepository {
   async getCountByChannel(): Promise<Record<string, number>> {
     const sql = `
       SELECT channel_type, COUNT(*) as count
-      FROM notification_templates
+      FROM channel_templates
       WHERE is_active = 1
       GROUP BY channel_type
     `;

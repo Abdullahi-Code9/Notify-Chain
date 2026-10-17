@@ -1,0 +1,123 @@
+﻿2026-10-16T13:03:06.690Z [32minfo[39m: Handling GET /api/events {"requestId":"ef77b472","correlationId":"0916edc1-b5a7-4fba-8f85-7114c61e8e87","limit":20}
+2026-10-16T13:03:06.744Z [32minfo[39m: GET /api/events complete {"requestId":"ef77b472","correlationId":"0916edc1-b5a7-4fba-8f85-7114c61e8e87","returned":0,"durationMs":65}
+2026-10-16T13:03:06.767Z [32minfo[39m: Handling GET /api/events {"requestId":"ad3a7637","correlationId":"my-trace-abc123","limit":20}
+2026-10-16T13:03:06.768Z [32minfo[39m: GET /api/events complete {"requestId":"ad3a7637","correlationId":"my-trace-abc123","returned":0,"durationMs":2}
+2026-10-16T13:03:06.776Z [32minfo[39m: Handling GET /api/events {"requestId":"d385bde8","correlationId":"56c7643d-94b9-473b-b72a-5328d521657d","limit":20}
+2026-10-16T13:03:06.779Z [32minfo[39m: GET /api/events complete {"requestId":"d385bde8","correlationId":"56c7643d-94b9-473b-b72a-5328d521657d","returned":0,"durationMs":3}
+2026-10-16T13:03:06.786Z [33mwarn[39m: Unhandled request {"requestId":"7596bcd1","correlationId":"trace-404-test","method":"GET","url":"/no-such-route"}
+2026-10-16T13:03:06.788Z [32minfo[39m: Request completed {"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":2,"requestId":"7596bcd1"}
+2026-10-16T13:03:06.821Z [33mwarn[39m: Unhandled request {"requestId":"d8fda068","correlationId":"164fd73f-f204-44d4-a0d6-c23db7d565ad","method":"GET","url":"/no-such-route"}
+2026-10-16T13:03:06.822Z [32minfo[39m: Request completed {"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":2,"requestId":"d8fda068"}
+2026-10-16T13:03:06.999Z [33mwarn[39m: Unhandled request {"requestId":"8632d83c","correlationId":"de9a8641-55fb-42bd-8159-651641f00402","method":"GET","url":"/no-such-route"}
+2026-10-16T13:03:07.000Z [32minfo[39m: Request completed {"method":"GET","url":"/no-such-route","statusCode":404,"durationMs":2,"requestId":"8632d83c"}
+2026-10-16T13:03:07.036Z [32minfo[39m: Handling GET /api/events {"requestId":"78223858","correlationId":"dc6021c7-c194-4a42-ad63-2e06a610a040","limit":50}
+2026-10-16T13:03:07.037Z [32minfo[39m: GET /api/events complete {"requestId":"78223858","correlationId":"dc6021c7-c194-4a42-ad63-2e06a610a040","returned":50,"durationMs":2}
+2026-10-16T13:03:07.107Z [32minfo[39m: Handling GET /api/events {"requestId":"4183ca02","correlationId":"35323213-73bb-4d93-aa36-d07f15038217","limit":100}
+2026-10-16T13:03:07.111Z [32minfo[39m: GET /api/events complete {"requestId":"4183ca02","correlationId":"35323213-73bb-4d93-aa36-d07f15038217","returned":100,"durationMs":5}
+2026-10-16T13:03:07.117Z [32minfo[39m: Handling GET /api/events {"requestId":"64ec5270","correlationId":"9be7f1aa-2ce4-489f-a82c-51f66f69c417","limit":1}
+2026-10-16T13:03:07.118Z [32minfo[39m: GET /api/events complete {"requestId":"64ec5270","correlationId":"9be7f1aa-2ce4-489f-a82c-51f66f69c417","returned":1,"durationMs":1}
+2026-10-16T13:03:07.126Z [32minfo[39m: Handling GET /api/events {"requestId":"a2d0c27b","correlationId":"0681b2dc-3923-4620-9260-4b35d339652c","limit":20}
+2026-10-16T13:03:07.128Z [32minfo[39m: GET /api/events complete {"requestId":"a2d0c27b","correlationId":"0681b2dc-3923-4620-9260-4b35d339652c","returned":20,"durationMs":1}
+node : FAIL src/tests/events-server.test.ts (17.048 s)
+At line:15 char:3417
++ ... pgrep\bin'; node ./node_modules/jest/bin/jest.js --maxWorkers=1 --wor ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL src/tests/...t.ts (17.048 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  correlation ID propagation
+    √ generates a correlation ID when none is provided (240 ms)
+    √ echoes back the caller-supplied correlation ID (7 ms)
+    √ always includes x-request-id alongside correlation ID (10 ms)
+    √ correlation ID flows through on 404 responses (12 ms)
+  security headers
+    × sets baseline headers on preflight responses without changing cache policy (11 ms)
+    √ sets baseline headers on not-found responses (15 ms)
+    √ sets HSTS only when production is explicitly enabled (174 ms)
+  GET /api/events pagination
+    × defaults to 20 items when limit is not provided (14 ms)
+    × respects limit when provided within bounds (14 ms)
+    × caps excessively large limit at 100 (11 ms)
+    × handles negative limits by falling back to minimum (1) (6 ms)
+    × handles invalid limit by falling back to default (9 ms)
+
+  ● security headers › sets baseline headers on preflight responses without changing cache policy
+
+    read ECONNRESET
+
+  ● GET /api/events pagination › defaults to 20 items when limit is not provided
+
+    read ECONNRESET
+
+  ● GET /api/events pagination › respects limit when provided within bounds
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 175 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=50'[39m)[33m;[39m
+     [90m 176 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 177 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m50[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 178 |[39m   })[33m;[39m
+     [90m 179 |[39m
+     [90m 180 |[39m   test([32m'caps excessively large limit at 100'[39m[33m,[39m [36masync[39m () 
+[33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:177:24)
+
+  ● GET /api/events pagination › caps excessively large limit at 100
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 181 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=200'[39m)[33m;[39m
+     [90m 182 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 183 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m100[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 184 |[39m   })[33m;[39m
+     [90m 185 |[39m
+     [90m 186 |[39m   test([32m'handles negative limits by falling back to minimum (1)'[39m[33m,[39m 
+[36masync[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:183:24)
+
+  ● GET /api/events pagination › handles negative limits by falling back to minimum (1)
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 187 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=-10'[39m)[33m;[39m
+     [90m 188 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 189 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m1[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 190 |[39m   })[33m;[39m
+     [90m 191 |[39m
+     [90m 192 |[39m   test([32m'handles invalid limit by falling back to default'[39m[33m,[39m [36masync[39m 
+() [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:189:24)
+
+  ● GET /api/events pagination › handles invalid limit by falling back to default
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+
+    [0m [90m 193 |[39m     [36mconst[39m { status[33m,[39m body } [33m=[39m [36mawait[39m 
+makeRequest([32m'/api/events?limit=invalid'[39m)[33m;[39m
+     [90m 194 |[39m     expect(status)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 195 |[39m     
+expect(body[33m.[39mevents[33m.[39mlength)[33m.[39mtoBe([35m20[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 196 |[39m   })[33m;[39m
+     [90m 197 |[39m })[33m;[39m
+     [90m 198 |[39m[0m
+
+      at Object.<anonymous> (src/tests/events-server.test.ts:195:24)
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 6 passed, 12 total
+Snapshots:   0 total
+Time:        19.739 s
+Ran all test suites matching src/tests/events-server.test.ts.
