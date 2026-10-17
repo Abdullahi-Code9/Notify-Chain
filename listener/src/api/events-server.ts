@@ -14,7 +14,13 @@ import { handleTemplateRoutes } from './template-routes';
 import { sendOk, sendErr, sendJson, ErrorCode } from '../utils/response';
 import { normalizePaginationParams } from '../utils/pagination';
 import { handleApiError, ApiError } from './error-handler';
-import { applyRequestIdMiddleware } from '../middleware/request-id';
+import { type RequestContext } from '../middleware/request-id';
+import { runWithRequestCorrelation } from '../middleware/correlation';
+import { sendOkWithETag } from '../middleware/etag';
+import { handleCredentialRoutes } from './credentials-api';
+import { authorizeRequest } from './api-key-auth';
+import { ApiCredentialService } from '../services/api-credential-service';
+import type { ApiScope } from '../types/api-credential';
 import { TemplateService } from '../services/template-service';
 import { handleTemplateRoutes } from './template-routes';
 import { sendOk, sendErr, sendJson, ErrorCode } from '../utils/response';
@@ -83,6 +89,12 @@ export interface EventsServerOptions {
   discordWebhookUrl?: string;
   webhookSecrets?: WebhookSecret[];
   apiKeys?: Array<{ key: string; name?: string }>;
+  /**
+   * Issues and verifies scoped integration credentials (#988). Static
+   * `apiKeys` keep full access; credentials from this service are limited to
+   * their scopes.
+   */
+  credentialService?: ApiCredentialService | null;
   notificationAPI?: NotificationAPI | null;
   /** Idempotency-Key replay protection for mutating endpoints (webhooks, schedule). */
   idempotencyService?: IdempotencyKeyService | null;
@@ -461,15 +473,16 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       ? options.responseTimeMiddleware
       : new ResponseTimeMiddleware({ slowRequestThresholdMs: options.slowRequestThresholdMs });
 
-  const server = http.createServer(async (req, res) => {
+  const handleRequest = async (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    requestContext: RequestContext,
+  ): Promise<void> => {
     addSecurityHeaders(res, {
       isProduction: options.isProduction ?? process.env.NODE_ENV === 'production',
     });
 
-    // Request-ID middleware (#686): assigns (or validates+reuses) a requestId
-    // and resolves a correlationId for every request, stamping both onto the
-    // response headers. See listener/src/middleware/request-id.ts.
-    const { requestId, correlationId } = applyRequestIdMiddleware(req, res);
+    const { requestId, correlationId } = requestContext;
     const startTime = Date.now();
 
     // Start response-time tracking for this request (#491)
@@ -503,11 +516,11 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader(
       'Access-Control-Allow-Headers',
-      'Content-Type, X-API-Key, Authorization, X-Correlation-Id, X-Request-Id',
+      'Content-Type, X-API-Key, Authorization, X-Correlation-Id, X-Request-Id, If-None-Match',
     );
     res.setHeader(
       'Access-Control-Expose-Headers',
-      'X-Request-Id, X-Correlation-Id, X-Response-Time',
+      'X-Request-Id, X-Correlation-Id, X-Response-Time, ETag',
     );
 
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -529,21 +542,27 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       res.setHeader('Content-Type', 'application/json');
     }
     /**
-     * Enforces X-API-Key auth for protected endpoints. Sends a 401 and returns
-     * false when the request is not authenticated.
+     * Enforces X-API-Key auth and scope checks (#988) for protected endpoints.
+     * Sends 401 UNAUTHORIZED or 403 INVALID_PERMISSIONS and resolves false
+     * when the request may not proceed.
      */
-    const requireApiKey = (): boolean => {
-      const auth = authenticateApiKey(req, options.apiKeys);
-      if (auth.authenticated) return true;
-      logger.warn('API key authentication failed', {
+    const requireApiKey = async (requiredScopes: readonly ApiScope[] = []): Promise<boolean> => {
+      const auth = await authorizeRequest(req, {
+        apiKeys: options.apiKeys,
+        credentialService: options.credentialService,
+        requiredScopes,
+      });
+      if (auth.allowed) return true;
+      logger.warn('API key authorization failed', {
         requestId,
         correlationId,
         method: req.method,
         path: url.pathname,
-        reason: auth.reason,
+        status: auth.status,
+        code: auth.code,
       });
-      res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
-      sendErr(res, 401, API_KEY_AUTH_MESSAGES[auth.reason], ErrorCode.UNAUTHORIZED);
+      if (auth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+      sendErr(res, auth.status, auth.message, auth.code, auth.details);
       return false;
     };
 
@@ -562,6 +581,15 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       res.removeHeader('Content-Type');
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // Scoped API credential management (#988)
+    if (url.pathname === '/api/credentials' || url.pathname.startsWith('/api/credentials/')) {
+      await handleCredentialRoutes(req, res, url, {
+        credentialService: options.credentialService,
+        apiKeys: options.apiKeys,
+      });
       return;
     }
 
@@ -649,7 +677,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
         returned: events.length,
       });
 
-      sendOk(res, 200, {
+      sendOkWithETag(req, res, {
         count: events.length,
         startLedger: range.startLedger,
         endLedger: range.endLedger,
@@ -684,7 +712,8 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
       logger.info('Handling GET /api/events', { requestId, correlationId, limit: paginationParams.limit });
 
-      sendOk(res, 200, { count: eventRegistry.count(), events });
+      // ETag (#985): pollers that already hold the current feed get a 304.
+      sendOkWithETag(req, res, { count: eventRegistry.count(), events });
 
       logger.info('GET /api/events complete', {
         requestId,
@@ -753,12 +782,15 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
         durationMs: Date.now() - startTime,
       });
 
-      sendOk(res, 200, snapshot);
-
-      if (reset) {
-        aggregator.reset();
-        logger.info('Analytics snapshot reset after read', { requestId, correlationId });
+      // A resetting read has a side effect, so it always returns the full body.
+      if (!reset) {
+        sendOkWithETag(req, res, snapshot);
+        return;
       }
+
+      sendOk(res, 200, snapshot);
+      aggregator.reset();
+      logger.info('Analytics snapshot reset after read', { requestId, correlationId });
       return;
     }
 
@@ -775,7 +807,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       options.metricsStore
         .getHistory(limit, since)
         .then((snapshots) => {
-          sendOk(res, 200, { snapshots });
+          sendOkWithETag(req, res, { snapshots });
         })
         .catch((error) => {
           logger.error('Failed to fetch metrics history', { error, requestId, correlationId });
@@ -995,7 +1027,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     // POST /api/notifications/import — bulk import from JSON or CSV
     if (req.method === 'POST' && url.pathname === '/api/notifications/import') {
       // Authenticate before revealing anything about service availability.
-      if (!requireApiKey()) return;
+      if (!(await requireApiKey(['notifications:write']))) return;
 
       if (!options.notificationAPI) {
         sendErr(res, 503, 'Scheduler not enabled', ErrorCode.SERVICE_UNAVAILABLE);
@@ -1004,16 +1036,6 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
       if (!validateContentType(req, res, ['application/json', 'text/csv', 'application/csv'])) {
         return;
-      }
-
-      const apiKeyHeader = req.headers['x-api-key'];
-      if (options.apiKeys && options.apiKeys.length > 0) {
-        const provided = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
-        const allowed = options.apiKeys.some((k) => k.key === provided);
-        if (!allowed) {
-          sendErr(res, 401, 'Unauthorized', ErrorCode.UNAUTHORIZED);
-          return;
-        }
       }
 
       let body = '';
@@ -1045,15 +1067,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       (req.method === 'GET' || req.method === 'POST') &&
       (url.pathname === '/api/admin/export' || url.pathname === '/api/export')
     ) {
-      const apiKeyHeader = req.headers['x-api-key'];
-      if (options.apiKeys && options.apiKeys.length > 0) {
-        const provided = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
-        const allowed = options.apiKeys.some((k) => k.key === provided);
-        if (!allowed) {
-          sendErr(res, 401, 'Unauthorized', ErrorCode.UNAUTHORIZED);
-          return;
-        }
-      }
+      if (!(await requireApiKey(['events:read', 'notifications:read']))) return;
 
       const processExport = async (rawFilters: Record<string, unknown>) => {
         try {
@@ -1289,7 +1303,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       options.notificationAPI
         .getStatistics()
         .then((stats) => {
-          sendOk(res, 200, stats);
+          sendOkWithETag(req, res, stats);
         })
         .catch((error) => {
           logger.error('Failed to get scheduler stats', { error, requestId, correlationId });
@@ -1307,7 +1321,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       (options.notificationAPI as any)
         .getExecutionMetrics()
         .then((metrics: unknown) => {
-          sendOk(res, 200, metrics);
+          sendOkWithETag(req, res, metrics);
         })
         .catch((error: Error) => {
           logger.error('Failed to get execution metrics', { error, requestId, correlationId });
@@ -1325,7 +1339,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       (options.notificationAPI as any)
         .getRetryDistribution()
         .then((distribution: unknown) => {
-          sendOk(res, 200, distribution);
+          sendOkWithETag(req, res, distribution);
         })
         .catch((error: Error) => {
           logger.error('Failed to get retry distribution', { error, requestId, correlationId });
@@ -1369,7 +1383,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       options.notificationAPI
         .getRetryStatistics()
         .then((stats) => {
-          sendOk(res, 200, stats);
+          sendOkWithETag(req, res, stats);
         })
         .catch((error) => {
           logger.error('Failed to get retry statistics', { error, requestId, correlationId });
@@ -1515,29 +1529,10 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
-    function isValidApiKey(apiKey: string | undefined, allowedKeys: Array<{ key: string; name?: string }> | undefined): boolean {
-    function isValidApiKey(
-      apiKey: string | undefined,
-      allowedKeys: Array<{ key: string; name?: string }> | undefined,
-    ): boolean {
-      if (!allowedKeys || allowedKeys.length === 0) {
-        // If no API keys are configured, allow unauthenticated access is allowed (for backward compatibility)
-        return true;
-      }
-      if (!apiKey) {
-        return false;
-      }
-      return allowedKeys.some((k) => k.key === apiKey);
-    }
-
     // Get delivery receipts for a scheduled notification
     const receiptPath = url.pathname.match(/^\/api\/notifications\/(\d+)\/receipts$/);
     if (req.method === 'GET' && receiptPath) {
-      const apiKey = req.headers['x-api-key'] as string | undefined;
-      if (!isValidApiKey(apiKey, options.apiKeys)) {
-        sendErr(res, 401, 'Unauthorized: Invalid or missing API key', ErrorCode.UNAUTHORIZED);
-        return;
-      }
+      if (!(await requireApiKey(['notifications:read']))) return;
 
       if (!options.deliveryReceiptRepository) {
         sendErr(res, 503, 'Delivery receipt storage is not configured', ErrorCode.SERVICE_UNAVAILABLE);
@@ -1561,26 +1556,11 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
-    // Get notification delivery history endpoint
-    if (req.method === 'GET' && req.url?.startsWith('/api/notifications/history')) {
-      const apiKey = req.headers['x-api-key'] as string | undefined;
-      if (!isValidApiKey(apiKey, options.apiKeys)) {
-        sendErr(res, 401, 'Unauthorized: Invalid or missing API key', ErrorCode.UNAUTHORIZED);
-        return;
-      }
-
-      const url = new URL(req.url, 'http://localhost');
-      const limit = url.searchParams.get('limit')
-        ? parseInt(url.searchParams.get('limit')!, 10)
-        : undefined;
-      const offset = url.searchParams.get('offset')
-        ? parseInt(url.searchParams.get('offset')!, 10)
-        : undefined;
     // Get notification delivery history endpoint.
     // Matched on the rewritten pathname so /api/v1/notifications/history is
     // routed (and authenticated) the same as the unversioned path.
     if (req.method === 'GET' && url.pathname === '/api/notifications/history') {
-      if (!requireApiKey()) return;
+      if (!(await requireApiKey(['notifications:read']))) return;
       const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit')!, 10) : undefined;
       const offset = url.searchParams.get('offset') ? parseInt(url.searchParams.get('offset')!, 10) : undefined;
       const cursor = url.searchParams.get('cursor') || undefined;
@@ -2121,6 +2101,23 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     });
     sendErr(res, 404, 'Not found', ErrorCode.NOT_FOUND);
     responseTime.finish(req, res, requestId, 404);
+  };
+
+  const server = http.createServer((req, res) => {
+    // Request-ID + correlation middleware (#686, #986): assigns (or
+    // validates+reuses) a requestId and correlationId, stamps both onto the
+    // response headers, and runs the handler inside an AsyncLocalStorage
+    // context so logs, error envelopes and queued jobs inherit them.
+    runWithRequestCorrelation(req, res, (requestContext) =>
+      handleRequest(req, res, requestContext),
+    ).catch((error: unknown) => {
+      logger.error('Unhandled error in events server request handler', { error });
+      if (!res.headersSent) {
+        sendErr(res, 500, 'Internal server error', ErrorCode.INTERNAL_ERROR);
+      } else {
+        res.end();
+      }
+    });
   });
 
   if (rateLimiter) {
