@@ -1,7 +1,8 @@
-import { Config, ContractConfig, DiscordConfig, WebhookSecret, AppCleanupConfig, EventQueueConfig, RetrySchedulerOptions, AnalyticsConfig, ExpirationConfig, ApiKey, BackfillConfig, LoggingConfig, ApiConfig } from './types';
+import { Config, ContractConfig, DiscordConfig, WebhookSecret, AppCleanupConfig, EventQueueConfig, RetrySchedulerOptions, AnalyticsConfig, ExpirationConfig, ApiKey, BackfillConfig, LoggingConfig, ApiConfig, EventBatchingConfig, DigestConfig, LocalizationConfig } from './types';
 import { validateCorsOrigin, CorsValidationError } from './utils/cors-validator';
 import { validateSecrets } from './config/validate-secrets';
 import { ConfigurationSchemaValidator, APP_CONFIG_SCHEMA } from './config-schema';
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from './i18n';
 import {
   SUPPORTED_LOG_FORMATS,
   SUPPORTED_LOG_LEVELS,
@@ -400,6 +401,49 @@ function loadCircuitBreakerConfig(): CircuitBreakerConfig {
   };
 }
 
+/**
+ * High-volume event batching (feature: batched delivery) (#batching).
+ *
+ *   EVENT_BATCHING_ENABLED   - master switch; off by default so delivery stays
+ *                              one-message-per-event unless an operator opts in.
+ *   EVENT_BATCHING_MAX_SIZE  - events per group before an early flush.
+ *   EVENT_BATCHING_WINDOW_MS - longest an event waits before being flushed.
+ */
+function loadEventBatchingConfig(): EventBatchingConfig {
+  return {
+    enabled: parseBooleanEnv('EVENT_BATCHING_ENABLED', false),
+    maxBatchSize: parseIntegerEnv('EVENT_BATCHING_MAX_SIZE', '50'),
+    windowMs: parseStrictIntegerEnv('EVENT_BATCHING_WINDOW_MS', '5000'),
+  };
+}
+
+/**
+ * Periodic digest summaries (feature: digest delivery).
+ *
+ *   DIGEST_ENABLED      - master switch; off by default (immediate alerts).
+ *   DIGEST_INTERVAL_MS  - digest period; defaults to one hour.
+ *   DIGEST_MAX_EVENTS   - events accumulated before an early digest.
+ */
+function loadDigestConfig(): DigestConfig {
+  return {
+    enabled: parseBooleanEnv('DIGEST_ENABLED', false),
+    intervalMs: parseStrictIntegerEnv('DIGEST_INTERVAL_MS', String(60 * 60 * 1000)),
+    maxEventsPerDigest: parseIntegerEnv('DIGEST_MAX_EVENTS', '100'),
+  };
+}
+
+/**
+ * Localization settings (feature: template separation).
+ *
+ *   DEFAULT_LOCALE - initial locale for user-facing text (default: "en").
+ *                    Validated against the supported locales below.
+ */
+function loadLocalizationConfig(): LocalizationConfig {
+  return {
+    defaultLocale: (trimEnv('DEFAULT_LOCALE') || DEFAULT_LOCALE).toLowerCase(),
+  };
+}
+
 export function loadConfig(): Config {
   validateRequiredEnvVars();
 
@@ -490,6 +534,9 @@ export function loadConfig(): Config {
     logging: loadLoggingConfig(),
     api: loadApiConfig(),
     circuitBreaker: loadCircuitBreakerConfig(),
+    eventBatching: loadEventBatchingConfig(),
+    digest: loadDigestConfig(),
+    localization: loadLocalizationConfig(),
   };
 }
 
@@ -939,6 +986,46 @@ export function validateConfig(config: Config): void {
       errors.push(
         `API_MAX_BODY_BYTES must be a positive integer ` +
           `(received: ${config.api.maxBodyBytes}).`,
+      );
+    }
+  }
+
+  // ── High-volume event batching ─────────────────────────────────────────────
+  if (config.eventBatching) {
+    if (config.eventBatching.maxBatchSize < 1) {
+      errors.push(
+        `EVENT_BATCHING_MAX_SIZE must be >= 1 (received: ${config.eventBatching.maxBatchSize}).`,
+      );
+    }
+    if (config.eventBatching.windowMs < 0) {
+      errors.push(
+        `EVENT_BATCHING_WINDOW_MS must be >= 0 (received: ${config.eventBatching.windowMs}).`,
+      );
+    }
+  }
+
+  // ── Periodic digests ───────────────────────────────────────────────────────
+  if (config.digest) {
+    if (config.digest.intervalMs < 1000) {
+      errors.push(
+        `DIGEST_INTERVAL_MS must be >= 1000 ms (received: ${config.digest.intervalMs}).`,
+      );
+    }
+    if (config.digest.maxEventsPerDigest < 1) {
+      errors.push(
+        `DIGEST_MAX_EVENTS must be >= 1 (received: ${config.digest.maxEventsPerDigest}).`,
+      );
+    }
+  }
+
+  // ── Localization ───────────────────────────────────────────────────────────
+  // Rejected rather than silently falling back: a typo in DEFAULT_LOCALE would
+  // otherwise send every notification in English with no signal to the operator.
+  if (config.localization) {
+    if (!SUPPORTED_LOCALES.includes(config.localization.defaultLocale)) {
+      errors.push(
+        `DEFAULT_LOCALE must be one of: ${SUPPORTED_LOCALES.join(', ')} ` +
+          `(received: "${config.localization.defaultLocale}").`,
       );
     }
   }

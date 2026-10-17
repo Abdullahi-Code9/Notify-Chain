@@ -7,6 +7,7 @@ import {
   ProviderHealthResult,
 } from '../../types/provider-capabilities';
 import { sendWebhook, WebhookSendOptions } from '../webhook-sender';
+import { stampWebhookPayloadVersion } from '../../utils/webhook-payload-version';
 import { sanitizeCredentials } from '../../utils/credential-sanitizer';
 import logger from '../../utils/logger';
 
@@ -62,13 +63,17 @@ export class WebhookNotificationProvider implements NotificationProvider {
       }
     }
 
+    // Stamp the documented webhook contract version onto the outbound body and
+    // advertise it via header so consumers can identify the payload schema.
+    const stamped = stampWebhookPayloadVersion(body as Record<string, unknown>);
+
     const opts: WebhookSendOptions = {
       timeoutMs: this.config.timeoutMs,
-      headers: { ...this.config.defaultHeaders },
+      headers: { ...this.config.defaultHeaders, ...stamped.headers },
     };
 
     try {
-      const response = await sendWebhook(targetRecipient, body, opts);
+      const response = await sendWebhook(targetRecipient, stamped.payload, opts);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
