@@ -1,10 +1,56 @@
 # Notification API Error Reference
 
-This reference lists listener API error responses, common causes, and operator or client actions. Error bodies use JSON and generally follow:
+This reference lists listener API error responses, common causes, and operator or client actions.
+
+## Standard Error Envelope (#987)
+
+Errors produced through the shared response helpers use this envelope:
 
 ```json
-{ "error": "Human readable error message" }
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_PERMISSIONS",
+    "message": "The provided credentials lack the necessary scope for this action.",
+    "details": [],
+    "correlation_id": "req-12345"
+  }
+}
 ```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `code` | string | Stable machine-readable code from the table below. **Branch on this, not on `message`.** |
+| `message` | string | Human-readable; wording may change between releases. |
+| `details` | array \| object | Validation issues or extra context. `[]` when there is nothing to add. |
+| `correlation_id` | string | Same value as the `X-Correlation-Id` response header. Quote it when reporting problems. |
+
+### Error Codes
+
+Codes are never renamed or reused once published. The source of truth is
+`src/errors/api-error-codes.ts` (`ERROR_CODE_CATALOG`).
+
+| Code | HTTP | Meaning |
+|------|------|---------|
+| `BAD_REQUEST` | 400 | Malformed request or invalid parameters. |
+| `VALIDATION_ERROR` | 400 | Body failed schema validation; `details` lists `{ field, message }` issues. |
+| `PARSE_ERROR` | 400 | Body is not valid JSON. |
+| `UNAUTHORIZED` | 401 | API key missing, unknown, revoked, or mismatched. |
+| `INVALID_PERMISSIONS` | 403 | Valid credential lacking a required scope; `details` lists `requiredScopes` / `missingScopes`. |
+| `FORBIDDEN` | 403 | Action not permitted for this caller. |
+| `NOT_FOUND` | 404 | Unknown route or resource. |
+| `METHOD_NOT_ALLOWED` | 405 | Resource does not support the method; see `Allow`. |
+| `CONFLICT` | 409 | Conflicts with current resource state. |
+| `PAYLOAD_TOO_LARGE` | 413 | Body exceeds the size limit. |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | `Content-Type` not accepted. |
+| `UNPROCESSABLE` | 422 | Well-formed but cannot be processed. |
+| `RATE_LIMITED` | 429 | Rate limit exceeded; honour `Retry-After`. |
+| `INTERNAL_ERROR` | 500 | Unexpected server failure. |
+| `SERVICE_UNAVAILABLE` | 503 | A required optional service is not configured. |
+
+> Some older endpoints documented below (e.g. `POST /api/schedule`) still
+> write ad-hoc bodies such as `{ "error": "...", "code": "..." }`. They will be
+> migrated to the standard envelope; the codes they emit are unchanged.
 
 Batch validation endpoints return structured validation results instead:
 
