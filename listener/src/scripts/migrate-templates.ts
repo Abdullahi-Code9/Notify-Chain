@@ -44,17 +44,10 @@ async function migrateTemplates() {
 
     const schema = fs.readFileSync(schemaPath, 'utf-8');
 
-    // Split and execute each statement
-    const statements = schema
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    // exec runs the whole script so the CREATE TRIGGER ... BEGIN/END block works
+    await db.exec(schema);
 
-    for (const statement of statements) {
-      await db.run(statement);
-    }
-
-    logger.info('Template schema migration completed', { statements: statements.length });
+    logger.info('Template schema migration completed');
 
     // Verify tables exist
     const tables = await db.all<{ name: string }>(
@@ -82,7 +75,7 @@ async function createSampleTemplates(db: Database) {
   try {
     // Check if templates already exist
     const existing = await db.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM notification_templates'
+      'SELECT COUNT(*) as count FROM channel_templates'
     );
 
     if ((existing?.count || 0) > 0) {
@@ -142,7 +135,7 @@ Status: ✅ Approved`,
 
     for (const sample of samples) {
       await db.run(
-        `INSERT INTO notification_templates (
+        `INSERT INTO channel_templates (
           unique_key, name, description, channel_type,
           subject_template, body_template, variables, default_values,
           is_active, created_by

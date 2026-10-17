@@ -37,22 +37,11 @@ describe('Template API Integration Tests', () => {
     db = new Database(testDbPath);
     await db.initialize();
 
-    // Run template schema
-    const schemaPath = path.join(__dirname, '../database/schema.sql');
+    // Run template schema (exec handles multi-statement scripts incl. triggers)
+    const schemaPath = path.join(__dirname, '../database/template-schema.sql');
     if (fs.existsSync(schemaPath)) {
       const schema = fs.readFileSync(schemaPath, 'utf-8');
-      const statements = schema
-        .split(';')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith('--'));
-
-      for (const statement of statements) {
-        try {
-          await db.run(statement);
-        } catch (error) {
-          // Ignore errors for existing tables
-        }
-      }
+      await db.exec(schema);
     }
 
     repository = new TemplateRepository(db);
@@ -83,7 +72,7 @@ describe('Template API Integration Tests', () => {
 
   beforeEach(async () => {
     await db.run('DELETE FROM template_usage_log');
-    await db.run('DELETE FROM notification_templates');
+    await db.run('DELETE FROM channel_templates');
   });
 
   /**

@@ -7,10 +7,6 @@ use crate::base::events::{
     NotificationDelivered, NotificationExpired, NotificationExtended,
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
     NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
-    ContractPaused, ContractUnpaused, GroupActivated, GroupDeactivated, NotificationAccessed,
-    NotificationAcknowledged, NotificationCategory, NotificationDelivered, NotificationExpired,
-    NotificationExtended, NotificationLimitsConfigured, NotificationPriority, NotificationRecalled,
-    NotificationRevoked, NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
     ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
 };
 use crate::base::metadata_validation::{validate_metadata, NotificationMetadata};
@@ -314,7 +310,6 @@ pub fn add_group_member(
     // Add new member (embedded in AutoShareDetails — no separate GroupMembers key)
     details.members.push_back(GroupMember {
         address,
-        address: address.clone(),
         percentage,
     });
 
@@ -449,6 +444,10 @@ pub fn get_admin(env: Env) -> Result<Address, Error> {
 pub fn transfer_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), Error> {
     current_admin.require_auth();
     require_admin(&env, &current_admin)?;
+
+    if get_paused_status(&env) {
+        return Err(Error::ContractPaused);
+    }
 
     // Reject transfers to the zero address (Soroban does not have a literal
     // address(0), but callers must not pass the contract's own address as the
@@ -1338,6 +1337,39 @@ pub fn get_notification(
     load_notification(&env, &notification_id).ok_or(Error::NotFound)
 }
 
+/// Returns the stored details for a scheduled notification, restricted to the
+/// notification's creator or the contract admin.
+///
+/// Unlike [`get_notification`], which is a permissionless read, this variant
+/// rejects any authenticated caller outside the notification's permitted scope
+/// with [`Error::Unauthorized`] and an [`AuthorizationFailure`] event, so
+/// competing users cannot read one another's notification records. Unknown
+/// notifications still yield [`Error::NotFound`].
+///
+/// # Errors
+/// - `NotFound` if the notification is not tracked
+/// - `Unauthorized` if `caller` is neither the creator nor the admin
+pub fn get_notification_for(
+    env: Env,
+    notification_id: BytesN<32>,
+    caller: Address,
+) -> Result<ScheduledNotification, Error> {
+    caller.require_auth();
+
+    let notification = get_notification(env.clone(), notification_id)?;
+
+    let admin = get_admin(env.clone()).ok();
+    let is_creator = caller == notification.creator;
+    let is_admin = admin.as_ref().map_or(false, |a| caller == *a);
+
+    if !is_creator && !is_admin {
+        publish_authorization_failure(&env, &caller, "get_notification_for");
+        return Err(Error::Unauthorized);
+    }
+
+    Ok(notification)
+}
+
 /// Returns whether a tracked notification has expired. Errors with
 /// [`Error::NotFound`] if the notification is not tracked.
 pub fn is_notification_expired(env: Env, notification_id: BytesN<32>) -> Result<bool, Error> {
@@ -1872,6 +1904,25 @@ pub fn revoke_notification(
 // Audit Logging
 // ============================================================================
 
+/// Loads a tracked notification for an audit write, rejecting unknown, revoked,
+/// and expired notifications so audit records always reference a live record.
+fn load_auditable_notification(
+    env: &Env,
+    notification_id: &BytesN<32>,
+) -> Result<ScheduledNotification, Error> {
+    let notification = load_notification(env, notification_id).ok_or(Error::NotFound)?;
+
+    if is_revoked(&notification) {
+        return Err(Error::NotificationRevoked);
+    }
+
+    if is_expired(env, &notification) {
+        return Err(Error::NotificationExpired);
+    }
+
+    Ok(notification)
+}
+
 /// Appends an immutable [`AuditRecord`] to the on-chain audit log and emits an
 /// [`AuditRecordAppended`] event. The sequence number is auto-incremented.
 fn append_audit_record(
@@ -1948,7 +1999,8 @@ pub fn get_audit_records_for_notification(
 /// Records a delivery attempt for a notification in the audit log.
 ///
 /// This is a permissionless write so any authorised service (an off-chain
-/// relay, a keeper) can record that it attempted delivery.
+/// relay, a keeper) can record that it attempted delivery. Unknown, revoked,
+/// and expired notifications are rejected.
 pub fn record_delivery_attempt(
     env: Env,
     notification_id: BytesN<32>,
@@ -1960,11 +2012,15 @@ pub fn record_delivery_attempt(
         return Err(Error::ContractPaused);
     }
 
+    load_auditable_notification(&env, &notification_id)?;
+
     append_audit_record(&env, notification_id, AuditAction::DeliveryAttempt, actor);
     Ok(())
 }
 
 /// Records a delivery failure for a notification in the audit log.
+///
+/// Unknown, revoked, and expired notifications are rejected.
 pub fn record_delivery_failure(
     env: Env,
     notification_id: BytesN<32>,
@@ -1976,11 +2032,15 @@ pub fn record_delivery_failure(
         return Err(Error::ContractPaused);
     }
 
+    load_auditable_notification(&env, &notification_id)?;
+
     append_audit_record(&env, notification_id, AuditAction::DeliveryFailed, actor);
     Ok(())
 }
 
 /// Records that the recipient acknowledged a notification.
+///
+/// Unknown, revoked, and expired notifications are rejected.
 pub fn record_acknowledgment(
     env: Env,
     notification_id: BytesN<32>,
@@ -1992,6 +2052,8 @@ pub fn record_acknowledgment(
         return Err(Error::ContractPaused);
     }
 
+    load_auditable_notification(&env, &notification_id)?;
+
     append_audit_record(&env, notification_id, AuditAction::Acknowledged, actor);
     Ok(())
 }
@@ -2001,6 +2063,38 @@ pub fn record_acknowledgment(
 /// Returns [`Error::NotFound`] if the notification is not tracked.
 pub fn is_notification_revoked(env: Env, notification_id: BytesN<32>) -> Result<bool, Error> {
     let notification = get_notification(env, notification_id)?;
+    Ok(is_revoked(&notification))
+}
+
+/// Returns whether a scheduled notification has been revoked, restricted to the
+/// notification's creator or the contract admin.
+///
+/// The permissionless [`is_notification_revoked`] read is only appropriate when
+/// the caller has already been authorized elsewhere; this variant performs the
+/// same ownership check as [`get_notification_for`] so revocation status cannot
+/// be polled for another party's notification.
+///
+/// # Errors
+/// - `NotFound` if the notification is not tracked
+/// - `Unauthorized` if `caller` is neither the creator nor the admin
+pub fn is_notification_revoked_for(
+    env: Env,
+    notification_id: BytesN<32>,
+    caller: Address,
+) -> Result<bool, Error> {
+    caller.require_auth();
+
+    let notification = get_notification(env.clone(), notification_id)?;
+
+    let admin = get_admin(env.clone()).ok();
+    let is_creator = caller == notification.creator;
+    let is_admin = admin.as_ref().map_or(false, |a| caller == *a);
+
+    if !is_creator && !is_admin {
+        publish_authorization_failure(&env, &caller, "is_notification_revoked_for");
+        return Err(Error::Unauthorized);
+    }
+
     Ok(is_revoked(&notification))
 }
 

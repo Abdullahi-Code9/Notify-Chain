@@ -64,6 +64,7 @@ export class DiscordNotificationProvider implements NotificationProvider {
       const providerResponse = { statusCode: response.status };
 
       if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
         logger.warn('Discord provider: webhook responded with non-OK status', {
           requestId,
           targetRecipient: sanitizeCredentials(targetRecipient),
@@ -74,6 +75,10 @@ export class DiscordNotificationProvider implements NotificationProvider {
           success: false,
           degradedCapabilities,
           errorMessage: `HTTP ${response.status}: ${sanitizeCredentials(errorText)}`,
+          errorCode: `HTTP_${response.status}`,
+          statusCode: response.status,
+          providerMessageId,
+          providerResponse,
         };
       }
 
@@ -81,7 +86,7 @@ export class DiscordNotificationProvider implements NotificationProvider {
         requestId,
         targetRecipient: sanitizeCredentials(targetRecipient),
       });
-      return { success: true, degradedCapabilities };
+      return { success: true, degradedCapabilities, providerMessageId, providerResponse };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const sanitized = sanitizeCredentials(errorMessage);

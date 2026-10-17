@@ -568,15 +568,16 @@ fn test_confirm_delivery_is_idempotent_for_repeated_requests() {
         &NotificationPriority::Medium,
     );
 
-    // First confirmation performs the delivery.
+    // First confirmation performs the delivery and archives the record.
     client.confirm_notification_delivery(&id, &creator);
-    let first = client.get_notification(&id);
+    let first = client.get_archived_notification(&id);
 
     // Repeating the exact same request must not create a duplicate delivery
-    // nor mutate the persisted notification state.
-    client.confirm_notification_delivery(&id, &creator);
-    client.confirm_notification_delivery(&id, &creator);
-    let after_repeats = client.get_notification(&id);
+    // nor mutate the persisted archive state. Duplicates surface as a terminal
+    // `NotificationDelivered`/`NotFound` that callers treat as success.
+    assert!(client.try_confirm_notification_delivery(&id, &creator).is_err());
+    assert!(client.try_confirm_notification_delivery(&id, &creator).is_err());
+    let after_repeats = client.get_archived_notification(&id);
 
     assert_eq!(
         first, after_repeats,
@@ -604,18 +605,18 @@ fn test_delivery_idempotency_state_is_persisted() {
 
     client.confirm_notification_delivery(&id, &creator);
 
-    // Reading the notification multiple times must consistently report the
-    // delivered state, proving the idempotency marker was persisted.
-    let first_read = client.get_notification(&id);
-    let second_read = client.get_notification(&id);
+    // Reading the archived notification multiple times must consistently report
+    // the same delivered state, proving the idempotency marker was persisted.
+    let first_read = client.get_archived_notification(&id);
+    let second_read = client.get_archived_notification(&id);
     assert_eq!(
         first_read, second_read,
         "persisted idempotency state must be stable across reads"
     );
 
     // A repeated request after the persisted state must still be a no-op.
-    client.confirm_notification_delivery(&id, &creator);
-    let after_repeat = client.get_notification(&id);
+    assert!(client.try_confirm_notification_delivery(&id, &creator).is_err());
+    let after_repeat = client.get_archived_notification(&id);
     assert_eq!(
         first_read, after_repeat,
         "persisted idempotency state must survive repeated requests"
@@ -659,8 +660,8 @@ fn test_concurrent_duplicate_delivery_requests_are_safe() {
     );
 
     // The persisted state must be consistent after concurrent duplicates.
-    let final_state = client.get_notification(&id);
-    let reread_state = client.get_notification(&id);
+    let final_state = client.get_archived_notification(&id);
+    let reread_state = client.get_archived_notification(&id);
     assert_eq!(
         final_state, reread_state,
         "concurrent duplicate requests must leave consistent persisted state"

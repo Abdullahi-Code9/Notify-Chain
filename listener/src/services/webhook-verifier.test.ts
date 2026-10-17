@@ -15,7 +15,7 @@ import { WebhookReplayCache } from './webhook-replay-cache';
 
 jest.mock('../utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
+  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
 }));
 
 const mockLogger = logger as jest.Mocked<typeof logger>;
@@ -534,9 +534,6 @@ describe('verifyWebhookRequest — end-to-end request authentication', () => {
     // this test keeps exercising the key-swap path specifically.
     const ts = Math.floor(Date.now() / 1000).toString();
     const sig = computeWebhookSignature(payload, SECRETS[1].secret, ts);
-    const outcome = verifyWebhookRequest({
-    // Signed with key-beta's secret but presented as key-alpha
-    const sig = computeWebhookSignature(payload, SECRETS[1].secret);
     const outcome = await verifyWebhookRequest({
       headers: {
         'x-webhook-signature': sig,
@@ -594,8 +591,8 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     };
   }
 
-  it('REJECTS a request that carries no timestamp (would otherwise replay forever)', () => {
-    const outcome = verifyWebhookRequest({
+  it('REJECTS a request that carries no timestamp (would otherwise replay forever)', async () => {
+    const outcome = await verifyWebhookRequest({
       headers: signedHeaders(BODY, null),
       rawBody: BODY,
       secrets: SECRETS,
@@ -606,8 +603,8 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(outcome.errorCode).toBe('AUTH_MISSING_TIMESTAMP');
   });
 
-  it('ACCEPTS the same timestamp-less request when legacy mode is opted into', () => {
-    const outcome = verifyWebhookRequest({
+  it('ACCEPTS the same timestamp-less request when legacy mode is opted into', async () => {
+    const outcome = await verifyWebhookRequest({
       headers: signedHeaders(BODY, null),
       rawBody: BODY,
       secrets: SECRETS,
@@ -616,13 +613,13 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(outcome.authenticated).toBe(true);
   });
 
-  it('REJECTS a captured request replayed after the freshness window has passed', () => {
+  it('REJECTS a captured request replayed after the freshness window has passed', async () => {
     const realNow = Date.now;
     try {
       const ts = String(Math.floor(Date.now() / 1000));
       const headers = signedHeaders(BODY, ts);
 
-      const first = verifyWebhookRequest({
+      const first = await verifyWebhookRequest({
         headers,
         rawBody: BODY,
         secrets: SECRETS,
@@ -632,7 +629,7 @@ describe('Issue #853 — replay protection at the request boundary', () => {
 
       // Replay one hour later with the exact same captured headers.
       Date.now = () => realNow() + 60 * 60 * 1000;
-      const replay = verifyWebhookRequest({
+      const replay = await verifyWebhookRequest({
         headers,
         rawBody: BODY,
         secrets: SECRETS,
@@ -646,12 +643,12 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     }
   });
 
-  it('REJECTS a verbatim replay inside the freshness window via the replay cache', () => {
+  it('REJECTS a verbatim replay inside the freshness window via the replay cache', async () => {
     const replayCache = new WebhookReplayCache();
     const ts = String(Math.floor(Date.now() / 1000));
     const headers = signedHeaders(BODY, ts);
 
-    const first = verifyWebhookRequest({
+    const first = await verifyWebhookRequest({
       headers,
       rawBody: BODY,
       secrets: SECRETS,
@@ -661,7 +658,7 @@ describe('Issue #853 — replay protection at the request boundary', () => {
 
     // Same signature, no Idempotency-Key header — the pre-existing replay
     // defence the attacker would trivially bypass.
-    const second = verifyWebhookRequest({
+    const second = await verifyWebhookRequest({
       headers,
       rawBody: BODY,
       secrets: SECRETS,
@@ -677,18 +674,18 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     );
   });
 
-  it('replay cache does not reject a genuinely new request from the same key', () => {
+  it('replay cache does not reject a genuinely new request from the same key', async () => {
     const replayCache = new WebhookReplayCache();
     const ts = String(Math.floor(Date.now() / 1000));
 
-    const a = verifyWebhookRequest({
+    const a = await verifyWebhookRequest({
       headers: signedHeaders(BODY, ts),
       rawBody: BODY,
       secrets: SECRETS,
       replayCache,
     });
     const other = '{"action":"transfer","amount":20}';
-    const b = verifyWebhookRequest({
+    const b = await verifyWebhookRequest({
       headers: signedHeaders(other, ts),
       rawBody: other,
       secrets: SECRETS,
@@ -699,11 +696,11 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(b.authenticated).toBe(true);
   });
 
-  it('does not record invalid signatures in the replay cache', () => {
+  it('does not record invalid signatures in the replay cache', async () => {
     const replayCache = new WebhookReplayCache();
     const ts = String(Math.floor(Date.now() / 1000));
 
-    const bad = verifyWebhookRequest({
+    const bad = await verifyWebhookRequest({
       headers: signedHeaders(BODY, ts, 'some_other_secret'),
       rawBody: BODY,
       secrets: SECRETS,
@@ -712,7 +709,7 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(bad.authenticated).toBe(false);
 
     // The genuine request must still be accepted afterwards.
-    const good = verifyWebhookRequest({
+    const good = await verifyWebhookRequest({
       headers: signedHeaders(BODY, ts),
       rawBody: BODY,
       secrets: SECRETS,
@@ -721,9 +718,9 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(good.authenticated).toBe(true);
   });
 
-  it('REJECTS a non-integer timestamp instead of silently truncating it', () => {
+  it('REJECTS a non-integer timestamp instead of silently truncating it', async () => {
     const ts = `${Math.floor(Date.now() / 1000)}garbage`;
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: signedHeaders(BODY, ts),
       rawBody: BODY,
       secrets: SECRETS,
@@ -733,9 +730,9 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
   });
 
-  it('REJECTS a fractional timestamp', () => {
+  it('REJECTS a fractional timestamp', async () => {
     const ts = `${Math.floor(Date.now() / 1000)}.9`;
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: signedHeaders(BODY, ts),
       rawBody: BODY,
       secrets: SECRETS,
@@ -744,10 +741,10 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(outcome.errorCode).toBe('AUTH_TIMESTAMP_EXPIRED');
   });
 
-  it('accepts an uppercase hex signature (hex is case-insensitive)', () => {
+  it('accepts an uppercase hex signature (hex is case-insensitive)', async () => {
     const ts = String(Math.floor(Date.now() / 1000));
     const headers = signedHeaders(BODY, ts);
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: {
         ...headers,
         'x-webhook-signature': headers['x-webhook-signature'].toUpperCase(),
@@ -759,13 +756,13 @@ describe('Issue #853 — replay protection at the request boundary', () => {
     expect(outcome.authenticated).toBe(true);
   });
 
-  it('still rejects a genuine signature whose hex case was altered', () => {
+  it('still rejects a genuine signature whose hex case was altered', async () => {
     const ts = String(Math.floor(Date.now() / 1000));
     const headers = signedHeaders(BODY, ts);
     const tampered = headers['x-webhook-signature'].replace(/.$/, (c) =>
       c === 'a' ? 'b' : 'a'
     );
-    const outcome = verifyWebhookRequest({
+    const outcome = await verifyWebhookRequest({
       headers: { ...headers, 'x-webhook-signature': tampered },
       rawBody: BODY,
       secrets: SECRETS,

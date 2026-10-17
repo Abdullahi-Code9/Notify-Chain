@@ -1,5 +1,6 @@
 import type { RetryFailureType } from '../services/retry-policy';
 import type { CircuitBreakerConfig } from '../services/circuit-breaker';
+import type { PartialRetryBackoffConfig } from '../utils/retry-backoff-config';
 import * as StellarSDK from '@stellar/stellar-sdk';
 
 export interface NotificationProvider {
@@ -94,6 +95,8 @@ export interface Config {
   api?: ApiConfig;
   /** Dry-run mode: parse and validate events without persisting or delivering notifications. */
   dryRun?: boolean;
+  /** Circuit breaker configuration for RPC failure handling. */
+  circuitBreaker?: CircuitBreakerConfig;
 }
 
 /** Observability settings, sourced from LOG_LEVEL / LOG_FORMAT. */
@@ -234,6 +237,33 @@ export interface ExpirationConfig {
  */
 export interface BackfillConfig {
   /**
+   * When true, a backfill run is triggered once at startup before the live
+   * polling loop begins.
+   */
+  enabled?: boolean;
+  /**
+   * The earliest ledger from which to recover missed events (inclusive).
+   * Events at or after this ledger that are not yet in processed_events will
+   * be passed through the normal processing pipeline.
+   */
+  startLedger?: number;
+  /**
+   * The last ledger to include in the backfill window (inclusive).
+   * Defaults to the current network-tip ledger when not set.
+   */
+  endLedger?: number;
+  /**
+   * Maximum number of Stellar RPC pages to fetch per contract during the
+   * backfill.  Each page holds up to 200 events.  Defaults to 50.
+   */
+  maxPages?: number;
+  /**
+   * Upper bound on the total number of on-chain events processed per
+   * contract.  Acts as a safety rail against unexpectedly large windows.
+   * Defaults to 10 000.
+   */
+  maxEventsPerContract?: number;
+  /**
    * Maximum number of ledgers to replay from the network tip on a cold start.
    *
    * When the subscriber has no persisted cursor for a contract it would
@@ -244,7 +274,7 @@ export interface BackfillConfig {
    * Set to `0` to disable the limit and allow full historical replay
    * (the previous default behaviour).  Default: 10 000.
    */
-  maxLedgers: number;
+  maxLedgers?: number;
 }
 
 /**
@@ -260,4 +290,32 @@ export interface RpcRateLimitConfig {
   burstSize: number;
   /** Delay in ms to apply when throttled (default: 1000). */
   throttleDelayMs: number;
+}
+
+/** Configuration for fallback RPC endpoints and automatic failover. */
+export interface RpcFallbackConfig {
+  /** Array of fallback RPC URLs to try when primary fails */
+  fallbackUrls: string[];
+  /** Number of consecutive failures before marking endpoint unhealthy and failing over (default: 3) */
+  failureThreshold: number;
+  /** Cooldown duration in ms before attempting to reuse a failed endpoint (default: 60000) */
+  cooldownMs: number;
+  /** Timeout for RPC requests in milliseconds (default: 10000) */
+  requestTimeoutMs: number;
+  /** Maximum number of endpoint retries for a single operation across pool (default: pool size) */
+  maxRetries?: number;
+}
+
+/** Operational status metrics for an RPC endpoint */
+export interface RpcEndpointStatus {
+  url: string;
+  isPrimary: boolean;
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  consecutiveFailures: number;
+  totalRequests: number;
+  totalSuccesses: number;
+  totalFailures: number;
+  lastFailureTime: number | null;
+  lastSuccessTime: number | null;
+  lastError: string | null;
 }

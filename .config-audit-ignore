@@ -15,7 +15,9 @@
 
 # Vite environment variables are accessed through import.meta.env and may not
 # be directly referenced in source code but are used by the build process
-# VITE_STELLAR_NETWORK
+# Read via `import.meta.env?.VITE_STELLAR_NETWORK` in
+# dashboard/src/config/stellarNetwork.ts, which the usage scanner does not match.
+VITE_STELLAR_NETWORK
 # VITE_EVENTS_API_URL
 
 # Node.js runtime environment variable

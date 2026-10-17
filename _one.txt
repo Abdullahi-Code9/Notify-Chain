@@ -1,0 +1,42 @@
+﻿  ● WebhookDeliveryService › successful delivery (2xx) › returns success: true for a 200 response
+
+    TypeError: (0 , webhook_sender_1.isWebhookTimeoutError) is not a function
+
+    [0m [90m 150 |[39m       [36mconst[39m durationMs [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m 
+startMs[33m;[39m
+     [90m 151 |[39m       [36mconst[39m isDnsBlocked [33m=[39m err [36minstanceof[39m [33mError[39m 
+[33m&&[39m err[33m.[39mname [33m===[39m [32m'DnsRebindingError'[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 152 |[39m       [36mconst[39m isTimeout [33m=[39m 
+isWebhookTimeoutError(err)[33m;[39m
+     [90m     |[39m                                              [31m[1m^[22m[39m
+     [90m 153 |[39m       [36mconst[39m errorReason [33m=[39m isTimeout
+     [90m 154 |[39m         [33m?[39m [32m`Webhook request timed out after ${timeoutMs}ms`[39m
+     [90m 155 |[39m         [33m:[39m err [36minstanceof[39m [33mError[39m[0m
+
+      at WebhookDeliveryService.deliver (src/services/webhook-delivery-service.ts:152:46)
+      at Object.<anonymous> (src/services/webhook-delivery-service.test.ts:79:22)
+
+  ● WebhookDeliveryService › successful delivery (2xx) › returns success: true for a 201 response
+
+    TypeError: (0 , webhook_sender_1.isWebhookTimeoutError) is not a function
+
+    [0m [90m 150 |[39m       [36mconst[39m durationMs [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m 
+startMs[33m;[39m
+     [90m 151 |[39m       [36mconst[39m isDnsBlocked [33m=[39m err [36minstanceof[39m [33mError[39m 
+[33m&&[39m err[33m.[39mname [33m===[39m [32m'DnsRebindingError'[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 152 |[39m       [36mconst[39m isTimeout [33m=[39m 
+isWebhookTimeoutError(err)[33m;[39m
+     [90m     |[39m                                              [31m[1m^[22m[39m
+     [90m 153 |[39m       [36mconst[39m errorReason [33m=[39m isTimeout
+     [90m 154 |[39m         [33m?[39m [32m`Webhook request timed out after ${timeoutMs}ms`[39m
+     [90m 155 |[39m         [33m:[39m err [36minstanceof[39m [33mError[39m[0m
+
+      at WebhookDeliveryService.deliver (src/services/webhook-delivery-service.ts:152:46)
+      at Object.<anonymous> (src/services/webhook-delivery-service.test.ts:89:22)
+
+  ● WebhookDeliveryService › successful delivery (2xx) › logs an info message on successful delivery
+
+    TypeError: (0 , webhook_sender_1.isWebhookTimeoutError) is not a function
+
+    [0m [90m 150 |[39m       [36mconst[39m durationMs [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m 
+startMs[33m;[39m

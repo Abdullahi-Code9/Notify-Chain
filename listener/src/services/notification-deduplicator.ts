@@ -184,6 +184,15 @@ export class NotificationDeduplicator {
   }
 
   /**
+   * Reset the deduplicator to its initial state: empty cache, metrics, and events.
+   */
+  clear(): void {
+    this.seen.clear();
+    this.events.length = 0;
+    this.resetMetrics();
+  }
+
+  /**
    * Reset all metrics (useful for testing or metrics reporting).
    */
   resetMetrics(): void {

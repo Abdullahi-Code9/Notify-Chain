@@ -17,6 +17,8 @@ import {
   classifyHttpStatus,
 } from './retry-policy';
 import { startClaimLease } from './notification-claim-lease';
+import { RETRY_BACKOFF_DEFAULTS } from '../utils/retry-backoff-config';
+import type { RetryBackoffConfig } from '../utils/retry-backoff-config';
 
 export interface RetrySchedulerConfig {
   /** Whether the scheduler is enabled. */
@@ -73,7 +75,8 @@ export const RETRY_SCHEDULER_DEFAULTS: Readonly<Omit<RetrySchedulerConfig, 'back
   multiplier: 2,
   maxDelayMs: 60 * 60 * 1_000,
   jitter: true,
-webhookTimeoutMs: DEFAULT_WEBHOOK_TIMEOUT_MS,
+  backoff: RETRY_BACKOFF_DEFAULTS,
+  webhookTimeoutMs: DEFAULT_WEBHOOK_TIMEOUT_MS,
 };
 
 /**

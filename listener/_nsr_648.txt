@@ -1,0 +1,49 @@
+﻿diff --git a/listener/src/tests/notification-scheduler-refactored.test.ts b/listener/src/tests/notification-scheduler-refactored.test.ts
+index bce2ba2..9a44d50 100644
+--- a/listener/src/tests/notification-scheduler-refactored.test.ts
++++ b/listener/src/tests/notification-scheduler-refactored.test.ts
+@@ -306,34 +306,27 @@ describe('NotificationScheduler (Refactored)', () => {
+           .build()
+       );
+ 
+-      // 2. Create a notification in the past (overdue, pending)
+-      await repository.create(
++      // 2. Create a notification in the past that is currently PROCESSING but lock is expired
++      const staleId = await repository.create(
+         NotificationFixtureBuilder
+           .aScheduledNotificationInput()
+           .forImmediateExecution()
+           .build()
+       );
++      await repository.fetchAndLockPendingNotifications('processor-1', 30000, 10);
++      const pastLock = NotificationFixtureBuilder.dates.past(1000);
++      await db.run('UPDATE scheduled_notifications SET lock_expires_at = ? WHERE id = ?', [
++        pastLock.toISOString(),
++        staleId,
++      ]);
+ 
+-      // 3. Create a notification in the past that is currently PROCESSING but lock is expired
+-      const staleId = await repository.create(
++      // 3. Create a notification in the past (overdue, pending) - created AFTER locking to remain in PENDING status
++      await repository.create(
+         NotificationFixtureBuilder
+           .aScheduledNotificationInput()
+           .forImmediateExecution()
+           .build()
+       );
+-      const pastLock = NotificationFixtureBuilder.dates.past(1000);
+-      await db.run(
+-        `UPDATE scheduled_notifications
+-         SET status = ?, processor_id = ?, lock_expires_at = ?, processing_started_at = ?
+-         WHERE id = ?`,
+-        [
+-          NotificationStatus.PROCESSING,
+-          'processor-1',
+-          pastLock.toISOString(),
+-          pastLock.toISOString(),
+-          staleId,
+-        ]
+-      );
+ 
+       // Get stats BEFORE recovery
+       const stats = await repository.getStats();

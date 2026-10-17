@@ -1,7 +1,14 @@
-import { Config, ContractConfig, DiscordConfig, WebhookSecret, AppCleanupConfig, EventQueueConfig, RetrySchedulerOptions, AnalyticsConfig, ExpirationConfig, ApiKey, BackfillConfig, LoggingConfig, ApiConfig } from './types';
+import { Config, ContractConfig, DiscordConfig, WebhookSecret, AppCleanupConfig, EventQueueConfig, RetrySchedulerOptions, RetryPolicyOptions, AnalyticsConfig, ExpirationConfig, ApiKey, BackfillConfig, LoggingConfig, ApiConfig, RpcRateLimitConfig, RpcFallbackConfig } from './types';
 import { validateCorsOrigin, CorsValidationError } from './utils/cors-validator';
 import { validateSecrets } from './config/validate-secrets';
 import { ConfigurationSchemaValidator, APP_CONFIG_SCHEMA } from './config-schema';
+import {
+  RetryFailureType,
+  RETRY_FAILURE_TYPES,
+  DEFAULT_RETRYABLE_FAILURE_TYPES,
+  parseRetryableFailureTypes,
+} from './services/retry-policy';
+import type { CircuitBreakerConfig } from './services/circuit-breaker';
 import {
   SUPPORTED_LOG_FORMATS,
   SUPPORTED_LOG_LEVELS,
@@ -263,7 +270,6 @@ function loadAnalyticsConfig(): AnalyticsConfig {
 function loadRetrySchedulerConfig(policy: RetryPolicyOptions): RetrySchedulerOptions {
   return {
     enabled: trimEnv('RETRY_SCHEDULER_ENABLED') !== 'false',
-    webhookTimeoutMs: parseIntegerEnv('WEBHOOK_DELIVERY_TIMEOUT_MS', '10000'),
     pollIntervalMs: parseIntegerEnv('RETRY_SCHEDULER_POLL_INTERVAL_MS', '15000'),
     lockTimeoutMs: parseIntegerEnv('RETRY_SCHEDULER_LOCK_TIMEOUT_MS', '60000'),
     processorId: trimEnv('RETRY_SCHEDULER_PROCESSOR_ID'),
@@ -272,7 +278,7 @@ function loadRetrySchedulerConfig(policy: RetryPolicyOptions): RetrySchedulerOpt
     multiplier: parseIntegerEnv('RETRY_MULTIPLIER', '2'),
     maxDelayMs: parseIntegerEnv('RETRY_MAX_DELAY_MS', String(60 * 60 * 1000)),
     jitter: trimEnv('RETRY_JITTER') !== 'false',
-// Policy knobs are owned by the retry policy; fold them in so the scheduler
+    // Policy knobs are owned by the retry policy; fold them in so the scheduler
     // and the in-memory queues agree on the attempt budget and on which failure
     // types are worth retrying.
     maxAttempts: policy.maxAttempts,
@@ -883,7 +889,7 @@ export function validateConfig(config: Config): void {
 
   // ── Backfill ───────────────────────────────────────────────────────────────
   if (config.backfill) {
-    if (config.backfill.maxLedgers < 0) {
+    if ((config.backfill.maxLedgers ?? 0) < 0) {
       errors.push(
         `BACKFILL_MAX_LEDGERS must be >= 0 (0 = unlimited). ` +
           `(received: ${config.backfill.maxLedgers}).`,

@@ -43,7 +43,12 @@ const mockSendWebhook = sendWebhook as jest.MockedFunction<typeof sendWebhook>;
 // ---------------------------------------------------------------------------
 
 function makeResponse(status: number, ok = status >= 200 && status < 300): Response {
-  return { status, ok, text: jest.fn<() => Promise<string>>().mockResolvedValue('') } as unknown as Response;
+  return {
+    status,
+    ok,
+    headers: { get: () => null },
+    text: jest.fn<() => Promise<string>>().mockResolvedValue(''),
+  } as unknown as Response;
 }
 
 function makeAbortError(): Error {

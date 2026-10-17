@@ -15,9 +15,6 @@ import { sendOk, sendErr, sendJson, ErrorCode } from '../utils/response';
 import { normalizePaginationParams } from '../utils/pagination';
 import { handleApiError, ApiError } from './error-handler';
 import { applyRequestIdMiddleware } from '../middleware/request-id';
-import { TemplateService } from '../services/template-service';
-import { handleTemplateRoutes } from './template-routes';
-import { sendOk, sendErr, sendJson, ErrorCode } from '../utils/response';
 import { validateContentType, getMimeType } from '../middleware/content-type';
 import { NotificationHistoryService } from '../services/notification-history';
 import { SearchSuggestionService } from '../services/search-suggestion';
@@ -28,7 +25,13 @@ import {
   IdempotencyKeyReuseError,
 } from '../services/idempotency-key-service';
 import { WebhookReplayCache } from '../services/webhook-replay-cache';
-import { IdempotencyKeyService, IdempotencyKeyReuseError } from '../services/idempotency-key-service';
+import { authenticateApiKey, API_KEY_AUTH_MESSAGES } from './api-key-auth';
+import { parseLedgerRangeParams } from '../utils/ledger-range-validator';
+import { ValidationError, validationErrorBody } from '../utils/validation';
+import { DeliveryReceiptRepository } from '../services/delivery-receipt-repository';
+import { DeliveryReceiptStatus } from '../types/delivery-receipt';
+import { DataExportService } from '../services/data-export-service';
+import { validatePayload, Schemas } from '../middleware/request-validator';
 import { WebhookSecret, RateLimitConfig, ContractConfig } from '../types';
 import { RateLimiter } from './rate-limiter';
 import {
@@ -834,29 +837,14 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
           const secrets = options.webhookSecrets ?? [];
           const maxAgeSeconds = options.signatureExpirationSeconds ?? 300;
-        const secrets = options.webhookSecrets ?? [];
-        const maxAgeSeconds = options.signatureExpirationSeconds ?? 300;
-        
-        // Use default database for audit log or mock one if not available.
-        // Actually since SecurityAuditService requires Database, let's pass a real one.
-        const db = getDatabase();
-        const { SecurityAuditService } = require('../services/security-audit');
-        const auditService = new SecurityAuditService(db);
 
-        const auth = await verifyWebhookRequest({
-          headers: req.headers as Record<string, string | string[] | undefined>,
-          rawBody,
-          secrets,
-          sourceIp,
-          requestId,
-          correlationId,
-          maxAgeSeconds,
-          requireTimestamp: options.requireWebhookTimestamp !== false,
-          replayCache: webhookReplayCache,
-          auditService,
-        });
+          // Use default database for audit log or mock one if not available.
+          // Actually since SecurityAuditService requires Database, let's pass a real one.
+          const db = getDatabase();
+          const { SecurityAuditService } = require('../services/security-audit');
+          const auditService = new SecurityAuditService(db);
 
-          const auth = verifyWebhookRequest({
+          const auth = await verifyWebhookRequest({
             headers: req.headers as Record<string, string | string[] | undefined>,
             rawBody,
             secrets,
@@ -864,6 +852,9 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
             requestId,
             correlationId,
             maxAgeSeconds,
+            requireTimestamp: options.requireWebhookTimestamp !== false,
+            replayCache: webhookReplayCache,
+            auditService,
           });
 
           if (!auth.authenticated) {
@@ -1515,7 +1506,6 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
-    function isValidApiKey(apiKey: string | undefined, allowedKeys: Array<{ key: string; name?: string }> | undefined): boolean {
     function isValidApiKey(
       apiKey: string | undefined,
       allowedKeys: Array<{ key: string; name?: string }> | undefined,
@@ -1561,21 +1551,6 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
-    // Get notification delivery history endpoint
-    if (req.method === 'GET' && req.url?.startsWith('/api/notifications/history')) {
-      const apiKey = req.headers['x-api-key'] as string | undefined;
-      if (!isValidApiKey(apiKey, options.apiKeys)) {
-        sendErr(res, 401, 'Unauthorized: Invalid or missing API key', ErrorCode.UNAUTHORIZED);
-        return;
-      }
-
-      const url = new URL(req.url, 'http://localhost');
-      const limit = url.searchParams.get('limit')
-        ? parseInt(url.searchParams.get('limit')!, 10)
-        : undefined;
-      const offset = url.searchParams.get('offset')
-        ? parseInt(url.searchParams.get('offset')!, 10)
-        : undefined;
     // Get notification delivery history endpoint.
     // Matched on the rewritten pathname so /api/v1/notifications/history is
     // routed (and authenticated) the same as the unversioned path.

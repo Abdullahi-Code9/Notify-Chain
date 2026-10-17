@@ -50,7 +50,6 @@ async function parseBody(req: http.IncomingMessage): Promise<any> {
  * Send JSON response
  */
 function sendJson(res: http.ServerResponse, statusCode: number, data: any): void {
-  res.setHeader('Content-Type', 'application/json');
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }

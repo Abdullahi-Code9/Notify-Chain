@@ -1,0 +1,113 @@
+﻿
+> listener@1.0.0 typecheck
+> node ./node_modules/typescript/bin/tsc --noEmit
+
+src/api/events-server.ts(2,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/api/events-server.ts(12,10): error TS2300: Duplicate identifier 'TemplateService'.
+src/api/events-server.ts(13,10): error TS2300: Duplicate identifier 'handleTemplateRoutes'.
+src/api/events-server.ts(14,10): error TS2300: Duplicate identifier 'sendOk'.
+src/api/events-server.ts(14,18): error TS2300: Duplicate identifier 'sendErr'.
+src/api/events-server.ts(14,27): error TS2300: Duplicate identifier 'sendJson'.
+src/api/events-server.ts(14,37): error TS2300: Duplicate identifier 'ErrorCode'.
+src/api/events-server.ts(18,10): error TS2300: Duplicate identifier 'TemplateService'.
+src/api/events-server.ts(19,10): error TS2300: Duplicate identifier 'handleTemplateRoutes'.
+src/api/events-server.ts(20,10): error TS2300: Duplicate identifier 'sendOk'.
+src/api/events-server.ts(20,18): error TS2300: Duplicate identifier 'sendErr'.
+src/api/events-server.ts(20,27): error TS2300: Duplicate identifier 'sendJson'.
+src/api/events-server.ts(20,37): error TS2300: Duplicate identifier 'ErrorCode'.
+src/api/events-server.ts(27,3): error TS2300: Duplicate identifier 'IdempotencyKeyService'.
+src/api/events-server.ts(28,3): error TS2300: Duplicate identifier 'IdempotencyKeyReuseError'.
+src/api/events-server.ts(31,10): error TS2300: Duplicate identifier 'IdempotencyKeyService'.
+src/api/events-server.ts(31,33): error TS2300: Duplicate identifier 'IdempotencyKeyReuseError'.
+src/api/events-server.ts(121,31): error TS2304: Cannot find name 'DeliveryReceiptRepository'.
+src/api/events-server.ts(138,23): error TS2304: Cannot find name 'DataExportService'.
+src/api/events-server.ts(536,20): error TS2304: Cannot find name 'authenticateApiKey'.
+src/api/events-server.ts(546,25): error TS2304: Cannot find name 'API_KEY_AUTH_MESSAGES'.
+src/api/events-server.ts(632,17): error TS2304: Cannot find name 'parseLedgerRangeParams'.
+src/api/events-server.ts(634,28): error TS2304: Cannot find name 'ValidationError'.
+src/api/events-server.ts(635,76): error TS2304: Cannot find name 'validationErrorBody'.
+src/api/events-server.ts(835,17): error TS2451: Cannot redeclare block-scoped variable 'secrets'.
+src/api/events-server.ts(836,17): error TS2451: Cannot redeclare block-scoped variable 'maxAgeSeconds'.
+src/api/events-server.ts(837,15): error TS2451: Cannot redeclare block-scoped variable 'secrets'.
+src/api/events-server.ts(838,15): error TS2451: Cannot redeclare block-scoped variable 'maxAgeSeconds'.
+src/api/events-server.ts(846,15): error TS2451: Cannot redeclare block-scoped variable 'auth'.
+src/api/events-server.ts(859,17): error TS2451: Cannot redeclare block-scoped variable 'auth'.
+src/api/events-server.ts(1061,46): error TS2304: Cannot find name 'DataExportService'.
+src/api/events-server.ts(1063,30): error TS2304: Cannot find name 'validatePayload'.
+src/api/events-server.ts(1063,58): error TS2304: Cannot find name 'Schemas'.
+src/api/events-server.ts(1547,23): error TS2304: Cannot find name 'DeliveryReceiptStatus'.
+src/api/events-server.ts(1548,56): error TS2304: Cannot find name 'DeliveryReceiptStatus'.
+src/api/events-server.ts(1554,68): error TS2304: Cannot find name 'DeliveryReceiptStatus'.
+src/api/events-server.ts(1555,16): error TS7006: Parameter 'receipts' implicitly has an 'any' type.
+src/api/events-server.ts(1556,17): error TS7006: Parameter 'error' implicitly has an 'any' type.
+src/api/request-duration-logger.ts(55,34): error TS2345: Argument of type 'RequestDurationLogData' is not assignable to parameter of type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type 'RequestDurationLogData'.
+src/config.ts(263,43): error TS2304: Cannot find name 'RetryPolicyOptions'.
+src/config.ts(280,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/config.ts(297,35): error TS2304: Cannot find name 'RetryPolicyOptions'.
+src/config.ts(304,30): error TS2304: Cannot find name 'RetryFailureType'.
+src/config.ts(307,7): error TS2552: Cannot find name 'parseRetryableFailureTypes'. Did you mean 'retryableFailureTypes'?
+src/config.ts(308,11): error TS2552: Cannot find name 'DEFAULT_RETRYABLE_FAILURE_TYPES'. Did you mean 'retryableFailureTypes'?
+src/config.ts(376,36): error TS2304: Cannot find name 'RpcRateLimitConfig'.
+src/config.ts(385,57): error TS2304: Cannot find name 'RpcFallbackConfig'.
+src/config.ts(395,38): error TS2304: Cannot find name 'CircuitBreakerConfig'.
+src/config.ts(492,5): error TS2353: Object literal may only specify known properties, and 'circuitBreaker' does not exist in type 'Config'.
+src/config.ts(813,20): error TS2304: Cannot find name 'RETRY_FAILURE_TYPES'.
+src/config.ts(818,62): error TS2304: Cannot find name 'RETRY_FAILURE_TYPES'.
+src/examples/schedule-notification-example.ts(120,39): error TS2345: Argument of type 'NotificationStats' is not assignable to parameter of type 'LogContext'.
+  Index signature for type 'string' is missing in type 'NotificationStats'.
+src/index.ts(25,10): error TS2300: Duplicate identifier 'EventDeduplicationService'.
+src/index.ts(35,10): error TS2300: Duplicate identifier 'EventDeduplicationService'.
+src/scripts/replay-event.ts(18,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/discord-notification.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/discord-notification.ts(406,9): error TS1117: An object literal cannot have multiple properties with the same name.
+src/services/discord-notification.ts(430,9): error TS1117: An object literal cannot have multiple properties with the same name.
+src/services/event-normalization.ts(11,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/event-processing-queue.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/event-subscriber.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/historical-backfill-service.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/historical-backfill-service.ts(134,13): error TS2339: Property 'startLedger' does not exist on type 'BackfillConfig'.
+src/services/historical-backfill-service.ts(141,37): error TS2339: Property 'maxPages' does not exist on type 'BackfillConfig'.
+src/services/historical-backfill-service.ts(142,49): error TS2339: Property 'maxEventsPerContract' does not exist on type 'BackfillConfig'.
+src/services/historical-backfill-service.ts(185,29): error TS2339: Property 'endLedger' does not exist on type 'BackfillConfig'.
+src/services/historical-backfill-service.ts(186,34): error TS2339: Property 'endLedger' does not exist on type 'BackfillConfig'.
+src/services/historical-backfill-service.ts(206,42): error TS2339: Property 'maxPages' does not exist on type 'BackfillConfig'.
+src/services/historical-backfill-service.ts(207,43): error TS2339: Property 'maxEventsPerContract' does not exist on type 'BackfillConfig'.
+src/services/historical-backfill-service.ts(258,38): error TS7006: Parameter 'ev' implicitly has an 'any' type.
+src/services/indexing-reconciliation-engine.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/mock-notification-provider.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/mock-notification-transport.ts(9,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/notification-expiration.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/notification-retry-queue.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/notification-retry-queue.ts(22,13): error TS2304: Cannot find name 'PartialRetryBackoffConfig'.
+src/services/notification-retry-queue.ts(61,38): error TS2304: Cannot find name 'RetryBackoffConfig'.
+src/services/notification-retry-queue.ts(83,20): error TS2304: Cannot find name 'resolveRetryBackoffConfig'.
+src/services/notification-retry-queue.ts(83,46): error TS18048: 'options' is possibly 'undefined'.
+src/services/notification-retry-queue.ts(84,30): error TS18048: 'options' is possibly 'undefined'.
+src/services/notification-retry-queue.ts(85,28): error TS18048: 'options' is possibly 'undefined'.
+src/services/notification-retry-queue.ts(115,21): error TS2304: Cannot find name 'calculateBackoffDelay'.
+src/services/notification-retry-queue.ts(239,70): error TS2339: Property 'maxRetries' does not exist on type 'NotificationRetryQueue'.
+src/services/notification-retry-queue.ts(284,21): error TS2304: Cannot find name 'calculateBackoffDelay'.
+src/services/providers/discord-provider.ts(71,37): error TS2304: Cannot find name 'errorText'.
+src/services/providers/discord-provider.ts(76,73): error TS2304: Cannot find name 'errorText'.
+src/services/retry-scheduler.ts(65,14): error TS2741: Property 'backoff' is missing in type '{ enabled: true; pollIntervalMs: number; lockTimeoutMs: number; batchSize: number; baseDelayMs: number; multiplier: number; maxDelayMs: number; jitter: true; webhookTimeoutMs: number; }' but required in type 'Readonly<Omit<RetrySchedulerConfig, "backoff"> & { backoff: RetryBackoffConfig; }>'.
+src/services/retry-scheduler.ts(66,21): error TS2304: Cannot find name 'RetryBackoffConfig'.
+src/services/stellar-rpc-manager.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/stellar-rpc-manager.ts(3,10): error TS2305: Module '"../types"' has no exported member 'RpcEndpointStatus'.
+src/services/stellar-rpc-manager.ts(3,29): error TS2305: Module '"../types"' has no exported member 'RpcFallbackConfig'.
+src/services/subscription-event-emitter.ts(25,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/services/webhook-delivery-service.ts(151,13): error TS2451: Cannot redeclare block-scoped variable 'isTimeout'.
+src/services/webhook-delivery-service.ts(153,13): error TS2451: Cannot redeclare block-scoped variable 'isTimeout'.
+src/services/webhook-retry-helper.ts(73,7): error TS2304: Cannot find name 'PERMANENT_CLIENT_ERRORS'.
+src/services/webhook-retry-helper.ts(78,7): error TS2304: Cannot find name 'RETRYABLE_STATUS_CODES'.
+src/services/webhook-retry-helper.ts(142,45): error TS2554: Expected 0-2 arguments, but got 3.
+src/test-utils/notification-fixture-builder.ts(34,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/test-utils/notification-fixture-builder.ts(35,21): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/types/index.ts(3,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/types/index.ts(39,13): error TS2304: Cannot find name 'PartialRetryBackoffConfig'.
+src/types/index.ts(66,17): error TS2304: Cannot find name 'RpcFallbackConfig'.
+src/types/registry-event-input.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/utils/config-snapshot.ts(8,10): error TS2305: Module '"./redact"' has no exported member 'redactSensitiveData'.
+src/utils/event-utils.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.
+src/utils/json-logger-formatter.ts(9,10): error TS2305: Module '"./redact"' has no exported member 'redactSensitiveData'.
+src/utils/scval-format.ts(1,29): error TS2307: Cannot find module '@stellar/stellar-sdk' or its corresponding type declarations.

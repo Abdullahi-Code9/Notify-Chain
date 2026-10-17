@@ -1,0 +1,925 @@
+﻿cargo : [1m[32m   Compiling[0m serde_derive v1.0.228
+At line:15 char:3417
++ ... pgrep\bin'; cargo +1.85.0-x86_64-pc-windows-gnu test --manifest-path  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([1m[32m   Com...derive v1.0.228:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[1m[32m   Compiling[0m darling_macro v0.21.3
+[1m[32m   Compiling[0m generic-array v0.14.9
+[1m[32m   Compiling[0m der v0.7.10
+[1m[32m   Compiling[0m ark-ff-macros v0.4.2
+[1m[32m   Compiling[0m derivative v2.2.0
+[1m[32m   Compiling[0m thiserror-impl v1.0.69
+[1m[32m   Compiling[0m num-derive v0.4.2
+[1m[32m   Compiling[0m derive_arbitrary v1.3.2
+[1m[32m   Compiling[0m wasmparser-nostd v0.100.2
+[1m[32m   Compiling[0m curve25519-dalek-derive v0.1.1
+[1m[32m   Compiling[0m darling_macro v0.20.11
+[1m[32m   Compiling[0m darling v0.21.3
+[1m[32m   Compiling[0m soroban-builtin-sdk-macros v23.0.1
+[1m[32m   Compiling[0m arbitrary v1.3.2
+[1m[32m   Compiling[0m hex-literal v0.4.1
+[1m[32m   Compiling[0m heapless v0.8.0
+[1m[32m   Compiling[0m tempfile v3.25.0
+[1m[32m   Compiling[0m crypto-common v0.1.6
+[1m[32m   Compiling[0m block-buffer v0.10.4
+[1m[32m   Compiling[0m sec1 v0.7.3
+[1m[32m   Compiling[0m digest v0.10.7
+[1m[32m   Compiling[0m serde_with_macros v3.16.1
+[1m[32m   Compiling[0m crypto-bigint v0.5.5
+[1m[32m   Compiling[0m sha2 v0.10.9
+[1m[32m   Compiling[0m signature v2.2.0
+[1m[32m   Compiling[0m hmac v0.12.1
+[1m[32m   Compiling[0m ark-serialize v0.4.2
+[1m[32m   Compiling[0m thiserror v1.0.69
+[1m[32m   Compiling[0m curve25519-dalek v4.1.3
+[1m[32m   Compiling[0m rfc6979 v0.4.0
+[1m[32m   Compiling[0m ed25519 v2.2.3
+[1m[32m   Compiling[0m sha3 v0.10.8
+[1m[32m   Compiling[0m darling v0.20.11
+[1m[32m   Compiling[0m dtor v0.1.1
+[1m[32m   Compiling[0m macro-string v0.1.4
+[1m[32m   Compiling[0m ctor-proc-macro v0.0.6
+[1m[32m   Compiling[0m quick-error v1.2.3
+[1m[32m   Compiling[0m ark-ff v0.4.2
+[1m[32m   Compiling[0m bit-vec v0.8.0
+[1m[32m   Compiling[0m heck v0.5.0
+[1m[32m   Compiling[0m wait-timeout v0.2.1
+[1m[32m   Compiling[0m rand_chacha v0.9.0
+[1m[32m   Compiling[0m rusty-fork v0.3.1
+[1m[32m   Compiling[0m rand_xorshift v0.4.0
+[1m[32m   Compiling[0m ctor v0.5.0
+[1m[32m   Compiling[0m bit-set v0.8.0
+[1m[32m   Compiling[0m rand v0.9.4
+[1m[32m   Compiling[0m bytes-lit v0.0.5
+[1m[32m   Compiling[0m visibility v0.1.1
+[1m[32m   Compiling[0m regex-syntax v0.8.11
+[1m[32m   Compiling[0m ed25519-dalek v2.2.0
+[1m[32m   Compiling[0m serde v1.0.228
+[1m[32m   Compiling[0m bitflags v2.13.0
+[1m[32m   Compiling[0m unarray v0.1.4
+[1m[32m   Compiling[0m soroban-wasmi v0.31.1-soroban.20.0.1
+[1m[32m   Compiling[0m elliptic-curve v0.13.8
+[1m[32m   Compiling[0m ecdsa v0.16.9
+[1m[32m   Compiling[0m primeorder v0.13.6
+[1m[32m   Compiling[0m crate-git-revision v0.0.6
+[1m[32m   Compiling[0m schemars v0.8.22
+[1m[32m   Compiling[0m hex v0.4.3
+[1m[32m   Compiling[0m p256 v0.13.2
+[1m[32m   Compiling[0m k256 v0.13.4
+[1m[32m   Compiling[0m stellar-strkey v0.0.13
+[1m[32m   Compiling[0m stellar-xdr v23.0.0
+[1m[32m   Compiling[0m soroban-env-common v23.0.1
+[1m[32m   Compiling[0m stellar-strkey v0.0.16
+[1m[32m   Compiling[0m soroban-sdk v23.5.0
+[1m[32m   Compiling[0m proptest v1.11.0
+[1m[32m   Compiling[0m serde_with v3.16.1
+[1m[32m   Compiling[0m ark-poly v0.4.2
+[1m[32m   Compiling[0m ark-ec v0.4.2
+[1m[32m   Compiling[0m ark-bls12-381 v0.4.0
+[1m[32m   Compiling[0m soroban-spec v23.5.0
+[1m[32m   Compiling[0m soroban-env-macros v23.0.1
+[1m[32m   Compiling[0m soroban-spec-rust v23.5.0
+[1m[32m   Compiling[0m soroban-sdk-macros v23.5.0
+[1m[32m   Compiling[0m soroban-env-host v23.0.1
+[1m[32m   Compiling[0m soroban-ledger-snapshot v23.5.0
+[1m[32m   Compiling[0m hello-world v0.0.0 (C:\Users\NEW OWNER\Documents\drips\core foundry 
+941\Notify-Chain\contract\contracts\hello-world)
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `Address as _`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\audit_log_test.rs:15:30[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m15[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse soroban_sdk::testutils::{Address as _, 
+Events, Ledger};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m                              [0m[0m[1m[38;5;11m^^^^^^^^^^^^[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m   [0m[0m[1m[38;5;14m= [0m[0m[1m[38;5;15mnote[0m[0m: `#[warn(unused_imports)]` on by default[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `NotificationCategory`[0m
+[0m [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\batch_ack_test.rs:9:27[0m
+[0m  [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m9[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse crate::base::events::{NotificationCategory, 
+NotificationPriority};[0m
+[0m  [0m[0m[1m[38;5;14m|[0m[0m                           [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `Val`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\batch_ack_test.rs:14:69[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m14[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse soroban_sdk::{Address, BytesN, Env, String, 
+Symbol, TryFromVal, Val, Vec};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m                                                                     
+[0m[0m[1m[38;5;11m^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `Val`[0m
+[0m [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\batch_event_test.rs:6:47[0m
+[0m  [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m6[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse soroban_sdk::{BytesN, Symbol, TryFromVal, 
+Val};[0m
+[0m  [0m[0m[1m[38;5;14m|[0m[0m                                               [0m[0m[1m[38;5;11m^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `Address as _`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\batch_notification_test.rs:15:30[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m15[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse soroban_sdk::testutils::{Address as _, 
+Events, Ledger};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m                              [0m[0m[1m[38;5;11m^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `AutoShareContract`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\event_regression_test.rs:15:13[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m15[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse crate::{AutoShareContract, 
+AutoShareContractClient};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m             [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `vec`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\event_regression_test.rs:18:5[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m18[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m    vec, Address, BytesN, Env, String, Symbol, 
+TryIntoVal, Val, Vec,[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m     [0m[0m[1m[38;5;11m^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `Address as _`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\notification_lifetime_test.rs:21:30[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m21[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse soroban_sdk::testutils::{Address as _, 
+Ledger};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m                              [0m[0m[1m[38;5;11m^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `crate::base::errors::Error`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\notification_test.rs:18:5[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m18[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse crate::base::errors::Error;[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m     [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `soroban_sdk::Val`[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\payload_validation_test.rs:600:13[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m600[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m        use soroban_sdk::Val;[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m             [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `AutoShareContract`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\storage_optimization_test.rs:64:17[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m64[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m    use crate::{AutoShareContract, 
+AutoShareContractClient};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m                 [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused imports: `BytesN`, `Env`, and `String`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\storage_optimization_test.rs:65:57[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m65[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m    use soroban_sdk::{testutils::Address as _, 
+Address, BytesN, Env, String, Vec};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m                                                         
+[0m[0m[1m[38;5;11m^^^^^^[0m[0m  [0m[0m[1m[38;5;11m^^^[0m[0m  [0m[0m[1m[38;5;11m^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `crate::base::errors::Error`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\subscription_cancellation_test.rs:10:5[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m10[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse crate::base::errors::Error;[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m     [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `Address as _`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\subscription_cancellation_test.rs:15:30[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m15[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0muse soroban_sdk::testutils::{Address as _, 
+Events};[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m                              [0m[0m[1m[38;5;11m^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused import: `crate::base::errors::Error`[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\template_registry_test.rs:12:9[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m12[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m    use crate::base::errors::Error;[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m         [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:143:28[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m143[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            title: 
+String::from_slice(&soroban_sdk::Env::default(), "Test"),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                            [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m    [0m[0m[1m[38;5;14m= [0m[0m[1m[38;5;15mnote[0m[0m: `#[warn(deprecated)]` on by default[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:154:28[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m154[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            title: 
+String::from_slice(&soroban_sdk::Env::default(), ""),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                            [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:166:21[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m166[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            String::from_slice(&env, 
+&"a".repeat(MAX_METADATA_STRING_LENGTH as usize + 1));[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                     [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:180:21[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m180[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            String::from_slice(&env, 
+&"d".repeat(MAX_METADATA_STRING_LENGTH as usize + 1));[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                     [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:182:28[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m182[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            title: String::from_slice(&env, 
+"ok"),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                            [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:194:21[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m194[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            String::from_slice(&env, 
+&"u".repeat(MAX_METADATA_STRING_LENGTH as usize + 1));[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                     [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:196:28[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m196[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            title: String::from_slice(&env, 
+"ok"),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                            [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:211:31[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m211[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            let key = String::from_slice(&env, 
+core::str::from_utf8(&key_bytes).unwrap());[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                               [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:212:31[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m212[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            let val = String::from_slice(&env, 
+"v");[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                               [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:217:28[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m217[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            title: String::from_slice(&env, 
+"ok"),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                            [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:230:21[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m230[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            String::from_slice(&env, 
+"priority"),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                     [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:231:21[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m231[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            String::from_slice(&env, "high"),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                     [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:234:28[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m234[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            title: String::from_slice(&env, 
+"Alert"),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                            [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:235:39[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m235[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            description: 
+Some(String::from_slice(&env, "Body")),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                                       [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:236:36[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m236[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            data_uri: 
+Some(String::from_slice(&env, "ipfs://abc")),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                                    [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:250:31[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m250[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            let key = String::from_slice(&env, 
+core::str::from_utf8(&key_bytes).unwrap());[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                               [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:251:31[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m251[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            let val = String::from_slice(&env, 
+&"x".repeat(256));[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                               [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:256:28[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m256[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            title: String::from_slice(&env, 
+&"t".repeat(256)),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                            [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:257:39[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m257[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            description: 
+Some(String::from_slice(&env, &"d".repeat(256))),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                                       [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated associated function 
+`soroban_sdk::String::from_slice`: use from_str[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\base\metadata_validation.rs:258:36[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m258[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m            data_uri: 
+Some(String::from_slice(&env, &"u".repeat(256))),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m                                    [0m[0m[1m[38;5;11m^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: use of deprecated method `soroban_sdk::Env::register_contract`: use 
+`register`[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\batch_ack_test.rs:162:14[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m162[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m        &env.register_contract(None, 
+crate::AutoShareContract),[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m              [0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: unused variable: `caller`[0m
+[0m    [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\autoshare_logic.rs:1745:5[0m
+[0m     [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m1745[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m    caller: &Address,[0m
+[0m     [0m[0m[1m[38;5;14m|[0m[0m     [0m[0m[1m[38;5;11m^^^^^^[0m[0m [0m[0m[1m[38;5;11mhelp: if this 
+is intentional, prefix it with an underscore: `_caller`[0m
+[0m     [0m[0m[1m[38;5;14m|[0m
+[0m     [0m[0m[1m[38;5;14m= [0m[0m[1m[38;5;15mnote[0m[0m: `#[warn(unused_variables)]` on by default[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: variable does not need to be mutable[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\channel_logic.rs:108:9[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m108[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0m    let mut subscribers = load_subscribers(&env, 
+&channel_id);[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m         [0m[0m[1m[38;5;14m----[0m[0m[1m[38;5;11m^^^^^^^^^^^[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m         [0m[0m[1m[38;5;14m|[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m         [0m[0m[1m[38;5;14mhelp: remove this `mut`[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m    [0m[0m[1m[38;5;14m= [0m[0m[1m[38;5;15mnote[0m[0m: `#[warn(unused_mut)]` on by default[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: function `topics_of` is never used[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\archive_notification_test.rs:28:4[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m28[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0mfn topics_of(env: &Env, event_name: &str) -> 
+Option<Vec<Val>> {[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m    [0m[0m[1m[38;5;11m^^^^^^^^^[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m   [0m[0m[1m[38;5;14m= [0m[0m[1m[38;5;15mnote[0m[0m: `#[warn(dead_code)]` on by default[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: constant `ONE_HOUR` is never used[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\fuzz_test.rs:14:7[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m14[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0mconst ONE_HOUR: u64 = 3_600;[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m       [0m[0m[1m[38;5;11m^^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: function `data_of` is never used[0m
+[0m  [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\revocation_test.rs:56:4[0m
+[0m   [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m56[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0mfn data_of(env: &Env, event_name: &str) -> 
+Option<Val> {[0m
+[0m   [0m[0m[1m[38;5;14m|[0m[0m    [0m[0m[1m[38;5;11m^^^^^^^[0m
+
+[0m[1m[38;5;11mwarning[0m[0m[1m[38;5;15m: function `test_revoke_notification_while_contract_paused_fails` is 
+never used[0m
+[0m   [0m[0m[1m[38;5;14m--> [0m[0mcontracts\hello-world\src\tests\revocation_test.rs:244:4[0m
+[0m    [0m[0m[1m[38;5;14m|[0m
+[0m[1m[38;5;14m244[0m[0m [0m[0m[1m[38;5;14m|[0m[0m [0m[0mfn 
+test_revoke_notification_while_contract_paused_fails() {[0m
+[0m    [0m[0m[1m[38;5;14m|[0m[0m    
+[0m[0m[1m[38;5;11m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m:[0m `hello-world` (lib test) generated 42 warnings (run `cargo fix --lib -p hello-world 
+--tests` to apply 16 suggestions)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`test` 
+profile [unoptimized + debuginfo]]8;;\ target(s) in 5m 09s
+[1m[32m     Running[0m unittests src\lib.rs (contract\target\debug\deps\hello_world-d4fae4c6ce77434b.exe)
+
+running 502 tests
+test base::reputation::tests::test_reputation_score_calculation ... ok
+test base::reputation::tests::test_reputation_tier_classification ... ok
+test base::metadata_validation::tests::test_long_data_uri_invalid ... ok
+test base::metadata_validation::tests::test_long_description_invalid ... ok
+test base::metadata_validation::tests::test_long_title_invalid ... ok
+test base::metadata_validation::tests::test_empty_title_invalid ... ok
+test base::metadata_validation::tests::test_valid_metadata ... ok
+test base::reputation::tests::test_sender_reputation_tracking ... ok
+test base::metadata_validation::tests::test_valid_custom_fields ... ok
+test base::metadata_validation::tests::test_too_many_custom_fields_invalid ... ok
+test base::metadata_validation::tests::test_oversized_metadata_rejected ... ok
+test tests::access_control_test::admin_only::test_configure_notification_limits_unauthorized_emits_authorization_failure_event ... ok
+test tests::access_control_test::admin_only::test_pause_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_register_category_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_remove_supported_token_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_configure_notification_limits_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_pause_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_register_category_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_remove_supported_token_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_add_supported_token_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_add_supported_token_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_pause_random_group_creator_not_admin_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_configure_notification_limits_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_set_usage_fee_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_unpause_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_set_usage_fee_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_transfer_admin_authorized_succeeds ... ok
+test tests::access_control_test::admin_only::test_transfer_admin_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_withdraw_authorized_admin_succeeds ... ok
+test tests::access_control_test::admin_only::test_withdraw_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::admin_only::test_unpause_unauthorized_user_panics - should panic ... ok
+test tests::access_control_test::authorization_boundary::test_get_notification_cross_user_read_is_rejected ... ok
+test tests::access_control_test::authorization_boundary::test_extend_notification_expiry_cross_user_write_is_rejected ... ok
+test tests::access_control_test::authorization_boundary::test_get_notification_owner_can_read ... ok
+test tests::access_control_test::authorization_boundary::test_revoke_notification_cross_user_write_is_rejected ... ok
+test tests::access_control_test::authorization_boundary::test_get_notification_admin_can_read ... ok
+test tests::access_control_test::authorization_boundary::test_cancel_notification_cross_user_write_is_rejected ... ok
+test tests::access_control_test::authorization_boundary::test_ownership_validation_allows_owner_on_write ... ok
+test tests::access_control_test::authorization_boundary::test_ownership_validation_rejects_non_owner_on_write ... ok
+test tests::access_control_test::creator_only::test_deactivate_group_non_creator_panics - should panic ... ok
+test tests::access_control_test::creator_only::test_deactivate_group_creator_succeeds ... ok
+test tests::access_control_test::creator_only::test_add_group_member_non_creator_panics - should panic ... ok
+test tests::access_control_test::authorization_boundary::test_notification_ownership_is_recorded_on_schedule ... ok
+test tests::access_control_test::creator_only::test_add_group_member_creator_succeeds ... ok
+test tests::access_control_test::authorization_boundary::test_cross_user_access_emits_authorization_failure_event ... ok
+test tests::access_control_test::authorization_boundary::test_user_cannot_access_other_users_notification ... ok
+test tests::access_control_test::authorization_boundary::test_is_notification_revoked_cross_user_read_is_rejected ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_reduce_usage_admin_succeeds ... ok
+test tests::access_control_test::creator_only::test_activate_group_non_creator_panics - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_cancel_notification_unauthorized_emits_authorization_failure_event ... ok
+test tests::access_control_test::creator_only::test_update_members_non_creator_panics - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_reduce_usage_unrelated_user_panics - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_cancel_notification_unrelated_user_panics - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_extend_notification_expiry_admin_succeeds ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_cancel_notification_creator_succeeds ... ok
+test tests::access_control_test::creator_only::test_activate_group_creator_succeeds ... ok
+test tests::access_log_test::test_access_event_fails_for_nonexistent_notification - should panic ... ok
+test tests::access_log_test::test_cross_user_access_rejected_for_nonexistent_notification - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_extend_notification_expiry_unrelated_user_panics - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_revoke_notification_admin_succeeds ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_revoke_notification_creator_succeeds ... ok
+test tests::access_log_test::test_access_event_emitted_for_existing_notification ... ok
+test tests::access_log_test::test_cross_user_read_access_is_rejected - should panic ... ok
+test tests::access_log_test::test_owner_can_modify_own_notification ... ok
+test tests::access_log_test::test_resource_ownership_is_validated_for_non_owner - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_revoke_notification_unrelated_user_panics - should panic ... ok
+test tests::access_log_test::test_resource_ownership_is_validated_for_owner ... ok
+test tests::access_log_test::test_cross_user_write_access_is_rejected - should panic ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_extend_notification_expiry_creator_succeeds ... ok
+test tests::access_log_test::test_owner_cannot_modify_other_users_notification - should panic ... ok
+test tests::access_log_test::test_multiple_access_events_can_be_emitted ... ok
+test tests::archive_notification_test::test_expire_archives_notification ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_cancel_notification_admin_succeeds ... ok
+test tests::audit_log_test::test_acknowledgment_blocked_when_paused ... ok
+test tests::audit_log_test::test_acknowledgment_recorded ... ok
+test tests::audit_log_test::test_audit_log_immutability ... ok
+test tests::access_control_test::creator_or_admin_notifications::test_revoke_notification_unauthorized_emits_authorization_failure_event ... ok
+test tests::audit_log_test::test_audit_records_for_unknown_notification_returns_empty ... ok
+test tests::archive_notification_test::test_delivery_archives_notification ... ok
+test tests::audit_log_test::test_audit_sequence_numbers_increment ... ok
+test tests::audit_log_test::test_cancel_notification_creates_audit_record ... ok
+test tests::audit_log_test::test_delivery_attempt_blocked_when_paused ... ok
+test tests::archive_notification_test::test_cancel_archives_notification ... ok
+test tests::audit_log_test::test_schedule_notification_creates_audit_record ... ok
+test tests::audit_log_test::test_expire_notification_creates_audit_record ... ok
+test tests::audit_log_test::test_delivery_attempt_recorded ... ok
+test tests::audit_log_test::test_delivery_failure_blocked_when_paused ... ok
+test tests::audit_log_test::test_full_lifecycle_audit_trail ... ok
+test tests::autoshare_test::test_add_duplicate_token_fails - should panic ... ok
+test tests::audit_log_test::test_delivery_failure_recorded ... ok
+test tests::audit_log_test::test_schedule_notification_emits_audit_event ... ok
+test tests::audit_log_test::test_audit_records_filtered_by_notification_id ... ok
+test tests::audit_log_test::test_batch_schedule_creates_audit_records ... ok
+test tests::autoshare_test::test_add_and_get_supported_tokens ... ok
+test tests::autoshare_test::test_add_member_to_non_existent_group - should panic ... ok
+test tests::autoshare_test::test_activating_already_active_group_fails - should panic ... ok
+test tests::autoshare_test::test_add_supported_token_fails_already_exists - should panic ... ok
+test tests::autoshare_test::test_admin_initialization ... ok
+test tests::autoshare_test::test_add_group_member_success ... ok
+test tests::autoshare_test::test_admin_functions_after_transfer ... ok
+test tests::autoshare_test::test_admin_can_pause ... ok
+test tests::autoshare_test::test_admin_can_unpause ... ok
+test tests::autoshare_test::test_add_group_member_unauthorized - should panic ... ok
+test tests::autoshare_test::test_add_duplicate_member - should panic ... ok
+test tests::autoshare_test::test_add_multiple_members_sequentially ... ok
+test tests::autoshare_test::test_add_member_invalid_total_percentage - should panic ... ok
+test tests::autoshare_test::test_admin_can_deactivate_channel_even_if_not_creator ... ok
+test tests::autoshare_test::test_admin_can_withdraw ... ok
+test tests::autoshare_test::test_create_fails_name_too_long - should panic ... ok
+test tests::autoshare_test::test_create_fails_invalid_usage_count_zero - should panic ... ok
+test tests::autoshare_test::test_add_member_to_inactive_group ... ok
+test tests::autoshare_test::test_create_group_with_zero_usages_fails ... ok
+test tests::autoshare_test::test_create_fails_duplicate_member - should panic ... ok
+test tests::autoshare_test::test_create_fails_unsupported_token - should panic ... ok
+test tests::autoshare_test::test_create_fails_empty_members - should panic ... ok
+test tests::autoshare_test::test_get_admin ... ok
+test tests::autoshare_test::test_create_fails_invalid_percentage - should panic ... ok
+test tests::autoshare_test::test_creator_can_deactivate_group ... ok
+test tests::autoshare_test::test_deactivated_channel_blocks_new_subscriptions ... ok
+test tests::autoshare_test::test_get_all_groups_empty ... ok
+test tests::autoshare_test::test_creator_can_activate_group ... ok
+test tests::autoshare_test::test_create_and_get_success ... ok
+test tests::autoshare_test::test_get_contract_balance ... ok
+test tests::autoshare_test::test_duplicate_id_fails - should panic ... ok
+test tests::autoshare_test::test_get_groups_by_creator_empty ... ok
+test tests::autoshare_test::test_get_group_members_non_existent_group - should panic ... ok
+test tests::autoshare_test::test_create_group_with_payment ... ok
+test tests::autoshare_test::test_get_group_members_empty ... ok
+test tests::autoshare_test::test_initialize_with_admin ... ok
+test tests::autoshare_test::test_is_group_active_on_nonexistent_group_fails - should panic ... ok
+test tests::autoshare_test::test_get_group_members_multiple ... ok
+test tests::autoshare_test::test_get_all_groups_includes_inactive ... ok
+test tests::autoshare_test::test_deactivating_already_inactive_group_fails - should panic ... ok
+test tests::autoshare_test::test_group_created_as_active ... ok
+test tests::autoshare_test::test_get_non_existent_fails - should panic ... ok
+test tests::autoshare_test::test_is_group_member ... ok
+test tests::autoshare_test::test_is_group_member_non_existent_group - should panic ... ok
+test tests::autoshare_test::test_is_group_member_true ... ok
+test tests::autoshare_test::test_is_group_member_works_on_inactive_group ... ok
+test tests::autoshare_test::test_is_subscribed_false_after_channel_deactivated ... ok
+test tests::autoshare_test::test_is_subscribed_false_for_non_member ... ok
+test tests::autoshare_test::test_is_subscribed_on_nonexistent_channel_fails - should panic ... ok
+test tests::autoshare_test::test_is_subscribed_true_for_member ... ok
+test tests::autoshare_test::test_name_too_long_rejected - should panic ... ok
+test tests::autoshare_test::test_name_at_max_length_succeeds ... ok
+test tests::autoshare_test::test_deactivated_channel_preserves_historical_subscription_data ... ok
+test tests::autoshare_test::test_non_admin_cannot_withdraw - should panic ... ok
+test tests::autoshare_test::test_is_group_member_false ... ok
+test tests::autoshare_test::test_non_admin_cannot_set_usage_fee - should panic ... ok
+test tests::autoshare_test::test_is_subscribed_true_for_creator ... ok
+test tests::autoshare_test::test_remove_supported_token_fails_not_found - should panic ... ok
+test tests::autoshare_test::test_set_and_get_usage_fee ... ok
+test tests::autoshare_test::test_old_admin_cannot_withdraw_after_transfer - should panic ... ok
+test tests::autoshare_test::test_set_usage_fee_fails_zero - should panic ... ok
+test tests::autoshare_test::test_get_all_groups_multiple ... ok
+test tests::autoshare_test::test_remove_non_existent_token_fails - should panic ... ok
+test tests::autoshare_test::test_remove_supported_token ... ok
+test tests::autoshare_test::test_non_creator_cannot_activate - should panic ... ok
+test tests::autoshare_test::test_non_creator_cannot_deactivate - should panic ... ok
+test tests::autoshare_test::test_reduce_usage_fails_no_usages_remaining - should panic ... ok
+test tests::autoshare_test::test_get_groups_by_creator_multiple ... ok
+test tests::autoshare_test::test_status_change_on_nonexistent_group_fails - should panic ... ok
+test tests::autoshare_test::test_transfer_admin_unauthorized - should panic ... ok
+test tests::autoshare_test::test_transfer_admin ... ok
+test tests::autoshare_test::test_members_at_max_succeeds ... ok
+test tests::autoshare_test::test_withdraw_insufficient_balance - should panic ... ok
+test tests::autoshare_test::test_topup_fails_unsupported_token - should panic ... ok
+test tests::autoshare_test::test_update_members_fails_too_many - should panic ... ok
+test tests::autoshare_test::test_viewing_inactive_group_works ... ok
+test tests::autoshare_test::test_withdraw_negative_amount - should panic ... ok
+test tests::autoshare_test::test_too_many_members_rejected - should panic ... ok
+test tests::autoshare_test::test_withdraw_zero_amount - should panic ... ok
+test tests::autoshare_test::test_topup_fails_invalid_usage_count_zero - should panic ... ok
+test tests::autoshare_test::test_updating_inactive_group_fails - should panic ... ok
+test tests::batch_ack_test::test_acknowledge_revoked_fails - should panic ... ok
+test tests::autoshare_test::test_update_members_unauthorized - should panic ... ok
+test tests::autoshare_test::test_update_members_invalid_percentage - should panic ... ok
+test tests::batch_event_test::test_emit_batch_processing_completed_event ... ok
+test tests::autoshare_test::test_update_members_success ... ok
+test tests::batch_notification_test::test_batch_duplicate_id_rejected ... ok
+test tests::batch_ack_test::test_acknowledge_expired_fails - should panic ... ok
+test tests::batch_notification_test::test_batch_blocked_when_contract_paused ... ok
+test tests::batch_ack_test::test_acknowledge_unauthorized_fails - should panic ... ok
+test tests::batch_ack_test::test_acknowledge_multiple_notifications ... ok
+test tests::batch_notification_test::test_batch_all_or_nothing_on_validation_failure ... ok
+test tests::batch_notification_test::test_batch_empty_ids_rejected ... ok
+test tests::batch_notification_test::test_batch_exceeding_max_size_rejected ... ok
+test tests::batch_notification_test::test_batch_mismatched_lengths_rejected ... ok
+test tests::batch_notification_test::test_batch_id_already_scheduled_rejected ... ok
+test tests::batch_notification_test::test_batch_zero_ttl_rejected ... ok
+test tests::category_registry_test::test_default_registry_has_defaults ... ok
+test tests::category_registry_test::test_admin_can_register_category ... ok
+test tests::batch_notification_test::test_batch_creates_all_notifications ... ok
+test tests::batch_notification_test::test_batch_single_notification ... ok
+test tests::batch_notification_test::test_batch_emits_summary_event ... ok
+test tests::category_registry_test::test_registry_queries_multiple_categories ... ok
+test tests::category_registry_test::test_non_admin_cannot_register_category - should panic ... ok
+test tests::category_registry_test::test_duplicate_category_registration_rejected - should panic ... ok
+test tests::category_registry_test::test_register_category_emits_event ... ok
+test tests::batch_notification_test::test_batch_summary_event_has_notification_category ... ok
+test tests::batch_notification_test::test_batch_emits_per_notification_events ... ok
+test tests::batch_notification_test::test_batch_notifications_expire_correctly ... ok
+test tests::channel_subscription_test::test_batch_subscribe_empty_rejected ... ok
+test tests::channel_metadata_test::test_update_channel_metadata_emits_event ... ok
+test tests::channel_subscription_test::test_batch_subscribe_too_large_rejected ... ok
+test tests::channel_subscription_test::test_get_channel_creator_not_found ... ok
+test tests::channel_subscription_test::test_batch_subscribe_partial_failure_does_not_corrupt_state ... ok
+test tests::event_regression_test::test_admin_transferred_event_structure ... ok
+test tests::channel_subscription_test::test_batch_subscribe_multiple_channels ... ok
+test tests::channel_metadata_test::test_update_channel_metadata_stores_description ... ok
+test tests::channel_subscription_test::test_create_channel_stores_creator ... ok
+test tests::channel_subscription_test::test_subscriber_count_updates_on_subscribe_and_unsubscribe ... ok
+test tests::channel_subscription_test::test_duplicate_subscribe_rejected_count_unchanged ... ok
+test tests::batch_ack_test::benchmark_gas_usage ... ok
+test tests::event_regression_test::test_contract_paused_event_no_data_payload ... ok
+test tests::event_regression_test::test_event_names_are_stable ... ok
+test tests::channel_metadata_test::test_update_channel_metadata_rejects_non_creator - should panic ... ok
+test tests::event_regression_test::test_contract_paused_event_structure ... ok
+test tests::event_regression_test::test_admin_transferred_event_topic_ordering ... ok
+test tests::channel_metadata_test::test_update_channel_metadata_leaves_subscribers_intact ... ok
+test tests::event_regression_test::test_autoshare_created_event_topic_ordering ... ok
+test tests::event_regression_test::test_autoshare_updated_event_structure ... ok
+test tests::event_regression_test::test_autoshare_created_event_structure ... ok
+test tests::event_regression_test::test_contract_unpaused_event_structure ... ok
+test tests::expiration_test::test_cancellation_blocked_when_contract_paused ... ok
+test tests::event_regression_test::test_multiple_events_in_sequence ... ok
+test tests::event_regression_test::test_group_activated_event_structure ... ok
+test tests::event_regression_test::test_no_event_on_read_operations ... ok
+test tests::expiration_test::test_cancelling_untracked_id_still_emits_event ... ok
+test tests::event_regression_test::test_group_deactivated_event_structure ... ok
+test tests::expiration_test::test_cannot_extend_expired_notification - should panic ... ok
+test tests::expiration_test::test_cannot_extend_nonexistent_notification - should panic ... ok
+test tests::expiration_test::test_cannot_extend_by_zero_seconds - should panic ... ok
+test tests::expiration_test::test_expire_unknown_notification_fails ... ok
+test tests::expiration_test::test_duplicate_schedule_is_rejected ... ok
+test tests::event_regression_test::test_withdrawal_event_structure ... ok
+test tests::expiration_test::test_expire_after_deadline_emits_event_and_reaps_storage ... ok
+test tests::expiration_test::test_expire_before_deadline_is_rejected ... ok
+test tests::expiration_test::test_get_unknown_notification_fails ... ok
+test tests::expiration_test::test_extend_notification_expiry_by_unauthorized_user_fails - should panic ... ok
+test tests::expiration_test::test_extend_notification_expiry_by_creator ... ok
+test tests::expiration_test::test_extend_notification_expiry_while_contract_paused_fails - should panic ... ok
+test tests::expiration_test::test_schedule_emits_notification_scheduled_event ... ok
+test tests::expiration_test::test_zero_duration_is_rejected ... ok
+test tests::expiration_test::test_schedule_blocked_when_contract_paused ... ok
+test tests::event_regression_test::test_withdrawal_event_topic_ordering ... ok
+test tests::expiration_test::test_schedule_stores_created_and_expiry ... ok
+test tests::expiration_test::test_valid_notification_can_be_cancelled_and_emits_event ... ok
+test tests::expiration_test::test_cannot_extend_revoked_notification - should panic ... ok
+test tests::expiration_test::test_not_expired_before_deadline_and_expired_after ... ok
+test tests::extended_coverage_test::test_audit_record_appended_event_has_notification_category ... ok
+test tests::extended_coverage_test::test_audit_record_appended_carries_correct_action_topic ... ok
+test tests::extended_coverage_test::test_audit_log_seq_starts_at_one ... ok
+test tests::expiration_test::test_expired_notification_cannot_be_cancelled ... ok
+test tests::expiration_test::test_extend_notification_expiry_by_admin ... ok
+test tests::extended_coverage_test::test_audit_records_per_notification_match_full_log_subset ... ok
+test tests::extended_coverage_test::test_configure_limits_non_admin_rejected ... ok
+test tests::extended_coverage_test::test_configure_limits_valid_values_accepted ... ok
+test tests::extended_coverage_test::test_batch_ttl_overflow_rejected ... ok
+test tests::extended_coverage_test::test_configure_limits_min_greater_than_max_rejected ... ok
+test tests::extended_coverage_test::test_acknowledgment_on_expired_notification_rejected ... ok
+test tests::extended_coverage_test::test_category_registered_event_carries_category_and_priority ... ok
+test tests::extended_coverage_test::test_configure_limits_emits_event_with_admin_category ... ok
+test tests::extended_coverage_test::test_configure_limits_zero_batch_size_rejected ... ok
+test tests::extended_coverage_test::test_record_acknowledgment_on_unknown_id_rejected ... ok
+test tests::extended_coverage_test::test_notification_recalled_event_has_notification_category ... ok
+test tests::extended_coverage_test::test_notification_expired_event_has_notification_category ... ok
+test tests::extended_coverage_test::test_audit_log_grows_across_independent_notifications ... ok
+test tests::extended_coverage_test::test_ownership_transfer_events_have_admin_category ... ok
+test tests::extended_coverage_test::test_delivery_attempt_on_revoked_notification_rejected ... ok
+test tests::extended_coverage_test::test_record_delivery_attempt_on_unknown_id_rejected ... ok
+test tests::extended_coverage_test::test_schema_version_set_has_admin_category ... ok
+test tests::extended_coverage_test::test_record_delivery_failure_on_unknown_id_rejected ... ok
+test tests::extended_coverage_test::test_notification_accessed_has_notification_category ... ok
+test tests::extended_coverage_test::test_revoke_notification_event_has_notification_category ... ok
+test tests::extended_coverage_test::test_notification_delivered_event_has_notification_category ... ok
+test tests::metadata_validation_test::test_batch_rejects_empty_title - should panic ... ok
+test tests::metadata_validation_test::test_schedule_rejects_empty_title - should panic ... ok
+test tests::extended_coverage_test::test_subscription_cancelled_has_group_category ... ok
+test tests::metadata_validation_test::test_schedule_accepts_valid_title ... ok
+test tests::mock_token_test::test_insufficient_balance - should panic ... ok
+test tests::mock_token_test::test_invalid_mint_amount - should panic ... ok
+test tests::fuzz_test::fuzz_reduce_usage_never_exceeds_paid_total ... ok
+test tests::mock_token_test::test_invalid_transfer_amount - should panic ... ok
+test tests::notification_lifetime_test::test_batch_schedule_zero_lifetime_rejected ... ok
+test tests::notification_lifetime_test::test_batch_schedule_one_second_over_max_rejected ... ok
+test tests::mock_token_test::test_mock_token ... ok
+test tests::notification_lifetime_test::test_batch_schedule_at_max_lifetime_succeeds ... ok
+test tests::notification_lifetime_test::test_extend_by_absurd_seconds_rejected ... ok
+test tests::notification_lifetime_test::test_schedule_absurd_lifetime_rejected ... ok
+test tests::notification_lifetime_test::test_extend_to_exactly_max_lifetime_succeeds ... ok
+test tests::notification_lifetime_test::test_extend_one_second_over_max_lifetime_rejected ... ok
+test tests::notification_lifetime_test::test_schedule_at_max_lifetime_succeeds ... ok
+test tests::notification_lifetime_test::test_schedule_minimum_valid_lifetime_succeeds ... ok
+test tests::notification_lifetime_test::test_schedule_zero_lifetime_rejected ... ok
+test tests::notification_test::test_admin_transfer_event_has_admin_category ... ok
+test tests::notification_lifetime_test::test_extend_by_zero_seconds_rejected ... ok
+test tests::notification_test::test_batch_cancel_rejects_cross_user_access ... ok
+test tests::notification_lifetime_test::test_schedule_one_second_over_max_lifetime_rejected ... ok
+test tests::notification_lifetime_test::test_schedule_typical_one_hour_lifetime_succeeds ... ok
+test tests::notification_test::test_cancellation_blocked_when_contract_paused ... ok
+test tests::notification_test::test_cancellation_event_data_contains_notification_id ... ok
+test tests::notification_test::test_batch_schedule_notifications_stores_per_item_priority ... ok
+test tests::notification_test::test_cancellation_event_has_notification_category ... ok
+test tests::notification_test::test_cancellation_event_is_emitted ... ok
+test tests::notification_test::test_cancel_notification_rejects_cross_user_write ... ok
+test tests::notification_test::test_cancel_notification_allows_owner ... ok
+test tests::notification_test::test_confirm_delivery_is_idempotent_for_repeated_requests ... ok
+test tests::notification_test::test_confirm_delivery_rejects_cross_user_write ... ok
+test tests::notification_test::test_created_event_backward_compatible_shape ... ok
+test tests::notification_test::test_created_event_has_group_category ... ok
+test tests::notification_test::test_cancellation_event_topic_shape ... ok
+test tests::notification_test::test_concurrent_duplicate_delivery_requests_are_safe ... ok
+test tests::notification_test::test_get_notification_rejects_cross_user_read ... ok
+test tests::notification_test::test_delivery_idempotency_state_is_persisted ... ok
+test tests::notification_test::test_events_can_be_filtered_by_category ... ok
+test tests::notification_test::test_multiple_cancellations_emit_distinct_events ... ok
+test tests::notification_test::test_deactivate_and_activate_events_have_group_category ... ok
+test tests::batch_notification_test::test_batch_exactly_max_size_accepted ... ok
+test tests::notification_test::test_pause_and_unpause_events_have_admin_category ... ok
+test tests::notification_test::test_created_group_stores_standard_priority ... ok
+test tests::notification_test::test_recall_notification_emits_event_for_sender ... ok
+test tests::notification_test::test_recall_notification_rejects_cross_user_write ... ok
+test tests::notification_test::test_recall_notification_rejects_after_delivery_confirmation ... ok
+test tests::notification_test::test_recall_notification_rejects_unauthorized_sender ... ok
+test tests::notification_test::test_updated_event_has_group_category ... ok
+test tests::notification_test::test_withdrawal_event_has_financial_category ... ok
+test tests::notification_validation_test::test_activate_already_active_group_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_activate_group_while_paused_is_rejected - should panic ... ok
+test tests::notification_test::test_notification_ownership_is_recorded_and_enforced ... ok
+test tests::notification_validation_test::test_create_name_one_over_max_length_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_create_with_unsupported_token_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_create_zero_usage_count_is_rejected - should panic ... ok
+test tests::notification_test::test_schedule_notification_event_carries_assigned_priority ... ok
+test tests::notification_validation_test::test_create_payload_persisted_correctly_after_event ... ok
+test tests::notification_validation_test::test_add_supported_token_duplicate_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_remove_supported_token_not_found_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_reduce_usage_nonexistent_group_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_set_usage_fee_by_non_admin_is_rejected - should panic ... ok
+test tests::notification_test::test_schedule_notification_stores_assigned_priority ... ok
+test tests::fuzz_test::fuzz_notification_zero_ttl_rejected ... ok
+test tests::notification_validation_test::test_create_name_at_max_length_is_accepted ... ok
+test tests::notification_validation_test::test_reduce_usage_below_zero_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_set_usage_fee_zero_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_topup_nonexistent_group_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_topup_zero_additional_usages_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_topup_unsupported_token_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_unauthorized_activate_emits_authorization_failure_with_admin_category - should panic ... ok
+test tests::notification_validation_test::test_deactivate_already_inactive_group_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_unauthorized_deactivate_emits_authorization_failure_with_admin_category - should panic ... ok
+test tests::notification_validation_test::test_deactivate_group_while_paused_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_update_members_duplicate_address_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_update_members_empty_list_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_unauthorized_update_emits_authorization_failure_with_admin_category - should panic ... ok
+test tests::notification_validation_test::test_update_members_inactive_group_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_update_members_nonexistent_group_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_update_members_percentages_sum_to_99_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_update_members_51_members_is_rejected - should panic ... ok
+test tests::fuzz_test::fuzz_paused_contract_blocks_group_creation ... ok
+test tests::notification_validation_test::test_update_members_single_member_100_percent_is_valid ... ok
+test tests::notification_validation_test::test_withdrawal_negative_amount_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_update_members_while_paused_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_update_members_valid_payload_emits_group_category ... ok
+test tests::notification_validation_test::test_update_members_percentages_sum_to_101_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_withdrawal_zero_amount_is_rejected - should panic ... ok
+test tests::notification_validation_test::test_withdrawal_exceeds_balance_is_rejected - should panic ... ok
+test tests::notification_version_test::test_current_notification_version_is_documented ... ok
+test tests::ownership_transfer_test::test_current_owner_unchanged_until_acceptance ... ok
+test tests::ownership_transfer_test::test_get_pending_owner_returns_none_initially ... ok
+test tests::ownership_transfer_test::test_initiate_and_accept_ownership_transfer ... ok
+test tests::ownership_transfer_test::test_accept_ownership_fails_when_no_transfer_pending - should panic ... ok
+test tests::ownership_transfer_test::test_new_owner_can_exercise_admin_rights_after_transfer ... ok
+test tests::ownership_transfer_test::test_pending_owner_cleared_after_acceptance ... ok
+test tests::notification_version_test::test_batch_scheduled_notifications_include_version ... ok
+test tests::ownership_transfer_test::test_pending_owner_set_after_initiation ... ok
+test tests::ownership_transfer_test::test_self_transfer_rejected_by_initiate - should panic ... ok
+test tests::ownership_transfer_test::test_transfer_admin_non_owner_rejected - should panic ... ok
+test tests::notification_validation_test::test_withdrawal_event_carries_correct_amount_and_financial_category ... ok
+test tests::ownership_transfer_test::test_non_owner_cannot_initiate_ownership_transfer - should panic ... ok
+test tests::ownership_transfer_test::test_wrong_address_cannot_accept_ownership - should panic ... ok
+test tests::notification_version_test::test_scheduled_notification_includes_version ... ok
+test tests::ownership_transfer_test::test_owner_can_change_pending_owner_before_acceptance ... ok
+test tests::pause_test::test_get_paused_status_view_works_before_admin_initialization ... ok
+test tests::notification_validation_test::test_update_members_exactly_50_members_is_valid ... ok
+test tests::ownership_transfer_test::test_transfer_admin_still_works ... ok
+test tests::ownership_transfer_test::test_transfer_admin_rejects_self_transfer - should panic ... ok
+test tests::pause_test::test_initial_state_is_unpaused_after_deployment ... ok
+test tests::pause_test::test_admin_can_pause ... ok
+test tests::pause_test::test_non_admin_pause_returns_unauthorized_error ... ok
+test tests::pause_test::test_admin_can_unpause ... ok
+test tests::pause_test::test_non_admin_unpause_returns_unauthorized_error ... ok
+test tests::pause_test::test_pause_emits_event_with_admin_actor ... ok
+test tests::pause_test::test_paused_status_returned_correctly ... ok
+test tests::pause_test::test_add_member_returns_contract_paused_error_when_paused ... ok
+test tests::pause_test::test_repeated_state_transitions_active_paused_active_paused ... ok
+test tests::pause_test::test_pause_already_paused_returns_already_paused_error ... ok
+test tests::pause_test::test_unpause_already_active_returns_not_paused_error ... ok
+test tests::pause_test::test_transfer_admin_returns_contract_paused_error_when_paused ... ok
+test tests::pause_test::test_unpause_emits_event_with_admin_actor ... ok
+test tests::pause_test::test_read_functions_work_when_paused ... ok
+test tests::pause_test::test_create_returns_contract_paused_error_when_paused ... ok
+test tests::pause_test::test_deactivate_group_returns_contract_paused_error_when_paused ... ok
+test tests::payload_validation_test::test_admin_transfer_has_critical_priority ... ok
+test tests::pause_test::test_update_members_returns_contract_paused_error_when_paused ... ok
+test tests::pause_test::test_operations_work_after_unpause ... ok
+test tests::payload_validation_test::test_create_rejects_duplicate_id ... ok
+test tests::payload_validation_test::test_admin_events_have_admin_category ... ok
+test tests::payload_validation_test::test_create_rejects_unsupported_token ... ok
+test tests::payload_validation_test::test_consumer_can_filter_by_category ... ok
+test tests::payload_validation_test::test_create_rejects_name_over_max_length ... ok
+test tests::pause_test::test_topup_subscription_returns_contract_paused_error_when_paused ... ok
+test tests::pause_test::test_state_preserved_after_unpause_cycle ... ok
+test tests::payload_validation_test::test_schedule_rejects_duplicate_id ... ok
+test tests::payload_validation_test::test_create_rejects_zero_usage_count ... ok
+test tests::payload_validation_test::test_financial_events_have_financial_category ... ok
+test tests::payload_validation_test::test_notification_events_have_notification_category ... ok
+test tests::fuzz_test::fuzz_notification_ttl_positive_always_schedules ... ok
+test tests::payload_validation_test::test_group_events_have_group_category ... ok
+test tests::payload_validation_test::test_ttl_of_one_second_is_valid ... ok
+test tests::payload_validation_test::test_usage_fee_boundary_one_is_valid ... ok
+test tests::payload_validation_test::test_single_member_at_100_percent_is_valid ... ok
+test tests::preferences_test::preferences_tests::test_other_user_cannot_set_channel_preference - should panic ... ok
+test tests::payload_validation_test::test_schedule_rejects_overflow_ttl ... ok
+test tests::payload_validation_test::test_update_members_rejects_duplicate_addresses ... ok
+test tests::payload_validation_test::test_usage_fee_zero_is_rejected ... ok
+test tests::preferences_test::preferences_tests::test_get_preferences_returns_defaults_for_new_user ... ok
+test tests::payload_validation_test::test_update_members_rejects_empty_list ... ok
+test tests::payload_validation_test::test_schedule_rejects_zero_ttl ... ok
+test tests::payload_validation_test::test_every_event_carries_category_and_priority ... ok
+test tests::preferences_test::preferences_tests::test_set_category_preference_disables_payment_notifications ... ok
+test tests::preferences_test::preferences_tests::test_set_category_preference_disables_system_alerts ... ok
+test tests::preferences_test::preferences_tests::test_reset_preferences_restores_all_defaults ... ok
+test tests::preferences_test::preferences_tests::test_set_channel_preference_disables_email ... ok
+test tests::payload_validation_test::test_update_members_rejects_percentages_not_summing_to_100 ... ok
+test tests::preferences_test::preferences_tests::test_set_preferences_updates_channels_and_categories ... ok
+test tests::preferences_test::preferences_tests::test_ui_can_read_all_channel_states ... ok
+test tests::preferences_test::preferences_tests::test_set_preferences_emits_channel_events_for_each_channel ... ok
+test tests::revocation_test::test_cannot_cancel_revoked_notification - should panic ... ok
+test tests::payload_validation_test::test_update_members_rejects_over_max_members ... ok
+test tests::revocation_test::test_cannot_revoke_nonexistent_notification - should panic ... ok
+test tests::preferences_test::preferences_tests::test_preferences_are_per_recipient ... ok
+test tests::preferences_test::preferences_tests::test_preferences_persist_after_page_refresh ... ok
+test tests::revocation_test::test_cannot_revoke_expired_notification - should panic ... ok
+test tests::preferences_test::preferences_tests::test_set_channel_preference_emits_channel_preference_updated ... ok
+test tests::revocation_test::test_is_notification_revoked_after_revocation ... ok
+test tests::revocation_test::test_revocation_stores_timestamp ... ok
+test tests::revocation_test::test_cannot_expire_revoked_notification - should panic ... ok
+test tests::revocation_test::test_revoke_event_has_notification_category ... ok
+test tests::revocation_test::test_revoke_notification_by_admin ... ok
+test tests::preferences_test::preferences_tests::test_set_channel_preference_re_enables_channel ... ok
+test tests::revocation_test::test_revoke_notification_by_creator ... ok
+test tests::schema_version_test::test_is_version_supported_returns_false_for_zero ... ok
+test tests::schema_version_test::test_is_version_supported_returns_true_for_valid ... ok
+test tests::schema_version_test::test_schema_version_default_is_zero ... ok
+test tests::revocation_test::test_cannot_revoke_already_revoked_notification - should panic ... ok
+test tests::schema_version_test::test_set_schema_version_previous_version_tracked ... ok
+test tests::revocation_test::test_revoke_notification_emits_event ... ok
+test tests::schema_version_test::test_set_schema_version_requires_admin - should panic ... ok
+test tests::schema_version_test::test_is_version_supported_returns_false_for_future ... ok
+test tests::schema_version_test::test_set_schema_version_rejects_zero - should panic ... ok
+test tests::schema_version_test::test_set_schema_version_stores_and_emits ... ok
+test tests::storage_optimization_test::storage_optimization_tests::test_instance_storage_admin_operations ... ok
+test tests::schema_version_test::test_set_schema_version_rejects_unsupported_version - should panic ... ok
+test tests::storage_optimization_test::storage_optimization_tests::test_instance_storage_pause_flag ... ok
+test tests::revocation_test::test_revoke_event_has_high_priority ... ok
+test tests::revocation_test::test_revoke_by_unauthorized_user_fails - should panic ... ok
+test tests::revocation_test::test_revoked_notification_still_queryable ... ok
+test tests::storage_optimization_test::storage_optimization_tests::test_is_group_member_uses_embedded_storage ... ok
+test tests::storage_optimization_test::storage_optimization_tests::test_members_embedded_in_details ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_emits_event ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_event_data_contains_cancelled_at ... ok
+test tests::storage_optimization_test::storage_optimization_tests::test_instance_storage_usage_fee ... ok
+test tests::storage_optimization_test::storage_optimization_tests::test_instance_storage_supported_tokens ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_blocked_when_paused - should panic ... ok
+test tests::storage_optimization_test::storage_optimization_tests::test_update_members_single_write_consistency ... ok
+test tests::template_registry_test::template_registry_tests::test_get_template_panics_for_nonexistent_id - should panic ... ok
+test tests::template_registry_test::template_registry_tests::test_duplicate_registration_panics - should panic ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_event_topic_shape ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_rejects_already_inactive_group - should panic ... ok
+test tests::template_registry_test::template_registry_tests::test_non_owner_cannot_update_template - should panic ... ok
+test tests::template_registry_test::template_registry_tests::test_multiple_templates_are_independent ... ok
+test tests::template_registry_test::template_registry_tests::test_register_with_empty_content_panics - should panic ... ok
+test tests::template_registry_test::template_registry_tests::test_register_template_succeeds ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_unknown_group_panics - should panic ... ok
+test tests::template_registry_test::template_registry_tests::test_register_with_name_too_long_panics - should panic ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_by_member ... ok
+test tests::template_registry_test::template_registry_tests::test_registered_template_can_be_retrieved ... ok
+test tests::test_utils_test::test_create_zero_users ... ok
+test tests::template_registry_test::template_registry_tests::test_update_nonexistent_template_panics - should panic ... ok
+test tests::template_registry_test::template_registry_tests::test_template_exists_returns_false_for_unknown_id ... ok
+test tests::template_registry_test::template_registry_tests::test_update_emits_template_updated_event ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_deactivates_group ... ok
+test tests::template_registry_test::template_registry_tests::test_owner_can_update_template ... ok
+test tests::template_registry_test::template_registry_tests::test_register_emits_template_registered_event ... ok
+test tests::subscription_cancellation_test::test_cancel_subscription_rejects_non_member - should panic ... ok
+test tests::version_test::test_version ... ok
+test tests::test_utils_test::test_mock_token_helpers ... ok
+test tests::test_utils_test::test_setup_test_env ... ok
+test tests::test_utils_test::test_autoshare_helpers ... ok
+test tests::template_registry_test::template_registry_tests::test_template_exists_returns_true_for_registered_id ... ok
+test tests::fuzz_test::fuzz_zero_usage_count_always_rejected ... ok
+test tests::fuzz_test::fuzz_member_percentages_sum_to_100_succeed ... ok
+
+test result: ok. 502 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.38s
+

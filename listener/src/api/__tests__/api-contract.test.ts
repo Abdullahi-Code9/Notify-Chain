@@ -49,7 +49,7 @@ jest.mock('../../store/event-registry', () => ({
 // Mock logger
 jest.mock('../../utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
+  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
   sanitizeUrl: jest.fn((url: string) => url),
 }));
 

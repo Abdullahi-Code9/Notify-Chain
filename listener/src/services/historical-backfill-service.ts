@@ -131,7 +131,7 @@ export class HistoricalBackfillService {
       };
     }
 
-    const { startLedger } = this.backfillConfig;
+    const startLedger = this.backfillConfig.startLedger ?? 1;
 
     logger.info('Historical backfill starting', {
       requestId,

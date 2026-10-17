@@ -1,8 +1,10 @@
 -- Notification Templates Database Schema
 -- SQLite schema for storing reusable notification templates with variable placeholders
 
--- Main table for notification templates
-CREATE TABLE IF NOT EXISTS notification_templates (
+-- Main table for channel notification templates.
+-- NOTE: named `channel_templates` rather than `notification_templates` so it
+-- coexists with the audited template table defined in schema.sql (TEXT id).
+CREATE TABLE IF NOT EXISTS channel_templates (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   
   -- Template identification
@@ -34,17 +36,17 @@ CREATE TABLE IF NOT EXISTS notification_templates (
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_templates_unique_key 
-  ON notification_templates(unique_key);
+  ON channel_templates(unique_key);
 
 CREATE INDEX IF NOT EXISTS idx_templates_channel_type 
-  ON notification_templates(channel_type);
+  ON channel_templates(channel_type);
 
 CREATE INDEX IF NOT EXISTS idx_templates_active 
-  ON notification_templates(is_active) 
+  ON channel_templates(is_active) 
   WHERE is_active = 1;
 
 CREATE INDEX IF NOT EXISTS idx_templates_created_at 
-  ON notification_templates(created_at DESC);
+  ON channel_templates(created_at DESC);
 
 -- Template usage history (for analytics)
 CREATE TABLE IF NOT EXISTS template_usage_log (
@@ -56,7 +58,7 @@ CREATE TABLE IF NOT EXISTS template_usage_log (
   status VARCHAR(50),                       -- 'SUCCESS', 'FAILED'
   error_message TEXT,                       -- Error details if failed
   
-  FOREIGN KEY (template_id) REFERENCES notification_templates(id) ON DELETE CASCADE
+  FOREIGN KEY (template_id) REFERENCES channel_templates(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_log_template_id 
@@ -67,10 +69,10 @@ CREATE INDEX IF NOT EXISTS idx_usage_log_rendered_at
 
 -- Trigger to update updated_at timestamp
 CREATE TRIGGER IF NOT EXISTS update_template_timestamp 
-AFTER UPDATE ON notification_templates
+AFTER UPDATE ON channel_templates
 FOR EACH ROW
 BEGIN
-  UPDATE notification_templates 
+  UPDATE channel_templates 
   SET updated_at = CURRENT_TIMESTAMP 
   WHERE id = NEW.id;
 END;
