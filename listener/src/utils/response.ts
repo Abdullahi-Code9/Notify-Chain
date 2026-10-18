@@ -106,6 +106,9 @@ export function err(
  * Write a raw JSON response.  Prefer `sendOk` / `sendErr` over this.
  */
 export function sendJson(res: http.ServerResponse, statusCode: number, body: unknown): void {
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('X-API-Version', 'v1');
+  }
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }

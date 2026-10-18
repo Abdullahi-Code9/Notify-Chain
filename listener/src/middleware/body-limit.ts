@@ -123,6 +123,10 @@ export function enforceBodyLimit(
 function respondTooLarge(res: http.ServerResponse, maxBytes: number, observedBytes: number): void {
   if (res.headersSent) return;
 
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('X-API-Version', 'v1');
+  }
+
   const payload = JSON.stringify({
     error: 'Payload Too Large',
     code: 'PAYLOAD_TOO_LARGE',

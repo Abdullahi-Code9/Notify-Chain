@@ -30,6 +30,10 @@ export function sendUnsupportedMediaType(
   expected: string = 'application/json',
 ): void {
   const message = `Unsupported Content-Type: '${contentType}'. Expected '${expected}'.`;
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('X-API-Version', 'v1');
+  }
+
   const payload = JSON.stringify({
     success: false,
     error: {
