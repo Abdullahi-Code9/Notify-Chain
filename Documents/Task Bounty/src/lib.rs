@@ -45,6 +45,81 @@ impl TaskBountyContract {
         storage::set_submission_counter(&env, 0);
     }
 
+    // ========================================================================
+    // Administrator transfer
+    // ========================================================================
+
+    /// Propose a transfer of administrator rights to a new address.
+    ///
+    /// The transfer is not effective until the proposed address calls
+    /// `accept_admin_transfer`. Only the current administrator may call this.
+    /// Replaces any previously pending proposal.
+    ///
+    /// # Arguments
+    /// * `admin` - Current administrator address
+    /// * `proposed` - Address being nominated as the next administrator
+    pub fn propose_admin_transfer(env: Env, admin: Address, proposed: Address) {
+        admin.require_auth();
+        let stored_admin = storage::get_admin(&env);
+        if admin != stored_admin {
+            panic_with_error!(env, types::Error::Unauthorized);
+        }
+        storage::set_pending_admin(&env, &proposed);
+        events::emit_admin_transfer_proposed(&env, &admin, &proposed);
+    }
+
+    /// Accept a pending administrator transfer.
+    ///
+    /// Only the address nominated by the current administrator via
+    /// `propose_admin_transfer` may call this. On success the caller
+    /// becomes the new administrator and the pending proposal is cleared.
+    ///
+    /// # Arguments
+    /// * `proposed` - The nominated address accepting the role
+    pub fn accept_admin_transfer(env: Env, proposed: Address) {
+        proposed.require_auth();
+        let pending = storage::get_pending_admin(&env);
+        match pending {
+            None => panic_with_error!(env, types::Error::NoPendingTransfer),
+            Some(ref p) => {
+                if *p != proposed {
+                    panic_with_error!(env, types::Error::Unauthorized);
+                }
+            }
+        }
+        storage::set_admin(&env, &proposed);
+        storage::clear_pending_admin(&env);
+        events::emit_admin_transfer_accepted(&env, &proposed);
+    }
+
+    /// Cancel a pending administrator transfer.
+    ///
+    /// Only the current administrator may call this. The pending proposal
+    /// is cleared; the existing administrator remains unchanged.
+    ///
+    /// # Arguments
+    /// * `admin` - Current administrator address
+    pub fn cancel_admin_transfer(env: Env, admin: Address) {
+        admin.require_auth();
+        let stored_admin = storage::get_admin(&env);
+        if admin != stored_admin {
+            panic_with_error!(env, types::Error::Unauthorized);
+        }
+        if storage::get_pending_admin(&env).is_none() {
+            panic_with_error!(env, types::Error::NoPendingTransfer);
+        }
+        storage::clear_pending_admin(&env);
+        events::emit_admin_transfer_cancelled(&env, &admin);
+    }
+
+    /// Return the currently pending administrator address, if any.
+    ///
+    /// Returns `None` when no transfer has been proposed. This function
+    /// does not modify contract state.
+    pub fn get_pending_admin(env: Env) -> Option<Address> {
+        storage::get_pending_admin(&env)
+    }
+
     /// Create a new task with escrowed reward
     ///
     /// # Arguments

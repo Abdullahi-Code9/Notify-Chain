@@ -149,6 +149,19 @@ pub fn set_admin(env: &Env, address: &Address) {
     env.storage().instance().set(&ADMIN, address);
 }
 
+// Pending admin transfer
+pub fn get_pending_admin(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&"PENDING_ADMIN")
+}
+
+pub fn set_pending_admin(env: &Env, address: &Address) {
+    env.storage().instance().set(&"PENDING_ADMIN", address);
+}
+
+pub fn clear_pending_admin(env: &Env) {
+    env.storage().instance().remove(&"PENDING_ADMIN");
+}
+
 // API credential storage
 pub fn get_api_credentials(env: &Env, organization: &Address) -> Vec<ApiCredential> {
     let key = (b"API_KEYS", organization);

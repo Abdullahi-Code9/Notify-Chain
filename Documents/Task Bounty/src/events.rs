@@ -118,3 +118,27 @@ pub fn emit_api_key_revoked(env: &Env, organization: &Address, credential_id: u6
         (organization.clone(), credential_id),
     );
 }
+
+/// Emit AdminTransferProposed event
+pub fn emit_admin_transfer_proposed(env: &Env, current_admin: &Address, proposed_admin: &Address) {
+    env.events().publish(
+        (symbol_short!("admin"), symbol_short!("proposed")),
+        (current_admin.clone(), proposed_admin.clone()),
+    );
+}
+
+/// Emit AdminTransferAccepted event
+pub fn emit_admin_transfer_accepted(env: &Env, new_admin: &Address) {
+    env.events().publish(
+        (symbol_short!("admin"), symbol_short!("accepted")),
+        new_admin.clone(),
+    );
+}
+
+/// Emit AdminTransferCancelled event
+pub fn emit_admin_transfer_cancelled(env: &Env, admin: &Address) {
+    env.events().publish(
+        (symbol_short!("admin"), symbol_short!("cancel")),
+        admin.clone(),
+    );
+}
