@@ -9,6 +9,7 @@ const DISPUTE_COUNTER: &str = "DISP_CNT";
 const API_KEY_COUNTER: &str = "API_KEY_CNT";
 const DISPUTE_RESOLVER: &str = "DISP_RES";
 const ADMIN: &str = "ADMIN";
+const PAUSED: &str = "PAUSED";
 
 // Task storage
 pub fn get_task(env: &Env, task_id: u64) -> Task {
@@ -147,6 +148,15 @@ pub fn get_admin(env: &Env) -> Address {
 
 pub fn set_admin(env: &Env, address: &Address) {
     env.storage().instance().set(&ADMIN, address);
+}
+
+// Pause state
+pub fn is_paused(env: &Env) -> bool {
+    env.storage().instance().get(&PAUSED).unwrap_or(false)
+}
+
+pub fn set_paused(env: &Env, paused: bool) {
+    env.storage().instance().set(&PAUSED, &paused);
 }
 
 // API credential storage

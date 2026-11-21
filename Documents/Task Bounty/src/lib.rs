@@ -45,6 +45,41 @@ impl TaskBountyContract {
         storage::set_submission_counter(&env, 0);
     }
 
+    /// Emergency pause: suspends all state-mutating operations.
+    /// Only the admin may call this.
+    ///
+    /// # Arguments
+    /// * `admin` - Address of the contract administrator
+    pub fn pause_contract(env: Env, admin: Address) {
+        admin.require_auth();
+        let stored_admin = storage::get_admin(&env);
+        if admin != stored_admin {
+            panic_with_error!(env, types::Error::Unauthorized);
+        }
+        storage::set_paused(&env, true);
+        events::emit_contract_paused(&env, &admin);
+    }
+
+    /// Resume a paused contract, re-enabling state-mutating operations.
+    /// Only the admin may call this.
+    ///
+    /// # Arguments
+    /// * `admin` - Address of the contract administrator
+    pub fn resume_contract(env: Env, admin: Address) {
+        admin.require_auth();
+        let stored_admin = storage::get_admin(&env);
+        if admin != stored_admin {
+            panic_with_error!(env, types::Error::Unauthorized);
+        }
+        storage::set_paused(&env, false);
+        events::emit_contract_resumed(&env, &admin);
+    }
+
+    /// Returns true if the contract is currently paused.
+    pub fn is_paused(env: Env) -> bool {
+        storage::is_paused(&env)
+    }
+
     /// Create a new task with escrowed reward
     ///
     /// # Arguments
@@ -69,6 +104,9 @@ impl TaskBountyContract {
         max_submissions: u32,
     ) -> u64 {
         poster.require_auth();
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
 
         task::create_task(
             &env,
@@ -100,6 +138,9 @@ impl TaskBountyContract {
         description: String,
     ) -> u64 {
         contributor.require_auth();
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
 
         submission::submit_work(&env, task_id, contributor, work_url, description)
     }
@@ -112,6 +153,9 @@ impl TaskBountyContract {
     /// * `poster` - Address of the task poster (for auth)
     pub fn approve_submission(env: Env, task_id: u64, submission_id: u64, poster: Address) {
         poster.require_auth();
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
 
         submission::approve_submission(&env, task_id, submission_id, poster)
     }
@@ -131,6 +175,9 @@ impl TaskBountyContract {
         reason: String,
     ) {
         poster.require_auth();
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
 
         submission::reject_submission(&env, task_id, submission_id, poster, reason)
     }
@@ -142,6 +189,9 @@ impl TaskBountyContract {
     /// * `poster` - Address of the task poster (for auth)
     pub fn cancel_task(env: Env, task_id: u64, poster: Address) {
         poster.require_auth();
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
 
         task::cancel_task(&env, task_id, poster)
     }
@@ -161,6 +211,9 @@ impl TaskBountyContract {
         reason: String,
     ) {
         raiser.require_auth();
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
 
         dispute::raise_dispute(&env, task_id, submission_id, raiser, reason)
     }
@@ -236,6 +289,9 @@ impl TaskBountyContract {
         label: String,
         fingerprint: BytesN<32>,
     ) -> u64 {
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
         api_keys::register_api_key(env, organization, label, fingerprint).unwrap()
     }
 
@@ -247,6 +303,9 @@ impl TaskBountyContract {
         new_fingerprint: BytesN<32>,
         reason: String,
     ) -> u64 {
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
         api_keys::rotate_api_key(
             env,
             organization,
@@ -259,6 +318,9 @@ impl TaskBountyContract {
     }
 
     pub fn revoke_api_key(env: Env, organization: Address, credential_id: u64) {
+        if storage::is_paused(&env) {
+            panic_with_error!(env, types::Error::ContractPaused);
+        }
         api_keys::revoke_api_key(env, organization, credential_id).unwrap();
     }
 

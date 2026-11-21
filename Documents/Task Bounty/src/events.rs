@@ -118,3 +118,19 @@ pub fn emit_api_key_revoked(env: &Env, organization: &Address, credential_id: u6
         (organization.clone(), credential_id),
     );
 }
+
+/// Emit ContractPaused event
+pub fn emit_contract_paused(env: &Env, admin: &Address) {
+    env.events().publish(
+        (symbol_short!("contract"), symbol_short!("paused")),
+        admin.clone(),
+    );
+}
+
+/// Emit ContractResumed event
+pub fn emit_contract_resumed(env: &Env, admin: &Address) {
+    env.events().publish(
+        (symbol_short!("contract"), symbol_short!("resumed")),
+        admin.clone(),
+    );
+}
