@@ -227,6 +227,63 @@ impl TaskBountyContract {
     }
 
     // ========================================================================
+    // Contract version and metadata queries
+    // ========================================================================
+
+    /// Return the semantic version string of this contract implementation.
+    ///
+    /// This value is a compile-time constant embedded in the WASM binary and
+    /// does not read from or write to contract storage.
+    ///
+    /// # Returns
+    /// Version string, e.g. `"1.0.0"`
+    pub fn get_version(env: Env) -> soroban_sdk::String {
+        soroban_sdk::String::from_str(&env, "1.0.0")
+    }
+
+    /// Return the list of event schema versions emitted by this deployment.
+    ///
+    /// External indexers and SDK consumers should inspect this list to
+    /// select the correct event decoder before processing contract events.
+    /// Each entry follows the pattern `"<namespace>/v<n>"`.
+    ///
+    /// This function does not read from or write to contract storage.
+    ///
+    /// # Returns
+    /// Vector of event schema version strings
+    pub fn get_supported_event_versions(env: Env) -> Vec<soroban_sdk::String> {
+        let mut versions = Vec::new(&env);
+        versions.push_back(soroban_sdk::String::from_str(&env, "task/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "submission/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "dispute/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "api/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "contract/v1"));
+        versions
+    }
+
+    /// Return immutable metadata describing this contract deployment.
+    ///
+    /// Combines `get_version` and `get_supported_event_versions` into a
+    /// single call for external applications that need a full capability
+    /// snapshot. All fields are compile-time constants; this function does
+    /// not read from or write to contract storage.
+    ///
+    /// # Returns
+    /// `ContractMetadata` struct containing version, name, description, and
+    /// supported event schema versions
+    pub fn get_metadata(env: Env) -> types::ContractMetadata {
+        types::ContractMetadata {
+            version: soroban_sdk::String::from_str(&env, "1.0.0"),
+            name: soroban_sdk::String::from_str(&env, "TaskBounty"),
+            description: soroban_sdk::String::from_str(
+                &env,
+                "Decentralized task and bounty board on Stellar",
+            ),
+            event_versions: Self::get_supported_event_versions(env.clone()),
+        }
+    }
+
+    // ========================================================================
     // API Credential Management
     // ========================================================================
 
