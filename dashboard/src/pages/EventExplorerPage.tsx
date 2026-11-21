@@ -10,19 +10,16 @@ import { IndexingHealthPanel } from '../components/IndexingHealthPanel';
 import { NotificationHealthPanel } from '../components/NotificationHealthPanel';
 import { NotificationSummaryPanel } from '../components/NotificationSummaryPanel';
 import { EmptyState } from '../components/EmptyState';
+import { EventActivityChart } from '../components/EventActivityChart';
+import { DashboardActivityTimeline } from '../components/DashboardActivityTimeline';
+import { DashboardViewPreferences } from '../components/DashboardViewPreferences';
 import {
   useEventFilters,
   useEventLoadingState,
   useFilteredEvents,
 } from '../hooks/useEventSelectors';
 import { useEventStore } from '../store/eventStore';
-import {
-  fetchEvents,
-  fetchStatus,
-  isListenerApiTimeoutError,
-  type ContractStatus,
-} from '../services/eventsApi';
-import { openEventStream, toEventStreamUrl } from '../services/eventStream';
+import { fetchEvents, fetchStatus, type ContractStatus } from '../services/eventsApi';
 import { resolveIndexingHealthUrl } from '../services/indexingHealthApi';
 import { resolveNotificationHealthUrl } from '../services/notificationHealthApi';
 import { generateMockEvents } from '../utils/eventData';
@@ -30,12 +27,23 @@ import { restoreWalletSession } from '../services/wallet';
 import type { BlockchainEvent } from '../types/event';
 import { useWalletAccountSync } from '../hooks/useWalletAccountSync';
 import { parseSelectedEventId } from '../utils/eventUrlState';
+import {
+  computeEventActivity,
+  DEFAULT_EVENT_ACTIVITY_RANGE,
+  EVENT_ACTIVITY_RANGES,
+  type EventActivityRange,
+} from '../utils/eventActivityData';
+import {
+  DEFAULT_DASHBOARD_PREFERENCES,
+  loadDashboardPreferences,
+  saveDashboardPreferences,
+  type DashboardPreferences,
+} from '../utils/dashboardPreferences';
 
 const DEFAULT_EVENT_COUNT = 5000;
 const DEFAULT_LIMIT = 12;
 const EVENT_ID_PARAM = 'eventId';
 const API_URL = import.meta.env.VITE_EVENTS_API_URL ?? 'http://localhost:8787/api/events';
-const STREAM_URL = toEventStreamUrl(API_URL);
 const POLL_INTERVAL_MS = 15_000;
 const LISTENER_BASE_URL = API_URL.replace('/api/events', '');
 const INDEXING_HEALTH_URL =
@@ -78,12 +86,16 @@ export function EventExplorerPage() {
   const [limit, setLimit] = useState(() => parseLimitParam(initialSearch));
   const [selectedNotification, setSelectedNotification] = useState<BlockchainEvent | null>(null);
   const [contractStatuses, setContractStatuses] = useState<ContractStatus[]>([]);
-  const [activityRange, setActivityRange] =
-    useState<EventActivityRange>(DEFAULT_EVENT_ACTIVITY_RANGE);
+  const [activityRange, setActivityRange] = useState<EventActivityRange>(
+    DEFAULT_EVENT_ACTIVITY_RANGE,
+  );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [dashboardPreferences, setDashboardPreferences] =
+    useState<DashboardPreferences>(loadDashboardPreferences);
 
   const events = useEventStore((state) => state.events);
   const setEvents = useEventStore((state) => state.setEvents);
-  const appendEvents = useEventStore((state) => state.appendEvents);
   const setLoading = useEventStore((state) => state.setLoading);
   const setError = useEventStore((state) => state.setError);
   const markSyncSuccess = useEventStore((state) => state.markSyncSuccess);
@@ -94,11 +106,13 @@ export function EventExplorerPage() {
   const setStatusFilter = useEventStore((state) => state.setStatusFilter);
   const setDateFrom = useEventStore((state) => state.setDateFrom);
   const setDateTo = useEventStore((state) => state.setDateTo);
+  const setSortBy = useEventStore((state) => state.setSortBy);
   // Re-fetch whenever lastFetchedAt is reset to 0 (via invalidateEvents()) so
   // that a successful blockchain status-change transaction is reflected on the
   // next render cycle without requiring a full hard refresh.
   const lastFetchedAt = useEventStore((state) => state.lastFetchedAt);
   const { isLoading, error } = useEventLoadingState();
+  const isInitialLoading = isLoading || (lastFetchedAt === 0 && !error);
   const filters = useEventFilters();
   const filteredEvents = useFilteredEvents();
 
@@ -124,13 +138,16 @@ export function EventExplorerPage() {
         const remoteEvents = await fetchEvents(API_URL);
         if (!cancelled) {
           setEvents(remoteEvents);
+          setError(null);
           markSyncSuccess();
         }
-      } catch (error) {
+      } catch (requestError) {
         if (!cancelled) {
           setEvents(generateMockEvents(DEFAULT_EVENT_COUNT));
-          setError('Listener API unavailable — showing mock events for demo.');
-          markSyncFailure('Initial sync failed');
+          const message =
+            requestError instanceof Error ? requestError.message : String(requestError);
+          setError(`Listener API unavailable (${message}) — showing mock events for demo.`);
+          markSyncFailure(message);
         }
       } finally {
         if (!cancelled) {
@@ -162,12 +179,15 @@ export function EventExplorerPage() {
         const remoteEvents = await fetchEvents(API_URL);
         if (!cancelled) {
           setEvents(remoteEvents);
+          setError(null);
           markSyncSuccess();
         }
-      } catch {
+      } catch (requestError) {
         if (!cancelled) {
-          setRefreshError('Background refresh failed');
-          markSyncFailure('Background refresh failed');
+          const message =
+            requestError instanceof Error ? requestError.message : String(requestError);
+          setRefreshError(`Background refresh failed: ${message}`);
+          markSyncFailure(message);
         }
       } finally {
         if (!cancelled) {
@@ -178,10 +198,9 @@ export function EventExplorerPage() {
 
     return () => {
       cancelled = true;
-      if (intervalId) clearInterval(intervalId);
-      closeStream?.();
+      clearInterval(intervalId);
     };
-  }, [appendEvents, setEvents, markSyncSuccess, markSyncFailure]);
+  }, [setEvents, setError, markSyncSuccess, markSyncFailure]);
 
   // Clear stale events and re-fetch whenever the connected wallet address
   // changes (switch or disconnect). This is the fix for issue #175.
@@ -196,10 +215,11 @@ export function EventExplorerPage() {
         setEvents(remoteEvents);
         markSyncSuccess();
       })
-      .catch((error) => {
+      .catch((requestError) => {
         setEvents(generateMockEvents(DEFAULT_EVENT_COUNT));
-        setError('Listener API unavailable — showing mock events for demo.');
-        markSyncFailure('Wallet refresh failed');
+        const message = requestError instanceof Error ? requestError.message : String(requestError);
+        setError(`Listener API unavailable (${message}) — showing mock events for demo.`);
+        markSyncFailure(message);
       })
       .finally(() => {
         setLoading(false);
@@ -304,9 +324,10 @@ export function EventExplorerPage() {
       setEvents(remoteEvents);
       markSyncSuccess();
       setError(null);
-    } catch {
-      setRefreshError('Manual refresh failed');
-      markSyncFailure('Manual refresh failed');
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : String(requestError);
+      setRefreshError(`Manual refresh failed: ${message}`);
+      markSyncFailure(message);
     } finally {
       setIsRefreshing(false);
     }
@@ -367,7 +388,6 @@ export function EventExplorerPage() {
       <EventFiltersBar />
       <NotificationSearchBar />
 
-      {error && !filteredEvents.length && (
       <section className="event-activity" aria-labelledby="event-activity-heading">
         <div className="event-activity__header">
           <h2 id="event-activity-heading">Event Activity</h2>
@@ -390,10 +410,35 @@ export function EventExplorerPage() {
 
         <EventActivityChart
           buckets={eventActivity.buckets}
-          isLoading={isLoading}
+          isLoading={isInitialLoading}
           rangeLabel={ACTIVITY_RANGE_LABELS[activityRange]}
         />
       </section>
+
+      <DashboardViewPreferences
+        preferences={dashboardPreferences}
+        onChange={(preferences) => {
+          setDashboardPreferences(preferences);
+          saveDashboardPreferences(preferences);
+        }}
+        onReset={() => {
+          const defaults = {
+            ...DEFAULT_DASHBOARD_PREFERENCES,
+            visibleColumns: [...DEFAULT_DASHBOARD_PREFERENCES.visibleColumns],
+          };
+          setDashboardPreferences(defaults);
+          saveDashboardPreferences(defaults);
+          setSortBy(defaults.defaultSort);
+        }}
+      />
+
+      <DashboardActivityTimeline
+        events={events}
+        isLoading={isInitialLoading}
+        error={error}
+        onRetry={() => void handleRetry()}
+        onSelectEvent={handleSelectEvent}
+      />
 
       {error && (
         <section className="event-explorer__error-banner" role="alert">
@@ -425,14 +470,14 @@ export function EventExplorerPage() {
           Showing {fromIndex.toLocaleString()}–{toIndex.toLocaleString()} of{' '}
           {filteredEvents.length.toLocaleString()} events
         </p>
-        {(isLoading || isRefreshing) && (
+        {(isInitialLoading || isRefreshing) && (
           <p className="event-explorer__loading-note">
-            {isRefreshing ? 'Refreshing events…' : 'Loading events…'}
+            {isRefreshing && !isInitialLoading ? 'Refreshing events…' : 'Loading events…'}
           </p>
         )}
       </div>
 
-      {isLoading && filteredEvents.length === 0 ? (
+      {isInitialLoading && filteredEvents.length === 0 ? (
         <EventExplorerSkeleton rows={Math.min(limit, 8)} />
       ) : currentPageEvents.length > 0 ? (
         <EventExplorerTable
@@ -440,6 +485,8 @@ export function EventExplorerPage() {
           onSelectEvent={handleSelectEvent}
           contractStatuses={contractStatuses}
           onContractClick={handleContractClick}
+          density={dashboardPreferences.density}
+          visibleColumns={dashboardPreferences.visibleColumns}
         />
       ) : (
         <EmptyState

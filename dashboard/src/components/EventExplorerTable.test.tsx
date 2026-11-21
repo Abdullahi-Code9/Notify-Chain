@@ -52,10 +52,7 @@ describe('EventExplorerTable column resizing helpers', () => {
   });
 
   it('clamps widths below the minimum when loading', () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify([40, 180, 120, 200, 110, 170]),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([40, 180, 120, 200, 110, 170]));
 
     const loaded = loadColumnWidths();
 
@@ -64,9 +61,7 @@ describe('EventExplorerTable column resizing helpers', () => {
   });
 
   it('builds a stable grid template from widths', () => {
-    expect(widthsToGridTemplate([100, 120, 80])).toBe(
-      '100px 120px 80px',
-    );
+    expect(widthsToGridTemplate([100, 120, 80])).toBe('100px 120px 80px');
   });
 });
 
@@ -77,19 +72,14 @@ describe('EventExplorerTable resizing UI', () => {
 
   it('renders resize handles and keeps layout stable while resizing', () => {
     const { getByLabelText, container } = render(
-      <EventExplorerTable
-        events={[sampleEvent]}
-        contractStatuses={[]}
-      />,
+      <EventExplorerTable events={[sampleEvent]} contractStatuses={[]} />,
     );
 
     const handle = getByLabelText('Resize Contract column');
 
     expect(handle).toBeInTheDocument();
 
-    const header = container.querySelector(
-      '.event-explorer__table-header',
-    ) as HTMLElement;
+    const header = container.querySelector('.event-explorer__table-header') as HTMLElement;
 
     const before = header.style.gridTemplateColumns;
 
@@ -106,16 +96,30 @@ describe('EventExplorerTable resizing UI', () => {
 
   it('renders invalid event timestamps without throwing', () => {
     render(
-      <EventExplorerTable
-        events={[{ ...sampleEvent, receivedAt: NaN }]}
-        contractStatuses={[]}
-      />,
+      <EventExplorerTable events={[{ ...sampleEvent, receivedAt: NaN }]} contractStatuses={[]} />,
     );
 
     expect(screen.getByText('Unknown time')).toBeInTheDocument();
 
-    expect(
-      screen.getByText('Unknown time').closest('time'),
-    ).not.toHaveAttribute('dateTime');
+    expect(screen.getByText('Unknown time').closest('time')).not.toHaveAttribute('dateTime');
+  });
+
+  it('respects saved density and visible-column preferences', () => {
+    const { container } = render(
+      <EventExplorerTable
+        events={[sampleEvent]}
+        density="compact"
+        visibleColumns={['event', 'ledger']}
+      />,
+    );
+
+    expect(container.querySelector('.event-explorer__table-wrapper')).toHaveClass(
+      'event-explorer__table-wrapper--compact',
+    );
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Event',
+      'Ledger',
+    ]);
+    expect(container.querySelectorAll('.event-explorer__cell')).toHaveLength(2);
   });
 });
