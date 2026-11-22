@@ -156,4 +156,6 @@ pub enum Error {
     InvalidApiKeyRotation = 17,
     ApiKeyRevoked = 18,
     UnauthorizedApiKeyAction = 19,
+    NoPendingTransfer = 21,
+    TransferAlreadyPending = 22,
 }
