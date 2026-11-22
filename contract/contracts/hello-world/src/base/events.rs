@@ -1,5 +1,45 @@
 use soroban_sdk::{contractevent, contracttype, Address, BytesN, String, Vec};
 
+// ============================================================================
+// Event schema versioning (issue #1122)
+// ============================================================================
+
+/// Schema version of every event this contract currently emits.
+///
+/// Consumers read this through the `get_event_schema_version` view and can
+/// identify the schema of any individual event from its name (topic[0]):
+///
+/// * An event name **without** a version suffix (e.g. `contract_paused`) is
+///   schema **v1**. Every event emitted today is v1, so existing listeners and
+///   indexers keep working byte-for-byte.
+/// * An event name **with** a `_v{N}` suffix (e.g. `notification_scheduled_v2`)
+///   is schema **vN**.
+///
+/// # Versioning rules
+///
+/// Additive, backward-compatible changes keep the current version:
+/// * adding a new event type;
+/// * adding a key to a map-format (`data_format = "map"`) event payload.
+///
+/// Breaking changes MUST ship as a new versioned event name and bump this
+/// constant:
+/// * adding, removing or reordering topics (consumers index topics by
+///   position from both the start and the end);
+/// * removing or renaming payload fields, or changing a field's type;
+/// * changing a single-value payload's type.
+///
+/// When a breaking version ships, the previous version is emitted alongside
+/// the new one for at least one release (dual emission) so consumers can
+/// migrate, and the deprecation is recorded in `docs/EVENT_SCHEMA_VERSIONING.md`.
+///
+/// This is distinct from the *notification payload* schema version managed by
+/// `set_schema_version` / `get_schema_version`, which versions stored
+/// notification payloads rather than event shapes.
+pub const EVENT_SCHEMA_VERSION: u32 = 1;
+
+/// Suffix separator used for versioned event names (`<name>_v<N>`).
+pub const EVENT_SCHEMA_VERSION_SUFFIX: &str = "_v";
+
 /// High-level notification category attached to every emitted event.
 ///
 /// Off-chain consumers (listeners, indexers, dashboards) often only care about a

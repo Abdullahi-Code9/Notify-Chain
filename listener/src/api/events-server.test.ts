@@ -631,6 +631,15 @@ class InMemoryIdempotencyRepo {
     };
   }
 
+  releaseExpiredKey(idempotencyKey: string) {
+    const entry = this.store.get(idempotencyKey);
+    if (entry && entry.expiresAt <= Date.now()) {
+      this.store.delete(idempotencyKey);
+      return Promise.resolve(1);
+    }
+    return Promise.resolve(0);
+  }
+
   validateRequestHash(idempotencyKey: string, requestBody: any) {
     const entry = this.store.get(idempotencyKey);
     if (!entry) return true;

@@ -271,8 +271,31 @@ CREATE INDEX IF NOT EXISTS idx_processed_events_reorg_duplicates
   ON processed_events(is_reorg_duplicate, processed_at) 
   WHERE is_reorg_duplicate = 1;
 
-CREATE INDEX IF NOT EXISTS idx_processed_events_ledger_contract 
+CREATE INDEX IF NOT EXISTS idx_processed_events_ledger_contract
   ON processed_events(ledger_number, contract_address);
+
+-- (contract_address, event_id) uniqueness is enforced by the guarded
+-- ux_processed_events_contract_event index created in Database bootstrap and
+-- migration 008, which first audit existing rows for duplicates (#1121).
+
+-- Per-stage processing latency for an event (#1120). One row per
+-- processed_events record; a NULL stage means it was not measured. Holds
+-- durations only, never event payloads.
+CREATE TABLE IF NOT EXISTS event_processing_timings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  processed_event_id INTEGER NOT NULL UNIQUE,
+  retrieval_ms REAL CHECK (retrieval_ms IS NULL OR retrieval_ms >= 0),
+  decode_validation_ms REAL CHECK (decode_validation_ms IS NULL OR decode_validation_ms >= 0),
+  persistence_ms REAL CHECK (persistence_ms IS NULL OR persistence_ms >= 0),
+  notification_prep_ms REAL CHECK (notification_prep_ms IS NULL OR notification_prep_ms >= 0),
+  total_ms REAL CHECK (total_ms IS NULL OR total_ms >= 0),
+  outcome VARCHAR(20) NOT NULL CHECK (outcome IN ('processed', 'duplicate', 'skipped', 'error')),
+  recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (processed_event_id) REFERENCES processed_events(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_processing_timings_recorded_at
+  ON event_processing_timings(recorded_at);
 
 -- Cursor tracking for event polling to detect reorgs
 CREATE TABLE IF NOT EXISTS polling_cursors (
@@ -327,6 +350,29 @@ CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires_at
 
 CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_at
   ON idempotency_keys(created_at);
+
+-- Generic Idempotency-Key records for event-management mutations (#1114).
+-- Unlike idempotency_keys this is not tied to a created notification, so it
+-- also covers updates/cancellations. A key is unique per client scope; the
+-- fingerprint binds it to one method + path + canonical body. Rows with
+-- status IN_PROGRESS guard against concurrent duplicates; expired rows are
+-- replaced on the next use of the key and purged by cleanup.
+CREATE TABLE IF NOT EXISTS api_idempotency_keys (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL,
+  status VARCHAR(20) NOT NULL CHECK (status IN ('IN_PROGRESS', 'COMPLETED')),
+  response_status INTEGER CHECK (response_status IS NULL OR response_status BETWEEN 100 AND 599),
+  response_body TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL,
+  UNIQUE (scope, idempotency_key),
+  CHECK (status = 'IN_PROGRESS' OR (response_status IS NOT NULL AND response_body IS NOT NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_idempotency_keys_expires_at
+  ON api_idempotency_keys(expires_at);
 
 -- Backpressure events table for tracking queue saturation and recovery
 CREATE TABLE IF NOT EXISTS backpressure_events (

@@ -755,6 +755,13 @@ impl AutoShareContract {
         autoshare_logic::is_version_supported(env, version)
     }
 
+    /// Returns the schema version of the events this contract emits
+    /// (issue #1122). Unsuffixed event names are v1; breaking changes ship
+    /// as `<name>_v<N>` events. See `base::events::EVENT_SCHEMA_VERSION`.
+    pub fn get_event_schema_version(_env: Env) -> u32 {
+        base::events::EVENT_SCHEMA_VERSION
+    }
+
     // ============================================================================
     // Access Logging  (Issue #312)
     // ============================================================================
@@ -941,6 +948,7 @@ mod tests {
     mod payload_validation_test;
     mod preferences_test;
     mod revocation_test;
+    mod event_schema_version_test;
     mod schema_version_test;
     mod storage_optimization_test;
     mod subscription_cancellation_test;
