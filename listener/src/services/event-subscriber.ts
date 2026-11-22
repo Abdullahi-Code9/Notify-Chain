@@ -48,6 +48,7 @@ export class EventSubscriber {
       cooldownMs: config.rpcFallback?.cooldownMs,
       requestTimeoutMs: config.rpcFallback?.requestTimeoutMs,
       maxRetries: config.rpcFallback?.maxRetries,
+      failbackToPrimary: config.rpcFallback?.failbackToPrimary,
     });
     this.deduplicationService = deduplicationService ?? null;
 

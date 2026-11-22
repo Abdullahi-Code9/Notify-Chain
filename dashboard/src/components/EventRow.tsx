@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { BlockchainEvent } from '../types/event';
-import { formatRelativeTimestamp, formatTimestamp, parseToDate } from '../utils/formatTime';
+import { formatRelativeTimestamp, formatTimestamp, toUtcIsoString } from '../utils/formatTime';
+import { useActiveTimeZone } from '../store/timezoneStore';
 import { CopyButton } from './CopyButton';
 
 interface EventRowProps {
@@ -16,7 +17,8 @@ function shortenAddress(address: string): string {
 
 export const EventRow = memo(function EventRow({ event }: EventRowProps) {
   const label = event.eventName ?? event.type;
-  const receivedAt = parseToDate(event.receivedAt);
+  const timeZone = useActiveTimeZone();
+  const receivedAtUtc = toUtcIsoString(event.receivedAt);
 
   return (
     <article
@@ -33,9 +35,12 @@ export const EventRow = memo(function EventRow({ event }: EventRowProps) {
           <span className="sr-only">Contract: </span>
           {shortenAddress(event.contractAddress)}
         </span>
-        <time dateTime={receivedAt?.toISOString()} title={formatTimestamp(event.receivedAt)}>
+        <time
+          dateTime={receivedAtUtc}
+          title={`${formatTimestamp(event.receivedAt, timeZone)}${receivedAtUtc ? ` (UTC: ${receivedAtUtc})` : ''}`}
+        >
           <span className="sr-only">Received: </span>
-          {formatRelativeTimestamp(event.receivedAt)}
+          {formatRelativeTimestamp(event.receivedAt, Date.now(), timeZone)}
         </time>
         <CopyButton value={event.eventId} label="notification ID" size="xs" />
       </div>

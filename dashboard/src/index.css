@@ -8888,3 +8888,153 @@ textarea {
 [data-theme="light"] .event-explorer__contract-link:hover {
   color: #2563eb;
 }
+
+/* ── Timezone preference selector (#1108) ─────────────────────────────── */
+.timezone-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timezone-selector__label {
+  font-size: 0.8rem;
+  color: var(--hm-text-secondary);
+}
+
+.timezone-selector__select {
+  border: 1px solid var(--hm-input-border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--hm-input-bg);
+  color: var(--hm-text-primary);
+  font-size: 0.85rem;
+}
+
+.timezone-selector__select:focus-visible {
+  outline: 2px solid var(--hm-accent);
+  outline-offset: 2px;
+}
+
+/* ── Notification destinations page (#1107) ───────────────────────────── */
+.destinations-page__header p {
+  color: var(--hm-text-secondary);
+}
+
+.destinations-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.destinations-page__error {
+  color: var(--text-danger);
+}
+
+.destination-card {
+  border: 1px solid var(--hm-border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--hm-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.destination-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.destination-card__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.destination-card__provider,
+.destination-card__help,
+.destination-card__meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--hm-text-secondary);
+}
+
+.destination-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.destination-card__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.destination-card__field input,
+.destination-card__secret-row input {
+  border: 1px solid var(--hm-input-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--hm-input-bg);
+  color: var(--hm-text-primary);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.destination-card__field input[aria-invalid='true'] {
+  border-color: var(--text-danger);
+}
+
+.destination-card__secret-row {
+  display: flex;
+  gap: 6px;
+}
+
+.destination-card__field-error,
+.destination-card__error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-danger);
+}
+
+.destination-card__success {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--badge-green-fg);
+}
+
+.destination-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.destination-status {
+  padding: var(--badge-padding-y) var(--badge-padding-x);
+  border-radius: var(--badge-radius);
+  font-size: var(--badge-font-size);
+  font-weight: var(--badge-font-weight);
+  white-space: nowrap;
+}
+
+.destination-status--connected {
+  background: var(--badge-green-bg);
+  color: var(--badge-green-fg);
+}
+
+.destination-status--error {
+  background: var(--badge-red-bg);
+  color: var(--badge-red-fg);
+}
+
+.destination-status--disabled {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-fg);
+}
+
+.destination-status--not-configured {
+  background: var(--hm-preset-bg);
+  color: var(--badge-neutral-fg);
+}

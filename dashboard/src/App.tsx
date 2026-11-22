@@ -13,9 +13,11 @@ import { NotificationPreferencesPage } from './pages/NotificationPreferencesPage
 import { TemplatesPage } from './pages/TemplatesPage';
 import { ChannelDetailsPage } from './pages/ChannelDetailsPage';
 import { RpcBenchmarkPage } from './pages/RpcBenchmarkPage';
+import { NotificationDestinationsPage } from './pages/NotificationDestinationsPage';
 import { ContractDetailPage } from './pages/ContractDetailPage';
 
 import { ThemeToggle } from './components/ThemeToggle';
+import { TimezoneSelector } from './components/TimezoneSelector';
 import { MobileNavDrawer, NAV_ITEMS, type Tab } from './components/MobileNavDrawer';
 import { ToastProvider } from './context/ToastContext';
 import { useTheme } from './hooks/useTheme';
@@ -183,6 +185,7 @@ export function App() {
         themeBar={
           <>
             <SyncStatus />
+            <TimezoneSelector />
             <ThemeToggle
               theme={theme}
               onToggle={toggleTheme}
@@ -299,6 +302,13 @@ function renderPanel(tab: Tab, events: any[]) {
       return (
         <ErrorBoundary section="Channel Details">
           <ChannelDetailsPage />
+        </ErrorBoundary>
+      );
+
+    case 'destinations':
+      return (
+        <ErrorBoundary section="Notification Destinations">
+          <NotificationDestinationsPage />
         </ErrorBoundary>
       );
 
