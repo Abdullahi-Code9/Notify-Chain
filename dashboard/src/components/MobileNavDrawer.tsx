@@ -23,6 +23,7 @@ export type Tab =
   | 'preferences'
   | 'templates'
   | 'channels'
+  | 'destinations'
   | 'rpc-benchmark'
   | 'contract-detail';
 
@@ -86,6 +87,11 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: 'channels',
     label: 'Channels',
+    group: 'Search & Config',
+  },
+  {
+    id: 'destinations',
+    label: 'Destinations',
     group: 'Search & Config',
   },
   {

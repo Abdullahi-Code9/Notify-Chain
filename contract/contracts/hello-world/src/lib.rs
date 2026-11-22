@@ -17,6 +17,7 @@ pub mod base {
     pub mod preferences;
     pub mod reputation;
     pub mod idempotency;
+    pub mod nonce;
     pub mod types;
 }
 
@@ -31,6 +32,7 @@ mod preferences_logic;
 mod reputation_logic;
 mod template_registry_logic;
 mod idempotency_logic;
+mod nonce_logic;
 
 #[cfg(test)]
 pub mod mock_token;
@@ -856,6 +858,122 @@ impl AutoShareContract {
     }
 
     // ============================================================================
+    // Nonce-Based Replay Protection (Issue #1126)
+    // ============================================================================
+
+    /// Returns the next nonce `signer` must use for `operation`.
+    pub fn get_next_nonce(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+    ) -> u64 {
+        nonce_logic::get_next_nonce(&env, &signer, operation)
+    }
+
+    /// Returns whether `nonce` has already been consumed by `signer` for `operation`.
+    pub fn is_nonce_consumed(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        nonce: u64,
+    ) -> bool {
+        nonce_logic::is_nonce_consumed(&env, &signer, operation, nonce)
+    }
+
+    /// Returns the persisted record of a consumed nonce, if any.
+    pub fn get_nonce_record(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        nonce: u64,
+    ) -> Option<base::nonce::NonceRecord> {
+        nonce_logic::get_nonce_record(&env, &signer, operation, nonce)
+    }
+
+    /// Replay-protected variant of [`Self::pause`].
+    ///
+    /// The admin's signature covers `nonce`, `contract` and `valid_until`
+    /// (they are arguments of this invocation), so the authorization cannot
+    /// be replayed, reused for another operation, or submitted to a different
+    /// contract. The legacy `pause` entry point is unchanged.
+    pub fn pause_with_nonce(
+        env: Env,
+        admin: Address,
+        nonce: u64,
+        contract: Address,
+        valid_until: u64,
+    ) -> Result<(), base::errors::Error> {
+        nonce_logic::consume_nonce(
+            &env,
+            &admin,
+            base::nonce::NonceOperation::Pause,
+            nonce,
+            &contract,
+            valid_until,
+        )?;
+        autoshare_logic::pause(env, admin)
+    }
+
+    /// Replay-protected variant of [`Self::unpause`].
+    pub fn unpause_with_nonce(
+        env: Env,
+        admin: Address,
+        nonce: u64,
+        contract: Address,
+        valid_until: u64,
+    ) -> Result<(), base::errors::Error> {
+        nonce_logic::consume_nonce(
+            &env,
+            &admin,
+            base::nonce::NonceOperation::Unpause,
+            nonce,
+            &contract,
+            valid_until,
+        )?;
+        autoshare_logic::unpause(env, admin)
+    }
+
+    /// Replay-protected variant of [`Self::transfer_admin`].
+    pub fn transfer_admin_with_nonce(
+        env: Env,
+        current_admin: Address,
+        new_admin: Address,
+        nonce: u64,
+        contract: Address,
+        valid_until: u64,
+    ) -> Result<(), base::errors::Error> {
+        nonce_logic::consume_nonce(
+            &env,
+            &current_admin,
+            base::nonce::NonceOperation::TransferAdmin,
+            nonce,
+            &contract,
+            valid_until,
+        )?;
+        autoshare_logic::transfer_admin(env, current_admin, new_admin)
+    }
+
+    /// Replay-protected variant of [`Self::revoke_notification`].
+    pub fn revoke_notification_with_nonce(
+        env: Env,
+        notification_id: BytesN<32>,
+        caller: Address,
+        nonce: u64,
+        contract: Address,
+        valid_until: u64,
+    ) -> Result<(), base::errors::Error> {
+        nonce_logic::consume_nonce(
+            &env,
+            &caller,
+            base::nonce::NonceOperation::RevokeNotification,
+            nonce,
+            &contract,
+            valid_until,
+        )?;
+        autoshare_logic::revoke_notification(env, notification_id, caller)
+    }
+
+    // ============================================================================
     // Notification Channels
     // ============================================================================
 
@@ -936,6 +1054,7 @@ mod tests {
     mod notification_test;
     mod notification_validation_test;
     mod notification_version_test;
+    mod nonce_replay_test;
     mod ownership_transfer_test;
     mod pause_test;
     mod payload_validation_test;
