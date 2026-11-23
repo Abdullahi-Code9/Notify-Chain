@@ -1,13 +1,15 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
-import logger, * as loggerModule from '../utils/logger';
-import { RpcEndpointStatus, RpcFallbackConfig } from '../types';
+import logger from '../utils/logger';
+import { RpcEndpointStatus } from '../types';
+import { redactRpcUrl, redactUrlsInText } from '../utils/rpc-url-redaction';
 
+/**
+ * Every endpoint reference that reaches a log line, status snapshot or error
+ * message goes through this function so that API keys embedded in userinfo,
+ * query strings or opaque path segments are never exposed (issue #1112).
+ */
 function sanitizeUrl(rawUrl: string): string {
-  if (typeof (loggerModule as any).sanitizeUrl === 'function') {
-    return (loggerModule as any).sanitizeUrl(rawUrl);
-  }
-  const queryStart = rawUrl.indexOf('?');
-  return queryStart === -1 ? rawUrl : rawUrl.slice(0, queryStart);
+  return redactRpcUrl(rawUrl);
 }
 
 export interface RpcManagerOptions {
@@ -17,6 +19,11 @@ export interface RpcManagerOptions {
   cooldownMs?: number;
   requestTimeoutMs?: number;
   maxRetries?: number;
+  /**
+   * Return to a higher-priority endpoint (primary first) once it is no longer
+   * marked unhealthy. Defaults to `true`.
+   */
+  failbackToPrimary?: boolean;
   serverFactory?: (url: string) => StellarSDK.rpc.Server;
 }
 
@@ -192,6 +199,7 @@ export class StellarRpcManager {
   private cooldownMs: number;
   private requestTimeoutMs: number;
   private maxRetries: number;
+  private failbackToPrimary: boolean;
   private serverFactory: (url: string) => StellarSDK.rpc.Server;
 
   constructor(options: RpcManagerOptions) {
@@ -200,6 +208,7 @@ export class StellarRpcManager {
       throw new Error('StellarRpcManager requires a non-empty primaryUrl');
     }
 
+    this.failbackToPrimary = options.failbackToPrimary ?? true;
     this.failureThreshold = options.failureThreshold ?? 3;
     this.cooldownMs = options.cooldownMs ?? 60000;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10000;
@@ -248,7 +257,44 @@ export class StellarRpcManager {
       failureThreshold: this.failureThreshold,
       cooldownMs: this.cooldownMs,
       requestTimeoutMs: this.requestTimeoutMs,
+      failbackToPrimary: this.failbackToPrimary,
     });
+  }
+
+  /**
+   * Returns to the highest-priority endpoint that is no longer unhealthy.
+   *
+   * Without failback a single transient primary outage would pin traffic to a
+   * fallback forever. A cooled-down endpoint is in the `degraded` state and is
+   * probed with real traffic: success restores it to `healthy`, while another
+   * transport failure marks it unhealthy again and fails over once more.
+   *
+   * Returns `true` when the active endpoint changed.
+   */
+  public maybeFailback(): boolean {
+    if (!this.failbackToPrimary || this.activeIndex === 0) {
+      return false;
+    }
+
+    this.checkCooldowns();
+
+    for (let i = 0; i < this.activeIndex; i++) {
+      const candidate = this.endpoints[i];
+      if (candidate.status !== 'unhealthy') {
+        const previous = this.endpoints[this.activeIndex];
+        this.activeIndex = i;
+        logger.info('Stellar RPC failback: returning to higher-priority endpoint', {
+          previousEndpoint: sanitizeUrl(previous.url),
+          newEndpoint: sanitizeUrl(candidate.url),
+          newEndpointStatus: candidate.status,
+          isPrimary: candidate.isPrimary,
+          activeEndpointIndex: i,
+        });
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -279,6 +325,7 @@ export class StellarRpcManager {
     this.checkCooldowns();
     return this.endpoints.map((e) => ({
       url: e.url,
+      redactedUrl: sanitizeUrl(e.url),
       isPrimary: e.isPrimary,
       status: e.status,
       consecutiveFailures: e.consecutiveFailures,
@@ -352,7 +399,9 @@ export class StellarRpcManager {
     const target = targetIndex !== -1 ? this.endpoints[targetIndex] : this.endpoints[this.activeIndex];
 
     const evaluation = isRpcFailureCondition(error);
-    const reason = evaluation.reason;
+    // Upstream error messages frequently echo the request URL (including any
+    // embedded key), so the reason is redacted before it is stored or logged.
+    const reason = redactUrlsInText(evaluation.reason);
 
     target.totalRequests++;
     target.totalFailures++;
@@ -496,6 +545,9 @@ export class StellarRpcManager {
 
     const errorsCollected: Array<{ endpoint: string; error: string }> = [];
 
+    // Resume a recovered higher-priority endpoint before issuing the request.
+    this.maybeFailback();
+
     for (let attempt = 1; attempt <= totalAttemptsAllowed; attempt++) {
       const currentEndpoint = this.endpoints[this.activeIndex];
       const endpointUrl = currentEndpoint.url;
@@ -516,10 +568,18 @@ export class StellarRpcManager {
 
         // If error is NOT an RPC availability failure (e.g. client validation error), rethrow immediately
         if (!evalResult.isFailure) {
+          // Application/domain errors (bad params, missing contract data, ...)
+          // say nothing about endpoint health: no failure is recorded and the
+          // active endpoint is left unchanged.
+          logger.debug('Stellar RPC application error: not failing over', {
+            operation: operationName,
+            endpoint: sanitizeUrl(endpointUrl),
+            reason: redactUrlsInText(evalResult.reason),
+          });
           throw err;
         }
 
-        const errMsg = err instanceof Error ? err.message : String(err);
+        const errMsg = redactUrlsInText(err instanceof Error ? err.message : String(err));
         errorsCollected.push({ endpoint: endpointUrl, error: errMsg });
 
         // Record failure
@@ -531,7 +591,7 @@ export class StellarRpcManager {
           // switch immediately for this failed operation retry
           if (!failResult.switched) {
             this.switchToNextEndpoint(
-              `Operation "${operationName}" failed on endpoint ${sanitizeUrl(endpointUrl)}: ${evalResult.reason}`
+              `Operation "${operationName}" failed on endpoint ${sanitizeUrl(endpointUrl)}: ${redactUrlsInText(evalResult.reason)}`
             );
           }
           continue;

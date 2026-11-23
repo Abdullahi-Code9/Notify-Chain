@@ -90,4 +90,14 @@ pub enum Error {
     TemplateContentEmpty = 40,
     /// Triggered when a duplicate notification delivery request is detected.
     DuplicateDelivery = 41,
+    /// Triggered when a nonce has already been consumed (replay attempt) or is
+    /// lower than the signer's next expected nonce (stale).
+    NonceAlreadyUsed = 42,
+    /// Triggered when a nonce is ahead of the expected sequence, or its
+    /// freshness window is out of bounds.
+    InvalidNonce = 43,
+    /// Triggered when a nonce's `valid_until` deadline has already passed.
+    NonceExpired = 44,
+    /// Triggered when a nonce is bound to a different contract address.
+    NonceContractMismatch = 45,
 }

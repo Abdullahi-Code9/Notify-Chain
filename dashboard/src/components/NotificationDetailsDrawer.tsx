@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { BlockchainEvent } from '../types/event';
-import { formatTimestamp } from '../utils/formatTime';
+import { formatTimestamp, formatUtcTimestamp, toUtcIsoString } from '../utils/formatTime';
+import { useActiveTimeZone } from '../store/timezoneStore';
 import { copyTextToClipboard } from '../utils/clipboard';
 import { getEventTypePresentation } from '../utils/eventTypeMapping';
 import { formatRawPayload, copyPayloadToClipboard } from '../utils/payloadViewer';
@@ -110,6 +111,7 @@ export function NotificationDetailsDrawer({
   });
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [isRawView, setIsRawView] = useState<boolean>(false);
+  const timeZone = useActiveTimeZone();
 
   const resolvedFetcher = useMemo(
     () => fetchMetadata ?? (async (e: BlockchainEvent) => defaultMetadata(e)),
@@ -314,7 +316,15 @@ export function NotificationDetailsDrawer({
           <div className="drawer__row">
             <span className="drawer__label">Observed</span>
             <span className="drawer__value drawer__value--wrap">
-              {formatTimestamp(notification.receivedAt)}
+              {formatTimestamp(notification.receivedAt, timeZone)}
+            </span>
+          </div>
+          <div className="drawer__row">
+            <span className="drawer__label">Observed (UTC)</span>
+            <span className="drawer__value drawer__value--wrap">
+              <time dateTime={toUtcIsoString(notification.receivedAt)}>
+                {formatUtcTimestamp(notification.receivedAt)}
+              </time>
             </span>
           </div>
 
@@ -403,8 +413,11 @@ export function NotificationDetailsDrawer({
                     <div className="drawer__timeline-dot" aria-hidden="true" />
                     <div className="drawer__timeline-body">
                       <div className="drawer__timeline-title">{entry.label}</div>
-                      <div className="drawer__timeline-time">
-                        {formatTimestamp(entry.timestampMs)}
+                      <div
+                        className="drawer__timeline-time"
+                        title={`UTC: ${formatUtcTimestamp(entry.timestampMs)}`}
+                      >
+                        {formatTimestamp(entry.timestampMs, timeZone)}
                       </div>
                       {entry.detail && (
                         <div className="drawer__timeline-detail">{entry.detail}</div>

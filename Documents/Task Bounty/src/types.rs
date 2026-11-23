@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, BytesN, String};
+use soroban_sdk::{contracttype, Address, BytesN, String, Vec};
 
 /// Task status enum
 #[contracttype]
@@ -132,6 +132,25 @@ pub struct ApiCredentialRotation {
     pub rotated_at: u64,
 }
 
+/// Immutable metadata describing the deployed contract.
+///
+/// Returned by `get_metadata()` and its component helpers. All fields are
+/// compile-time constants embedded in the WASM; none are read from storage.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct ContractMetadata {
+    /// Semantic version of this contract implementation, e.g. `"1.0.0"`.
+    pub version: String,
+    /// Human-readable contract name.
+    pub name: String,
+    /// Short description of the contract's purpose.
+    pub description: String,
+    /// List of event schema version strings supported by this deployment,
+    /// e.g. `["task/v1", "submission/v1"]`. External indexers can use this
+    /// to select the correct decoder without inspecting contract code.
+    pub event_versions: Vec<String>,
+}
+
 /// Error codes
 #[contracttype]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -156,5 +175,6 @@ pub enum Error {
     InvalidApiKeyRotation = 17,
     ApiKeyRevoked = 18,
     UnauthorizedApiKeyAction = 19,
-    ContractPaused = 20,
+    NoPendingTransfer = 21,
+    TransferAlreadyPending = 22,
 }

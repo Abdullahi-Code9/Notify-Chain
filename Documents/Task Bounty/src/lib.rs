@@ -45,39 +45,79 @@ impl TaskBountyContract {
         storage::set_submission_counter(&env, 0);
     }
 
-    /// Emergency pause: suspends all state-mutating operations.
-    /// Only the admin may call this.
+    // ========================================================================
+    // Administrator transfer
+    // ========================================================================
+
+    /// Propose a transfer of administrator rights to a new address.
+    ///
+    /// The transfer is not effective until the proposed address calls
+    /// `accept_admin_transfer`. Only the current administrator may call this.
+    /// Replaces any previously pending proposal.
     ///
     /// # Arguments
-    /// * `admin` - Address of the contract administrator
-    pub fn pause_contract(env: Env, admin: Address) {
+    /// * `admin` - Current administrator address
+    /// * `proposed` - Address being nominated as the next administrator
+    pub fn propose_admin_transfer(env: Env, admin: Address, proposed: Address) {
         admin.require_auth();
         let stored_admin = storage::get_admin(&env);
         if admin != stored_admin {
             panic_with_error!(env, types::Error::Unauthorized);
         }
-        storage::set_paused(&env, true);
-        events::emit_contract_paused(&env, &admin);
+        storage::set_pending_admin(&env, &proposed);
+        events::emit_admin_transfer_proposed(&env, &admin, &proposed);
     }
 
-    /// Resume a paused contract, re-enabling state-mutating operations.
-    /// Only the admin may call this.
+    /// Accept a pending administrator transfer.
+    ///
+    /// Only the address nominated by the current administrator via
+    /// `propose_admin_transfer` may call this. On success the caller
+    /// becomes the new administrator and the pending proposal is cleared.
     ///
     /// # Arguments
-    /// * `admin` - Address of the contract administrator
-    pub fn resume_contract(env: Env, admin: Address) {
+    /// * `proposed` - The nominated address accepting the role
+    pub fn accept_admin_transfer(env: Env, proposed: Address) {
+        proposed.require_auth();
+        let pending = storage::get_pending_admin(&env);
+        match pending {
+            None => panic_with_error!(env, types::Error::NoPendingTransfer),
+            Some(ref p) => {
+                if *p != proposed {
+                    panic_with_error!(env, types::Error::Unauthorized);
+                }
+            }
+        }
+        storage::set_admin(&env, &proposed);
+        storage::clear_pending_admin(&env);
+        events::emit_admin_transfer_accepted(&env, &proposed);
+    }
+
+    /// Cancel a pending administrator transfer.
+    ///
+    /// Only the current administrator may call this. The pending proposal
+    /// is cleared; the existing administrator remains unchanged.
+    ///
+    /// # Arguments
+    /// * `admin` - Current administrator address
+    pub fn cancel_admin_transfer(env: Env, admin: Address) {
         admin.require_auth();
         let stored_admin = storage::get_admin(&env);
         if admin != stored_admin {
             panic_with_error!(env, types::Error::Unauthorized);
         }
-        storage::set_paused(&env, false);
-        events::emit_contract_resumed(&env, &admin);
+        if storage::get_pending_admin(&env).is_none() {
+            panic_with_error!(env, types::Error::NoPendingTransfer);
+        }
+        storage::clear_pending_admin(&env);
+        events::emit_admin_transfer_cancelled(&env, &admin);
     }
 
-    /// Returns true if the contract is currently paused.
-    pub fn is_paused(env: Env) -> bool {
-        storage::is_paused(&env)
+    /// Return the currently pending administrator address, if any.
+    ///
+    /// Returns `None` when no transfer has been proposed. This function
+    /// does not modify contract state.
+    pub fn get_pending_admin(env: Env) -> Option<Address> {
+        storage::get_pending_admin(&env)
     }
 
     /// Create a new task with escrowed reward
@@ -277,6 +317,63 @@ impl TaskBountyContract {
     /// True if contributor has submitted
     pub fn has_submitted(env: Env, task_id: u64, contributor: Address) -> bool {
         storage::has_contributor_submitted(&env, task_id, &contributor)
+    }
+
+    // ========================================================================
+    // Contract version and metadata queries
+    // ========================================================================
+
+    /// Return the semantic version string of this contract implementation.
+    ///
+    /// This value is a compile-time constant embedded in the WASM binary and
+    /// does not read from or write to contract storage.
+    ///
+    /// # Returns
+    /// Version string, e.g. `"1.0.0"`
+    pub fn get_version(env: Env) -> soroban_sdk::String {
+        soroban_sdk::String::from_str(&env, "1.0.0")
+    }
+
+    /// Return the list of event schema versions emitted by this deployment.
+    ///
+    /// External indexers and SDK consumers should inspect this list to
+    /// select the correct event decoder before processing contract events.
+    /// Each entry follows the pattern `"<namespace>/v<n>"`.
+    ///
+    /// This function does not read from or write to contract storage.
+    ///
+    /// # Returns
+    /// Vector of event schema version strings
+    pub fn get_supported_event_versions(env: Env) -> Vec<soroban_sdk::String> {
+        let mut versions = Vec::new(&env);
+        versions.push_back(soroban_sdk::String::from_str(&env, "task/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "submission/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "dispute/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "api/v1"));
+        versions.push_back(soroban_sdk::String::from_str(&env, "contract/v1"));
+        versions
+    }
+
+    /// Return immutable metadata describing this contract deployment.
+    ///
+    /// Combines `get_version` and `get_supported_event_versions` into a
+    /// single call for external applications that need a full capability
+    /// snapshot. All fields are compile-time constants; this function does
+    /// not read from or write to contract storage.
+    ///
+    /// # Returns
+    /// `ContractMetadata` struct containing version, name, description, and
+    /// supported event schema versions
+    pub fn get_metadata(env: Env) -> types::ContractMetadata {
+        types::ContractMetadata {
+            version: soroban_sdk::String::from_str(&env, "1.0.0"),
+            name: soroban_sdk::String::from_str(&env, "TaskBounty"),
+            description: soroban_sdk::String::from_str(
+                &env,
+                "Decentralized task and bounty board on Stellar",
+            ),
+            event_versions: Self::get_supported_event_versions(env.clone()),
+        }
     }
 
     // ========================================================================
