@@ -15,6 +15,10 @@ repository implement each piece.
 > diagrams and a structured narrative. Then return here for the detailed
 > walkthrough.
 
+> **Security reviewers:** See [`SECURITY_THREAT_MODEL.md`](SECURITY_THREAT_MODEL.md)
+> for the full threat model — critical assets, trust boundaries, attack vectors,
+> mitigations, and open risks — maintained alongside this document.
+
 It does **not** replace the deeper subsystem docs linked at the end — read it
 first, then dive into the linked material as needed.
 
