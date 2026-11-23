@@ -11,6 +11,7 @@ use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
 pub mod base {
     pub mod channel;
     pub mod clock;
+    pub mod constants;
     pub mod errors;
     pub mod events;
     pub mod metadata_validation;
@@ -816,6 +817,25 @@ impl AutoShareContract {
     }
 
     // ============================================================================
+    // Storage Lifecycle & Cleanup
+    // ============================================================================
+
+    /// Prunes expired ephemeral records (admin only) and refreshes the TTL of
+    /// still-live notifications in the supplied list.
+    ///
+    /// Only expired `ScheduledNotification` entries are removed — each is first
+    /// archived so immutable history is preserved. Historical records (payment
+    /// history, audit log, archives, group/channel state) are never touched.
+    /// Returns the number of expired records pruned. Emits `RecordsCleanedUp`.
+    pub fn cleanup_expired_records(
+        env: Env,
+        admin: Address,
+        notification_ids: Vec<BytesN<32>>,
+    ) -> Result<u32, base::errors::Error> {
+        autoshare_logic::cleanup_expired_records(env, admin, notification_ids)
+    }
+
+    // ============================================================================
     // Notification Delivery Idempotency
     // ============================================================================
 
@@ -1048,6 +1068,7 @@ mod tests {
     mod expiration_test;
     mod extended_coverage_test;
     mod fuzz_test;
+    mod input_bounds_test;
     mod metadata_validation_test;
     mod mock_token_test;
     mod notification_lifetime_test;
@@ -1062,6 +1083,7 @@ mod tests {
     mod revocation_test;
     mod schema_version_test;
     mod storage_optimization_test;
+    mod storage_lifecycle_test;
     mod subscription_cancellation_test;
     mod template_registry_test;
     mod test_utils_test;

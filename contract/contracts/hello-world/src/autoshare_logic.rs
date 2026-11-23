@@ -1,4 +1,8 @@
 use crate::base::clock::current_time;
+use crate::base::constants::{
+    MAX_BATCH_SIZE, MAX_CHANNEL_CUSTOM_FIELDS, MAX_CHANNEL_DESCRIPTION_LEN,
+    MAX_MEMBER_COUNT, MAX_METADATA_STRING_LEN, MAX_NAME_LEN, MAX_TOPIC_LEN,
+};
 use crate::base::errors::Error;
 use crate::base::events::{
     AdminTransferred, AuditAction, AuditRecordAppended, AuthorizationFailure, AutoshareCreated,
@@ -7,7 +11,7 @@ use crate::base::events::{
     NotificationAccessed, NotificationAcknowledged, NotificationArchived, NotificationCategory,
     NotificationDelivered, NotificationExpired, NotificationExtended,
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
-    NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
+    NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred, RecordsCleanedUp,
     ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
 };
 use crate::base::metadata_validation::{validate_metadata, NotificationMetadata};
@@ -35,11 +39,10 @@ use soroban_sdk::{contracttype, token, Address, BytesN, Env, Map, String, Vec};
 /// - `GroupMembers(id)` – members are embedded in `AutoShareDetails.members`
 ///   and were being written twice on every mutation.  Reads now go directly
 ///   to `AutoShareDetails`, halving storage writes for member operations.
-/// Maximum allowed length for AutoShare group names.
-const MAX_NAME_LENGTH: u32 = 100;
-/// Maximum number of members allowed per AutoShare group.
-const MAX_MEMBERS: u32 = 50;
-
+///
+/// Input-size limits are defined centrally in [`crate::base::constants`] so
+/// every entry point enforces the same bound; see that module for the full
+/// table of documented maximum sizes.
 #[contracttype]
 pub enum DataKey {
     AutoShare(BytesN<32>),
@@ -103,6 +106,12 @@ pub fn create_autoshare(
 ) -> Result<(), Error> {
     creator.require_auth();
 
+    // Enforce the name bound up front, before any storage reads/writes, TTL
+    // management, or event emission.
+    if name.len() > MAX_NAME_LEN {
+        return Err(Error::NameTooLong);
+    }
+
     // Check if contract is paused
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
@@ -122,11 +131,6 @@ pub fn create_autoshare(
     // Validate usage count
     if usage_count == 0 {
         return Err(Error::InvalidUsageCount);
-    }
-
-    // Validate name length
-    if name.len() > MAX_NAME_LENGTH {
-        return Err(Error::NameTooLong);
     }
 
     // Verify token is supported
@@ -304,7 +308,7 @@ pub fn add_group_member(
     }
 
     // Validate member count limit
-    if details.members.len() >= MAX_MEMBERS {
+    if details.members.len() >= MAX_MEMBER_COUNT {
         return Err(Error::TooManyMembers);
     }
 
@@ -971,6 +975,15 @@ pub fn update_members(
 ) -> Result<(), Error> {
     caller.require_auth();
 
+    // Reject invalid-sized member lists up front, before any storage access or
+    // event emission: an empty list and a list exceeding the documented bound.
+    if new_members.is_empty() {
+        return Err(Error::EmptyMembers);
+    }
+    if new_members.len() > MAX_MEMBER_COUNT {
+        return Err(Error::TooManyMembers);
+    }
+
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
     }
@@ -989,16 +1002,6 @@ pub fn update_members(
 
     if !details.is_active {
         return Err(Error::GroupInactive);
-    }
-
-    // Validate new members
-    if new_members.is_empty() {
-        return Err(Error::EmptyMembers);
-    }
-
-    // Validate member count limit
-    if new_members.len() > MAX_MEMBERS {
-        return Err(Error::TooManyMembers);
     }
 
     let mut total_percentage: u32 = 0;
@@ -1171,7 +1174,7 @@ fn validate_members(env: &Env, members: &Vec<GroupMember>) -> Result<(), Error> 
         return Err(Error::EmptyMembers);
     }
     // Validate member count limit
-    if members.len() > MAX_MEMBERS {
+    if members.len() > MAX_MEMBER_COUNT {
         return Err(Error::TooManyMembers);
     }
     let mut total_percentage: u32 = 0;
@@ -1210,6 +1213,26 @@ const NOTIFICATION_PRIORITY: NotificationPriority = NotificationPriority::Medium
 /// **Placeholder value: 30 days (2_592_000 seconds).** Adjust this value in
 /// review if a different maximum is required by the product specification.
 const MAX_NOTIFICATION_LIFETIME_SECONDS: u64 = 30 * 24 * 60 * 60; // 30 days
+
+// ============================================================================
+// Persistent storage lifecycle (TTL management)
+// ============================================================================
+//
+// Live (active) notification entries are refreshed on every write so they are
+// never evicted by Soroban's TTL expiry before their own `expires_at`. Once a
+// notification has expired it becomes eligible for pruning via
+// [`cleanup_expired_records`], which archives it before removing the active
+// entry.
+//
+// `TTL_THRESHOLD` is the remaining-lived-entries count (~5s per ledger) below
+// which a write refreshes the entry; `TTL_EXTEND_TO` is the target ledger
+// count after a refresh.
+
+/// Refresh a persistent notification entry when fewer than ~1 day of ledgers
+/// remain before eviction.
+const NOTIFICATION_TTL_THRESHOLD: u32 = 17_280; // ~1 day @ 5s/ledger
+/// Extend a refreshed notification entry to ~30 days of ledgers.
+const NOTIFICATION_TTL_EXTEND_TO: u32 = 518_400; // ~30 days @ 5s/ledger
 
 /// Reads a scheduled notification from storage, if one is tracked for `id`.
 fn load_notification(env: &Env, id: &BytesN<32>) -> Option<ScheduledNotification> {
@@ -1251,6 +1274,12 @@ pub fn schedule_notification(
     priority: NotificationPriority,
 ) -> Result<(), Error> {
     creator.require_auth();
+
+    // Enforce the payload/title bound up front — before any storage access,
+    // TTL management, or event emission.
+    if title.len() > MAX_TOPIC_LEN {
+        return Err(Error::PayloadExceedsMaxLength);
+    }
 
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
@@ -1308,6 +1337,11 @@ pub fn schedule_notification(
         version: CURRENT_NOTIFICATION_VERSION,
     };
     env.storage().persistent().set(&key, &notification);
+    // Keep the live entry alive until at least its own expiry; expired entries
+    // are later reclaimed by `cleanup_expired_records`.
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, NOTIFICATION_TTL_THRESHOLD, NOTIFICATION_TTL_EXTEND_TO);
 
     append_audit_record(
         &env,
@@ -1508,9 +1542,6 @@ pub fn cancel_notification(
 // Batch Notification Creation
 // ============================================================================
 
-/// Maximum number of notifications that can be created in a single batch call.
-const MAX_BATCH_SIZE: u32 = 50;
-
 /// Creates multiple scheduled notifications in a single transaction.
 ///
 /// Each `ids[i]` is paired with `ttl_seconds[i]`. Both slices must have the same
@@ -1575,6 +1606,10 @@ pub fn batch_schedule_notifications(
         if title.is_empty() {
             return Err(Error::InvalidInput);
         }
+        // Enforce the payload/title bound before any entry is persisted.
+        if title.len() > MAX_TOPIC_LEN {
+            return Err(Error::PayloadExceedsMaxLength);
+        }
 
         // Check for intra-batch duplicates.
         for seen in seen_in_batch.iter() {
@@ -1627,6 +1662,9 @@ pub fn batch_schedule_notifications(
         };
         let key = DataKey::ScheduledNotification(id.clone());
         env.storage().persistent().set(&key, &notification);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, NOTIFICATION_TTL_THRESHOLD, NOTIFICATION_TTL_EXTEND_TO);
 
         append_audit_record(&env, id.clone(), AuditAction::Created, creator.clone());
 
@@ -2433,11 +2471,6 @@ pub fn record_notification_access(
 // Channel Metadata Updates
 // ============================================================================
 
-/// Maximum length for a channel description string.
-const MAX_CHANNEL_DESCRIPTION_LENGTH: u32 = 256;
-/// Maximum number of custom metadata fields on a channel.
-const MAX_CHANNEL_CUSTOM_FIELDS: u32 = 20;
-
 /// Updates the description and custom metadata for an AutoShare channel.
 ///
 /// Only the channel creator (group owner) may update metadata. Membership,
@@ -2447,7 +2480,8 @@ const MAX_CHANNEL_CUSTOM_FIELDS: u32 = 20;
 /// - `NotFound` if the channel / group does not exist
 /// - `Unauthorized` if `caller` is not the creator
 /// - `ContractPaused` if the contract is paused
-/// - `InvalidInput` if description or custom fields fail validation
+/// - `InputTooLarge` if `description`, the field count, or any key/value
+///   exceeds its documented bound (see `base::constants`)
 pub fn update_channel_metadata(
     env: Env,
     channel_id: BytesN<32>,
@@ -2457,6 +2491,27 @@ pub fn update_channel_metadata(
 ) -> Result<(), Error> {
     caller.require_auth();
 
+    // Validate every variable-length input up front, before any storage access,
+    // TTL management, or event emission.
+    if description.len() > MAX_CHANNEL_DESCRIPTION_LEN {
+        return Err(Error::InputTooLarge);
+    }
+
+    if custom_fields.len() > MAX_CHANNEL_CUSTOM_FIELDS {
+        return Err(Error::InputTooLarge);
+    }
+
+    for key in custom_fields.keys() {
+        if key.len() > MAX_METADATA_STRING_LEN {
+            return Err(Error::InputTooLarge);
+        }
+        if let Some(value) = custom_fields.get(key.clone()) {
+            if value.len() > MAX_METADATA_STRING_LEN {
+                return Err(Error::InputTooLarge);
+            }
+        }
+    }
+
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
     }
@@ -2464,25 +2519,6 @@ pub fn update_channel_metadata(
     let group = get_autoshare(env.clone(), channel_id.clone())?;
     if caller != group.creator {
         return Err(Error::Unauthorized);
-    }
-
-    if description.len() > MAX_CHANNEL_DESCRIPTION_LENGTH {
-        return Err(Error::InvalidInput);
-    }
-
-    if custom_fields.len() > MAX_CHANNEL_CUSTOM_FIELDS {
-        return Err(Error::InvalidInput);
-    }
-
-    for key in custom_fields.keys() {
-        if key.len() > 256 {
-            return Err(Error::InvalidInput);
-        }
-        if let Some(value) = custom_fields.get(key.clone()) {
-            if value.len() > 256 {
-                return Err(Error::InvalidInput);
-            }
-        }
     }
 
     // Validate via shared metadata rules when a non-empty description is provided.
@@ -2592,4 +2628,92 @@ pub fn get_archived_notification(
 /// Returns the current notification protocol version constant.
 pub fn get_notification_version(_env: Env) -> u32 {
     CURRENT_NOTIFICATION_VERSION
+}
+
+// ============================================================================
+// Persistent Storage Lifecycle & Cleanup
+// ============================================================================
+
+/// Prunes expired **ephemeral** records in a batch.
+///
+/// # Storage lifecycle
+///
+/// Records are split into two categories:
+///
+/// * **Historical / immutable** — payment history, the audit log, archived
+///   notifications, AutoShare group state, channel metadata, templates,
+///   supported tokens and config. These are never removed by cleanup.
+/// * **Ephemeral / expirable** — [`DataKey::ScheduledNotification`] entries
+///   (bounded by `expires_at`) and delivery-idempotency records. Only these
+///   may be reclaimed.
+///
+/// This function considers only the notification ids the caller supplies
+/// (there is no unbounded on-chain index to enumerate, which keeps the call's
+/// gas cost proportional to the caller's input). For each id:
+///
+/// * If the notification is **expired** (`now >= expires_at`) it is archived
+///   (preserving immutable history) and its active entry is removed.
+/// * If it is still **live**, its TTL is refreshed via `extend_ttl` so it is
+///   not evicted before its own expiry.
+/// * Unknown ids are ignored.
+///
+/// # Access control
+/// The `admin` must authorize the call and must be the current contract admin.
+///
+/// # Returns
+/// The number of expired records that were pruned.
+///
+/// # Errors
+/// - `Unauthorized` if `admin` is not the caller or not the current admin.
+///
+/// # Events
+/// Emits [`RecordsCleanedUp`] with the number of pruned records.
+pub fn cleanup_expired_records(
+    env: Env,
+    admin: Address,
+    notification_ids: Vec<BytesN<32>>,
+) -> Result<u32, Error> {
+    admin.require_auth();
+    require_admin(&env, &admin)?;
+
+    let now = current_time(&env);
+    let mut removed: u32 = 0;
+
+    for id in notification_ids.iter() {
+        let key = DataKey::ScheduledNotification(id.clone());
+        let notification = match load_notification(&env, &id) {
+            Some(n) => n,
+            // Already gone (never scheduled, or previously archived): nothing to do.
+            None => continue,
+        };
+
+        if now >= notification.expires_at {
+            // Expired ephemeral record: preserve immutable history in the
+            // archive, then reclaim the active storage entry. This is the ONLY
+            // removal performed anywhere in this function; historical records
+            // (payments, audit log, archives, group/channel state) are never
+            // deleted.
+            env.storage().persistent().remove(&key);
+            archive_notification(&env, &notification, String::from_str(&env, "expired"));
+            removed += 1;
+        } else {
+            // Still live: refresh the TTL so Soroban does not evict the entry
+            // before its own `expires_at`.
+            env.storage().persistent().extend_ttl(
+                &key,
+                NOTIFICATION_TTL_THRESHOLD,
+                NOTIFICATION_TTL_EXTEND_TO,
+            );
+        }
+    }
+
+    RecordsCleanedUp {
+        admin,
+        category: NotificationCategory::Notification,
+        priority: NotificationPriority::Low,
+        removed_count: removed,
+    }
+    .publish(&env);
+
+    Ok(removed)
 }

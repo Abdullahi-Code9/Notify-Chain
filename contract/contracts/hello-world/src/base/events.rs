@@ -631,3 +631,26 @@ pub struct TemplateUpdated {
     /// Unique identifier of the updated template.
     pub template_id: BytesN<32>,
 }
+
+// ============================================================================
+// Storage lifecycle / cleanup
+// ============================================================================
+
+/// Emitted when an authorized storage-cleanup call prunes expired records.
+///
+/// Only **ephemeral** records (expired scheduled notifications) are ever
+/// removed; historical/immutable records are never touched. `removed_count`
+/// reports how many active entries were pruned in the call.
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct RecordsCleanedUp {
+    /// Admin address that authorized the cleanup.
+    #[topic]
+    pub admin: Address,
+    #[topic]
+    pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
+    /// Number of expired records pruned by this call.
+    pub removed_count: u32,
+}
