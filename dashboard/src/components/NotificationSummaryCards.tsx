@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { NotificationSummaryMetrics } from '../types/notificationSummary';
 import { formatCount, formatDeliveredRate } from '../types/notificationSummary';
+import { useLocaleFormat } from '../utils/formatting';
 
 interface NotificationSummaryCardsProps {
   summary: NotificationSummaryMetrics | null;
@@ -13,12 +14,24 @@ type CardAccent = 'green' | 'yellow' | 'red';
 interface MetricCardProps {
   label: string;
   value: string;
+  /** Raw, unformatted value preserved for copying and machine-readable exports. */
+  rawValue?: string;
   subValue?: string;
+  /** Raw, unformatted sub value preserved for copying and machine-readable exports. */
+  rawSubValue?: string;
   accent: CardAccent;
   isLoading: boolean;
 }
 
-function MetricCard({ label, value, subValue, accent, isLoading }: MetricCardProps) {
+function MetricCard({
+  label,
+  value,
+  rawValue,
+  subValue,
+  rawSubValue,
+  accent,
+  isLoading,
+}: MetricCardProps) {
   return (
     <div
       className={`notification-summary__card notification-summary__card--${accent}`}
@@ -31,8 +44,14 @@ function MetricCard({ label, value, subValue, accent, isLoading }: MetricCardPro
         </dd>
       ) : (
         <dd className="notification-summary__card-value">
-          <span className="notification-summary__card-number">{value}</span>
-          {subValue && <span className="notification-summary__card-sub">{subValue}</span>}
+          <span className="notification-summary__card-number" data-raw={rawValue}>
+            {value}
+          </span>
+          {subValue && (
+            <span className="notification-summary__card-sub" data-raw={rawSubValue}>
+              {subValue}
+            </span>
+          )}
         </dd>
       )}
     </div>
@@ -53,22 +72,43 @@ export const NotificationSummaryCards = memo(function NotificationSummaryCards({
   summary,
   isLoading,
 }: NotificationSummaryCardsProps) {
-  const deliveredStr = isLoading ? '—' : formatCount(summary?.delivered ?? 0);
-  const pendingStr = isLoading ? '—' : formatCount(summary?.pending ?? 0);
-  const failedStr = isLoading ? '—' : formatCount(summary?.failed ?? 0);
-  const rateStr = isLoading ? undefined : formatDeliveredRate(summary?.deliveredRate ?? 0);
+  const { formatNumber } = useLocaleFormat();
+
+  const delivered = summary?.delivered ?? 0;
+  const pending = summary?.pending ?? 0;
+  const failed = summary?.failed ?? 0;
+  const deliveredRate = summary?.deliveredRate ?? 0;
+
+  const deliveredStr = isLoading ? '—' : formatNumber(delivered);
+  const pendingStr = isLoading ? '—' : formatNumber(pending);
+  const failedStr = isLoading ? '—' : formatNumber(failed);
+  const rateStr = isLoading ? undefined : formatDeliveredRate(deliveredRate);
 
   return (
     <dl className="notification-summary" aria-label="Notification delivery summary">
       <MetricCard
         label="Delivered"
         value={deliveredStr}
+        rawValue={String(delivered)}
         subValue={rateStr ? `Deliver rate: ${rateStr}` : undefined}
+        rawSubValue={rateStr ? String(deliveredRate) : undefined}
         accent="green"
         isLoading={isLoading}
       />
-      <MetricCard label="Pending" value={pendingStr} accent="yellow" isLoading={isLoading} />
-      <MetricCard label="Failed" value={failedStr} accent="red" isLoading={isLoading} />
+      <MetricCard
+        label="Pending"
+        value={pendingStr}
+        rawValue={String(pending)}
+        accent="yellow"
+        isLoading={isLoading}
+      />
+      <MetricCard
+        label="Failed"
+        value={failedStr}
+        rawValue={String(failed)}
+        accent="red"
+        isLoading={isLoading}
+      />
     </dl>
   );
 });

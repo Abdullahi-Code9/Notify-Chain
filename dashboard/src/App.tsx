@@ -15,6 +15,8 @@ import { ChannelDetailsPage } from './pages/ChannelDetailsPage';
 import { RpcBenchmarkPage } from './pages/RpcBenchmarkPage';
 import { NotificationDestinationsPage } from './pages/NotificationDestinationsPage';
 import { ContractDetailPage } from './pages/ContractDetailPage';
+import { AuditHistoryPage } from './pages/AuditHistoryPage';
+import { AdminRouteGuard } from './components/AdminRouteGuard';
 
 import { ThemeToggle } from './components/ThemeToggle';
 import { TimezoneSelector } from './components/TimezoneSelector';
@@ -316,6 +318,15 @@ function renderPanel(tab: Tab, events: any[]) {
       return (
         <ErrorBoundary section="RPC Benchmark">
           <RpcBenchmarkPage />
+        </ErrorBoundary>
+      );
+
+    case 'admin-audit':
+      return (
+        <ErrorBoundary section="Administrative Audit History">
+          <AdminRouteGuard>
+            <AuditHistoryPage />
+          </AdminRouteGuard>
         </ErrorBoundary>
       );
 

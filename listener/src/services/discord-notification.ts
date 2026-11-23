@@ -13,6 +13,7 @@ import { generateCorrelationId } from '../utils/request-id';
 import { getDatabase } from '../database/database';
 import { SecurityAuditService } from './security-audit';
 import { Translator, getDefaultTranslator, TranslationParams } from '../i18n';
+import { CircuitBreaker, CircuitBreakerOptions, CircuitOpenError } from './circuit-breaker';
 
 export const MAX_DISCORD_EMBED_LENGTH = 6000;
 export const MAX_DISCORD_FIELD_VALUE_LENGTH = 1024;
@@ -99,6 +100,8 @@ export interface DiscordNotificationOptions {
   translator?: Translator;
   /** Locale for user-facing text. Defaults to the translator's fallback locale. */
   locale?: string;
+  /** Circuit breaker tuning for this provider instance. */
+  circuitBreaker?: CircuitBreakerOptions;
 }
 
 export class DiscordNotificationService implements NotificationProvider {
@@ -108,6 +111,7 @@ export class DiscordNotificationService implements NotificationProvider {
   private readonly analytics: NotificationAnalyticsAggregator | null;
   private readonly translator: Translator;
   private readonly locale: string | undefined;
+  private readonly circuitBreaker: CircuitBreaker;
 
   constructor(
     config: DiscordConfig,
@@ -124,6 +128,10 @@ export class DiscordNotificationService implements NotificationProvider {
     this.analytics = getNotificationAnalyticsAggregator();
     this.translator = options.translator ?? getDefaultTranslator();
     this.locale = options.locale;
+    this.circuitBreaker = new CircuitBreaker(
+      `discord:${config.webhookId ?? config.webhookUrl}`,
+      options.circuitBreaker,
+    );
   }
 
   /** Translate a message key in this service's configured locale. */
@@ -175,7 +183,9 @@ export class DiscordNotificationService implements NotificationProvider {
     while (attempt <= maxRetries) {
       const attemptStart = Date.now();
       try {
-        const response = await this.sendWebhook(message, logContext);
+        const response = await this.circuitBreaker.execute(() =>
+          this.sendWebhook(message, logContext),
+        );
         const durationMs = Date.now() - attemptStart;
 
         if (response.ok) {
@@ -230,6 +240,15 @@ export class DiscordNotificationService implements NotificationProvider {
         }
       } catch (error) {
         const durationMs = Date.now() - attemptStart;
+        if (error instanceof CircuitOpenError) {
+          logger.warn('Discord circuit breaker open; skipping notification', {
+            ...logContext,
+            circuitState: this.circuitBreaker.getState(),
+            retryAfterMs: this.circuitBreaker.getRetryAfterMs(),
+            attempt,
+          });
+          return false;
+        }
         logger.error('Discord webhook request error', {
           ...logContext,
           error,
@@ -264,7 +283,13 @@ export class DiscordNotificationService implements NotificationProvider {
     return {
       ...this.deduplicator.getMetrics(),
       timeoutCount: this.timeoutCount,
+      circuitBreaker: this.circuitBreaker.getMetrics(),
     };
+  }
+
+  /** Current circuit breaker state for this provider (independent per instance). */
+  getCircuitState() {
+    return this.circuitBreaker.getState();
   }
 
   getDeduplicationMetrics() {
@@ -289,7 +314,9 @@ export class DiscordNotificationService implements NotificationProvider {
     const startTime = Date.now();
 
     try {
-      const response = await this.sendWebhook(message, logContext);
+      const response = await this.circuitBreaker.execute(() =>
+        this.sendWebhook(message, logContext),
+      );
       const durationMs = Date.now() - startTime;
 
       if (response.ok) {
@@ -307,6 +334,14 @@ export class DiscordNotificationService implements NotificationProvider {
       });
       return false;
     } catch (error) {
+      if (error instanceof CircuitOpenError) {
+        logger.warn('Discord circuit breaker open; skipping test message', {
+          ...logContext,
+          circuitState: this.circuitBreaker.getState(),
+          retryAfterMs: this.circuitBreaker.getRetryAfterMs(),
+        });
+        return false;
+      }
       logger.error('Discord test message request error', {
         ...logContext,
         error,

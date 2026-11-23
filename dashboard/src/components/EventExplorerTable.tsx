@@ -1,6 +1,11 @@
 import { useState, useCallback, memo, useMemo, useEffect, useRef } from 'react';
 import type { BlockchainEvent } from '../types/event';
 import { EventExplorerCard } from './EventExplorerCard';
+import {
+  formatDate,
+  formatNumber,
+  getActiveLocale,
+} from '../utils/localeFormat';
 
 const STORAGE_KEY = 'notify-chain-event-table-widths';
 
@@ -201,6 +206,24 @@ export const EventExplorerTable = memo(function EventExplorerTable({
 
   const gridTemplate = widthsToGridTemplate(columnWidths);
 
+  const locale = getActiveLocale();
+
+  const columnTitles = useMemo(
+    () =>
+      COLUMN_LABELS.map((label) => {
+        if (label === 'Received') {
+          return `${label} (${locale})`;
+        }
+
+        if (label === 'Ledger') {
+          return `${label} (${locale})`;
+        }
+
+        return label;
+      }),
+    [locale],
+  );
+
   return (
     <section className="event-explorer__table-wrapper">
       <div
@@ -213,6 +236,7 @@ export const EventExplorerTable = memo(function EventExplorerTable({
             key={label}
             className="event-explorer__column-header"
             role="columnheader"
+            title={columnTitles[index]}
           >
             <span>{label}</span>
 
@@ -246,6 +270,8 @@ export const EventExplorerTable = memo(function EventExplorerTable({
             isCopied={isCopied(event.contractAddress)}
             onSelectEvent={handleSelectEvent}
             onContractClick={onContractClick}
+            formattedReceived={formatDate(event.receivedAt, locale)}
+            formattedLedger={formatNumber(event.ledger, locale)}
           />
         ))}
       </div>
