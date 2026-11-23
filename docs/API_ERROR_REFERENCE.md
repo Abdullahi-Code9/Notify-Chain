@@ -248,7 +248,7 @@ curl http://localhost:8787/api/templates
 { "error": "Notification payload of 98304 bytes exceeds the 65536-byte limit. Reduce the payload size and retry." }
 ```
 
-**Cause:** The notification payload exceeded the maximum size — **64 KB (65,536 bytes)** by default.
+**Cause:** The notification payload exceeded the maximum size — **64 KB (65,536 bytes)** by default. Requests whose whole HTTP body exceeds the request-size limit also return 413 with `code: "PAYLOAD_TOO_LARGE"` (plus `maxBytes` and `observedBytes`). The default body limit is 1 MiB; bulk endpoints have larger ceilings: `POST /api/notifications/import` accepts 5 MiB and `POST /api/notifications/validate-batch` accepts 2 MiB. A configured `API_MAX_BODY_BYTES` applies to every other endpoint.
 
 **Resolution:**
 - Move large content out of the payload and reference it by URL.
