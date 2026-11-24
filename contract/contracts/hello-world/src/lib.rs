@@ -1033,6 +1033,7 @@ pub mod test_utils;
 #[cfg(test)]
 mod tests {
     mod access_control_test;
+    mod event_payload_consistency_test;
     mod access_log_test;
     mod archive_notification_test;
     mod audit_log_test;
