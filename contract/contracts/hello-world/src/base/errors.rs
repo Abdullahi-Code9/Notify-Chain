@@ -100,4 +100,13 @@ pub enum Error {
     NonceExpired = 44,
     /// Triggered when a nonce is bound to a different contract address.
     NonceContractMismatch = 45,
+    /// Triggered when attempting to run a storage migration that has already
+    /// been executed for the target version, preventing re-execution.
+    MigrationAlreadyExecuted = 46,
+    /// Triggered when no migration path exists between the current storage
+    /// version and the requested target version.
+    UnsupportedMigration = 47,
+    /// Triggered when requesting migration to a version that is not higher
+    /// than the current storage version.
+    MigrationVersionNotHigher = 48,
 }

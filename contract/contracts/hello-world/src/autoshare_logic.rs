@@ -8,7 +8,8 @@ use crate::base::events::{
     NotificationDelivered, NotificationExpired, NotificationExtended,
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
     NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
-    ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
+    ScheduledNotificationCancelled, SchemaVersionSet, StorageMigrationCompleted,
+    StorageMigrationStarted, SubscriptionCancelled, Withdrawal,
 };
 use crate::base::metadata_validation::{validate_metadata, NotificationMetadata};
 use crate::base::types::{
@@ -74,6 +75,14 @@ pub enum DataKey {
     /// caller-supplied idempotency key. Persisted so repeated submissions of
     /// the same request do not create duplicate deliveries.
     DeliveryIdempotency(BytesN<32>),
+    /// Persistent storage format version.  Set to `0` before the first
+    /// explicit migration, then advanced by each `run_migration` call.
+    StorageVersion,
+    /// Guard key for a completed migration.  `MigrationExecuted(to_version)`
+    /// is set to `true` once the migration to `to_version` finishes, so
+    /// re-running the same migration returns an error rather than corrupting
+    /// state.
+    MigrationExecuted(u32),
 }
 
 // ============================================================================
@@ -2592,4 +2601,161 @@ pub fn get_archived_notification(
 /// Returns the current notification protocol version constant.
 pub fn get_notification_version(_env: Env) -> u32 {
     CURRENT_NOTIFICATION_VERSION
+}
+
+// ============================================================================
+// Storage Migration  (Issue #1197)
+// ============================================================================
+
+/// The lowest storage version that migrations can target.
+const STORAGE_VERSION_INITIAL: u32 = 0;
+
+/// The highest storage version the current contract binary supports.
+/// Advance this constant whenever a new migration path is added.
+pub const STORAGE_VERSION_CURRENT: u32 = 1;
+
+/// Returns the persistent storage format version.
+///
+/// Returns `0` when storage has never been explicitly versioned (i.e. the
+/// contract was deployed before migration tracking was introduced — that is the
+/// original "v0" layout).
+pub fn get_storage_version(env: Env) -> u32 {
+    env.storage()
+        .persistent()
+        .get::<DataKey, u32>(&DataKey::StorageVersion)
+        .unwrap_or(STORAGE_VERSION_INITIAL)
+}
+
+/// Returns `true` when the migration to `target_version` has already been
+/// executed, preventing re-execution.
+pub fn is_migration_executed(env: Env, target_version: u32) -> bool {
+    env.storage()
+        .persistent()
+        .get::<DataKey, bool>(&DataKey::MigrationExecuted(target_version))
+        .unwrap_or(false)
+}
+
+/// Migrates persistent storage from the current version to `target_version`.
+///
+/// # Behaviour
+/// 1. Reads the current storage version (`from_version`).
+/// 2. Validates that `target_version > from_version` and that a migration
+///    path exists.
+/// 3. Checks the `MigrationExecuted(target_version)` guard to prevent
+///    repeated execution.
+/// 4. Emits `StorageMigrationStarted`.
+/// 5. Runs the appropriate per-version migration step.
+/// 6. Writes the new `StorageVersion` and sets `MigrationExecuted(target_version)`.
+/// 7. Emits `StorageMigrationCompleted`.
+///
+/// # Errors
+/// - [`Error::Unauthorized`]             – `admin` is not the stored admin.
+/// - [`Error::MigrationAlreadyExecuted`] – guard key already set for `target_version`.
+/// - [`Error::MigrationVersionNotHigher`] – `target_version <= from_version`.
+/// - [`Error::UnsupportedMigration`]     – no defined path from `from_version` to `target_version`.
+pub fn run_migration(env: Env, admin: Address, target_version: u32) -> Result<(), Error> {
+    admin.require_auth();
+
+    let stored_admin = get_admin(env.clone())?;
+    if admin != stored_admin {
+        return Err(Error::Unauthorized);
+    }
+
+    let from_version = get_storage_version(env.clone());
+
+    if target_version <= from_version {
+        return Err(Error::MigrationVersionNotHigher);
+    }
+
+    // Guard: refuse if this exact migration already ran.
+    if is_migration_executed(env.clone(), target_version) {
+        return Err(Error::MigrationAlreadyExecuted);
+    }
+
+    // Only migrations with an explicit implementation are supported.
+    if from_version != STORAGE_VERSION_INITIAL || target_version != 1 {
+        return Err(Error::UnsupportedMigration);
+    }
+
+    StorageMigrationStarted {
+        admin: admin.clone(),
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::Critical,
+        from_version,
+        to_version: target_version,
+    }
+    .publish(&env);
+
+    migrate_v0_to_v1(&env)?;
+
+    env.storage()
+        .persistent()
+        .set(&DataKey::StorageVersion, &target_version);
+    env.storage()
+        .persistent()
+        .set(&DataKey::MigrationExecuted(target_version), &true);
+
+    let migrated_at = current_time(&env);
+
+    StorageMigrationCompleted {
+        admin,
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::Critical,
+        from_version,
+        to_version: target_version,
+        migrated_at,
+    }
+    .publish(&env);
+
+    Ok(())
+}
+
+/// Migration step: v0 → v1.
+///
+/// v0 is the implicit pre-versioning layout shipped before Issue #1197.
+/// v1 is the first explicitly versioned layout. The only structural change is
+/// that any [`ScheduledNotification`] record carrying `version == 0` (written
+/// before Issue #309 added the field) is back-filled with
+/// [`CURRENT_NOTIFICATION_VERSION`]. Records that already carry a non-zero
+/// version are left untouched, making this step idempotent at the record level.
+fn migrate_v0_to_v1(env: &Env) -> Result<(), Error> {
+    // Soroban does not expose a key enumeration API, so we discover notification
+    // IDs via the audit log — the only durable index that spans all notifications.
+    let mut notification_ids: Vec<BytesN<32>> = Vec::new(env);
+
+    if let Some(audit_log) = env
+        .storage()
+        .persistent()
+        .get::<DataKey, Vec<AuditRecord>>(&DataKey::AuditLog)
+    {
+        for record in audit_log.iter() {
+            let id = record.notification_id.clone();
+            let mut found = false;
+            for existing in notification_ids.iter() {
+                if existing == id {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                notification_ids.push_back(id);
+            }
+        }
+    }
+
+    for id in notification_ids.iter() {
+        let key = DataKey::ScheduledNotification(id.clone());
+        if let Some(mut notification) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, ScheduledNotification>(&key)
+        {
+            if notification.version == 0 {
+                notification.version = CURRENT_NOTIFICATION_VERSION;
+                env.storage().persistent().set(&key, &notification);
+            }
+        }
+    }
+
+    Ok(())
 }

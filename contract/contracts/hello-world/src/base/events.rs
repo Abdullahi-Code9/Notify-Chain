@@ -631,3 +631,50 @@ pub struct TemplateUpdated {
     /// Unique identifier of the updated template.
     pub template_id: BytesN<32>,
 }
+
+// ============================================================================
+// Storage Migration  (Issue #1197)
+// ============================================================================
+
+/// Emitted when the admin initiates a storage schema migration.
+///
+/// Off-chain consumers should pause indexing until `StorageMigrationCompleted`
+/// is received for the same `to_version` to avoid reading partially-migrated
+/// state.
+#[contractevent]
+#[derive(Clone)]
+pub struct StorageMigrationStarted {
+    /// Admin address that triggered the migration.
+    #[topic]
+    pub admin: Address,
+    #[topic]
+    pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
+    /// Storage version being migrated away from.
+    pub from_version: u32,
+    /// Storage version being migrated to.
+    pub to_version: u32,
+}
+
+/// Emitted when a storage schema migration completes successfully.
+///
+/// After this event the contract state is fully consistent with `to_version`
+/// and off-chain consumers may resume normal indexing.
+#[contractevent]
+#[derive(Clone)]
+pub struct StorageMigrationCompleted {
+    /// Admin address that triggered the migration.
+    #[topic]
+    pub admin: Address,
+    #[topic]
+    pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
+    /// Storage version migrated away from.
+    pub from_version: u32,
+    /// Storage version now active.
+    pub to_version: u32,
+    /// Ledger timestamp when migration completed.
+    pub migrated_at: u64,
+}
