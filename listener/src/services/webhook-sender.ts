@@ -15,6 +15,11 @@ export interface WebhookSendOptions {
    * @default false
    */
   skipDnsGuard?: boolean;
+  /**
+   * Maximum number of redirects followed. Each redirect target is validated
+   * independently before it is contacted. @default 3
+   */
+  maxRedirects?: number;
 }
 
 /**
@@ -49,10 +54,12 @@ export function isWebhookTimeoutError(error: unknown): boolean {
 /**
  * Sends a single outbound POST webhook to `url`.
  *
- * Before the HTTP request is made the destination is validated against the
- * DNS rebinding guard (issue #994). If the resolved address falls within any
- * blocked range (RFC 1918, loopback, link-local, etc.) the request is
- * rejected with a `DnsRebindingError` before a single byte leaves the process.
+ * Before every connection (including each redirect hop) the destination is
+ * validated against the DNS rebinding guard (#994, #1206). If the resolved
+ * address falls within any blocked range (RFC 1918, loopback, link-local,
+ * etc.) the request is rejected with a `DnsRebindingError` before a single
+ * byte leaves the process. Redirects are never followed implicitly: the
+ * `Location` target is resolved and validated as a new destination.
  */
 export async function sendWebhook(
   url: string,
@@ -60,43 +67,75 @@ export async function sendWebhook(
   opts: WebhookSendOptions = {},
 ): Promise<Response> {
   const timeoutMs = opts.timeoutMs ?? 5000;
+  const maxRedirects = opts.maxRedirects ?? 3;
 
-  // ── DNS rebinding guard ────────────────────────────────────────────────────
-  if (!opts.skipDnsGuard) {
-    const guardResult = await guardWebhookUrl(url, opts.dnsResolver);
-    if (!guardResult.safe) {
-      logger.warn('Webhook delivery blocked by DNS rebinding guard', {
-        url,
-        hostname: guardResult.hostname,
-        blockedAddress: guardResult.blockedAddress,
-        reason: guardResult.reason,
-      });
-      const err = new DnsRebindingError(
-        guardResult.reason ?? `Webhook destination blocked: ${url}`,
-        guardResult.hostname,
-        guardResult.blockedAddress,
-      );
-      throw err;
-    }
-  }
+  // Validating immediately before every connection keeps a DNS change between
+  // validation and connect from silently bypassing the policy. The addresses
+  // returned here are the ones approved for this hop.
+  await assertSafeDestination(url, opts);
 
-  // ── Outbound HTTP POST ─────────────────────────────────────────────────────
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let currentUrl = url;
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(opts.headers ?? {}),
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal as any,
-    });
-    return response;
+    for (let hop = 0; ; hop++) {
+      const response = await fetch(currentUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(opts.headers ?? {}),
+        },
+        body: JSON.stringify(payload),
+        // Redirects are handled here so every target is validated, rather
+        // than letting the HTTP client follow an untrusted Location header.
+        redirect: 'manual',
+        signal: controller.signal as any,
+      });
+
+      const location = response.headers.get('location');
+      if (!location || response.status < 300 || response.status >= 400 || !isRedirect(response.status)) {
+        return response;
+      }
+      if (hop >= maxRedirects) {
+        return response;
+      }
+
+      const redirectUrl = new URL(location, currentUrl).toString();
+      // Independent validation: a redirect to a private address is blocked
+      // even when the original destination was public.
+      await assertSafeDestination(redirectUrl, opts);
+      void response.body?.cancel().catch(() => {});
+      currentUrl = redirectUrl;
+    }
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+async function assertSafeDestination(
+  url: string,
+  opts: WebhookSendOptions,
+): Promise<void> {
+  if (opts.skipDnsGuard) return;
+
+  const guardResult = await guardWebhookUrl(url, opts.dnsResolver);
+  if (!guardResult.safe) {
+    logger.warn('Webhook delivery blocked by DNS rebinding guard', {
+      url,
+      hostname: guardResult.hostname,
+      blockedAddress: guardResult.blockedAddress,
+      reason: guardResult.reason,
+    });
+    throw new DnsRebindingError(
+      guardResult.reason ?? `Webhook destination blocked: ${url}`,
+      guardResult.hostname,
+      guardResult.blockedAddress,
+    );
   }
 }
 
