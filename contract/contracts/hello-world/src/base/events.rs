@@ -631,3 +631,36 @@ pub struct TemplateUpdated {
     /// Unique identifier of the updated template.
     pub template_id: BytesN<32>,
 }
+
+// ============================================================================
+// Network Configuration  (Issue #1196)
+// ============================================================================
+
+/// Emitted once during contract initialization when the expected Stellar
+/// network is locked in.
+///
+/// `network_id` is the SHA-256 hash of the Stellar network passphrase
+/// (returned by `env.ledger().network_id()`).  Off-chain tools can read
+/// this event to confirm which network the contract was deployed for without
+/// having to inspect raw storage.
+///
+/// # Examples of well-known `network_id` values
+///
+/// | Network     | Passphrase                                             |
+/// |-------------|--------------------------------------------------------|
+/// | Mainnet     | `Public Global Stellar Network ; September 2015`       |
+/// | Testnet     | `Test SDF Network ; September 2015`                    |
+/// | Futurenet   | `Test SDF Future Network ; October 2022`               |
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct NetworkConfigInitialized {
+    /// The admin that initialized the contract.
+    #[topic]
+    pub admin: Address,
+    #[topic]
+    pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
+    /// The locked-in network identifier (SHA-256 of network passphrase).
+    pub network_id: BytesN<32>,
+}

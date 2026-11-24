@@ -100,4 +100,10 @@ pub enum Error {
     NonceExpired = 44,
     /// Triggered when a nonce is bound to a different contract address.
     NonceContractMismatch = 45,
+    /// Triggered when the contract is initialized or invoked on a Stellar
+    /// network whose `network_id` (SHA-256 of its passphrase) does not match
+    /// the value that was locked in at initialization time.  This prevents
+    /// a deployment intended for Testnet from accidentally being used as a
+    /// Mainnet deployment, or vice-versa.
+    NetworkMismatch = 46,
 }
