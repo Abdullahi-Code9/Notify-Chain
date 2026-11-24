@@ -55,7 +55,7 @@ impl AutoShareContract {
 
     /// Initializes the contract admin. Can only be called once.
     pub fn initialize_admin(env: Env, admin: Address) {
-        autoshare_logic::initialize_admin(env, admin);
+        autoshare_logic::initialize_admin(env, admin).unwrap();
     }
 
     /// Pauses the contract. Only admin can call.
@@ -1048,6 +1048,7 @@ mod tests {
     mod expiration_test;
     mod extended_coverage_test;
     mod fuzz_test;
+    mod initialization_state_test;
     mod metadata_validation_test;
     mod mock_token_test;
     mod notification_lifetime_test;

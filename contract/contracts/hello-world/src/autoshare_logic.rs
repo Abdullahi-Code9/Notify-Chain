@@ -102,6 +102,7 @@ pub fn create_autoshare(
     payment_token: Address,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
 
     // Check if contract is paused
     if get_paused_status(&env) {
@@ -327,23 +328,37 @@ pub fn add_group_member(
 // Admin Management
 // ============================================================================
 
-pub fn initialize_admin(env: Env, admin: Address) {
+pub fn initialize_admin(env: Env, admin: Address) -> Result<(), Error> {
     admin.require_auth();
 
-    // Only set if not already initialized (instance storage)
-    if !env.storage().instance().has(&INSTANCE_ADMIN) {
-        env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    // Initialization is a one-time, authorized workflow. A repeat by the same
+    // admin is a safe no-op; any attempt to replace that admin must fail
+    // explicitly before touching state.
+    if let Some(current_admin) = env.storage().instance().get::<_, Address>(&INSTANCE_ADMIN) {
+        if current_admin == admin {
+            return Ok(());
+        }
+        return Err(Error::AlreadyInitialized);
+    }
 
-        // Initialize default usage fee (10 tokens per usage) in instance storage
-        env.storage().instance().set(&INSTANCE_FEE, &10u32);
+    env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    env.storage().instance().set(&INSTANCE_FEE, &10u32);
 
-        // Initialize empty supported tokens list in instance storage
-        let empty_tokens: Vec<Address> = Vec::new(&env);
-        env.storage()
-            .instance()
-            .set(&INSTANCE_TOKENS, &empty_tokens);
+    let empty_tokens: Vec<Address> = Vec::new(&env);
+    env.storage()
+        .instance()
+        .set(&INSTANCE_TOKENS, &empty_tokens);
 
-        seed_default_categories(&env);
+    seed_default_categories(&env);
+    Ok(())
+}
+
+/// Rejects calls that depend on contract state established by `initialize_admin`.
+pub fn require_initialized(env: &Env) -> Result<(), Error> {
+    if env.storage().instance().has(&INSTANCE_ADMIN) {
+        Ok(())
+    } else {
+        Err(Error::NotInitialized)
     }
 }
 
@@ -421,6 +436,7 @@ fn publish_authorization_failure(env: &Env, caller: &Address, action: &str) {
 }
 
 fn require_admin(env: &Env, caller: &Address) -> Result<(), Error> {
+    require_initialized(env)?;
     let admin: Address = env
         .storage()
         .instance()
@@ -1251,6 +1267,7 @@ pub fn schedule_notification(
     priority: NotificationPriority,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
 
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);

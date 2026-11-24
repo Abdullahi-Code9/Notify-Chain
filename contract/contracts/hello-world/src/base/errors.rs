@@ -100,4 +100,8 @@ pub enum Error {
     NonceExpired = 44,
     /// Triggered when a nonce is bound to a different contract address.
     NonceContractMismatch = 45,
+    /// Triggered when an operation requires `initialize_admin` to have run first.
+    NotInitialized = 46,
+    /// Triggered when `initialize_admin` is called more than once.
+    AlreadyInitialized = 47,
 }
