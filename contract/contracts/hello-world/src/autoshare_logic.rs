@@ -74,6 +74,9 @@ pub enum DataKey {
     /// caller-supplied idempotency key. Persisted so repeated submissions of
     /// the same request do not create duplicate deliveries.
     DeliveryIdempotency(BytesN<32>),
+    /// Network identifier stored at initialization to prevent cross-network
+    /// configuration mistakes (Issue #1196).
+    NetworkId,
 }
 
 // ============================================================================
@@ -92,6 +95,40 @@ const INSTANCE_PENDING_OWNER: &str = "PendOwner";
 /// Instance-storage key for the monotonically increasing idempotency counter
 /// used to derive deterministic delivery identifiers.
 const INSTANCE_DELIVERY_SEQ: &str = "DelivSeq";
+
+// ============================================================================
+// Enumeration limits (Issue #1199)
+// ============================================================================
+//
+// Unbounded collection reads grow linearly with state and can exceed Soroban
+// ledger resource limits as the contract accumulates records over time.
+// Every paginated read function enforces `MAX_ENUMERATION_PAGE_SIZE` to keep
+// single-invocation resource usage predictable and deterministic.
+//
+// | Limit                       | Value | Rationale                             |
+// |-----------------------------|-------|---------------------------------------|
+// | MAX_ENUMERATION_PAGE_SIZE   | 100   | Fits within a single Soroban TX budget |
+//
+/// Maximum number of records that may be returned in a single paginated
+/// enumeration call. Requests for a larger page are rejected with
+/// [`Error::PageLimitExceeded`].
+pub const MAX_ENUMERATION_PAGE_SIZE: u32 = 100;
+
+// ============================================================================
+// Network configuration constants (Issue #1196)
+// ============================================================================
+//
+// These well-known passphrases identify Stellar networks. The contract stores
+// the expected network identifier at initialization time and can validate it
+// on demand so that off-chain integrations detect cross-network mismatches
+// before they cause data corruption.
+
+/// Stellar Testnet network passphrase.
+pub const STELLAR_TESTNET_PASSPHRASE: &str = "Test SDF Network ; September 2015";
+/// Stellar Mainnet (Public) network passphrase.
+pub const STELLAR_MAINNET_PASSPHRASE: &str = "Public Global Stellar Network ; September 2015";
+/// Stellar Futurenet network passphrase.
+pub const STELLAR_FUTURENET_PASSPHRASE: &str = "Test SDF Future Network ; October 2022";
 
 pub fn create_autoshare(
     env: Env,
@@ -367,6 +404,295 @@ pub fn get_registered_categories(env: Env) -> Vec<NotificationCategory> {
         .persistent()
         .get(&key)
         .unwrap_or(Vec::new(&env))
+}
+
+// ============================================================================
+// Network Configuration  (Issue #1196)
+// ============================================================================
+//
+// A contract deployed to Testnet must not be accidentally used with Mainnet
+// configuration or vice-versa. By storing the expected network passphrase
+// at initialization time the contract can surface mismatches before they
+// cause data corruption in off-chain integrations.
+
+/// Stores the expected Stellar network passphrase for this deployment.
+///
+/// Must be called by the admin after (or during) initialization.
+/// The stored passphrase can later be queried with [`get_network_id`] or
+/// validated with [`validate_network_id`].
+///
+/// # Known passphrases
+/// - Testnet:   `"Test SDF Network ; September 2015"`
+/// - Mainnet:   `"Public Global Stellar Network ; September 2015"`
+/// - Futurenet: `"Test SDF Future Network ; October 2022"`
+///
+/// # Errors
+/// - [`Error::InvalidNetworkId`] – `network_passphrase` is an empty string.
+/// - [`Error::Unauthorized`]     – caller is not the contract admin.
+/// - [`Error::AlreadyExists`]    – a *different* network ID is already set;
+///   the same value is accepted idempotently (no error).
+pub fn set_network_id(env: Env, admin: Address, network_passphrase: String) -> Result<(), Error> {
+    admin.require_auth();
+    require_admin(&env, &admin)?;
+
+    if network_passphrase.len() == 0 {
+        return Err(Error::InvalidNetworkId);
+    }
+
+    let key = DataKey::NetworkId;
+    // Idempotent: skip the write if the identical value is already stored.
+    if let Some(existing) = env.storage().persistent().get::<DataKey, String>(&key) {
+        if existing == network_passphrase {
+            return Ok(());
+        }
+        // A different network ID is already committed — reject the change to
+        // prevent accidental cross-network configuration swaps.
+        return Err(Error::AlreadyExists);
+    }
+
+    env.storage().persistent().set(&key, &network_passphrase);
+    Ok(())
+}
+
+/// Returns the network passphrase stored for this deployment, if any.
+///
+/// Returns `None` if [`set_network_id`] has never been called (backward
+/// compatible: existing deployments that have not opted in are simply unset).
+pub fn get_network_id(env: Env) -> Option<String> {
+    env.storage()
+        .persistent()
+        .get::<DataKey, String>(&DataKey::NetworkId)
+}
+
+/// Validates that `expected_passphrase` matches the stored network identifier.
+///
+/// Off-chain integrations call this to confirm they are connected to the
+/// network this contract was deployed for before submitting transactions.
+///
+/// # Return value
+/// - `Ok(true)`  – passphrases match.
+/// - `Ok(false)` – no network ID has been set yet; treated as valid to
+///   preserve backward compatibility with existing deployments.
+/// - `Err(NetworkMismatch)`   – a network ID is stored but it differs from
+///   `expected_passphrase`.
+/// - `Err(InvalidNetworkId)` – `expected_passphrase` is empty.
+pub fn validate_network_id(
+    env: Env,
+    expected_passphrase: String,
+) -> Result<bool, Error> {
+    if expected_passphrase.len() == 0 {
+        return Err(Error::InvalidNetworkId);
+    }
+
+    match env
+        .storage()
+        .persistent()
+        .get::<DataKey, String>(&DataKey::NetworkId)
+    {
+        None => Ok(false),
+        Some(stored) => {
+            if stored == expected_passphrase {
+                Ok(true)
+            } else {
+                Err(Error::NetworkMismatch)
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Bounded enumeration helpers  (Issue #1199)
+// ============================================================================
+//
+// Each `_paged` function accepts an `offset` (0-indexed start position) and a
+// `page_size` (number of records to return).  `page_size` must not exceed
+// `MAX_ENUMERATION_PAGE_SIZE`; callers that ask for more receive
+// `Error::PageLimitExceeded` immediately without reading any storage.
+//
+// Results are always returned in the same deterministic order as the
+// underlying append-only storage, so the same (offset, page_size) inputs
+// always produce the same slice as long as no new records have been appended.
+
+/// Returns up to `page_size` AutoShare groups starting at `offset`.
+///
+/// Groups are returned in creation order (the order they were appended to the
+/// `AllGroups` index). The slice is deterministic for a fixed ledger state.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_all_groups_paged(
+    env: Env,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<AutoShareDetails>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let all_groups_key = DataKey::AllGroups;
+    let group_ids: Vec<BytesN<32>> = env
+        .storage()
+        .persistent()
+        .get(&all_groups_key)
+        .unwrap_or(Vec::new(&env));
+
+    let total = group_ids.len();
+    let mut result: Vec<AutoShareDetails> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        let id = group_ids.get(i).unwrap();
+        if let Ok(details) = get_autoshare(env.clone(), id) {
+            result.push_back(details);
+        }
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` audit records starting at `offset`.
+///
+/// Records are returned in append order (ascending `seq`). The slice is
+/// deterministic for a fixed ledger state.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_audit_log_paged(
+    env: Env,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<AuditRecord>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let log: Vec<AuditRecord> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::AuditLog)
+        .unwrap_or(Vec::new(&env));
+
+    let total = log.len();
+    let mut result: Vec<AuditRecord> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(log.get(i).unwrap());
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` payment history records for `user` starting at
+/// `offset`.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_user_payment_history_paged(
+    env: Env,
+    user: Address,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<PaymentHistory>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let history: Vec<PaymentHistory> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::UserPaymentHistory(user))
+        .unwrap_or(Vec::new(&env));
+
+    let total = history.len();
+    let mut result: Vec<PaymentHistory> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(history.get(i).unwrap());
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` payment history records for group `id` starting
+/// at `offset`.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_group_payment_history_paged(
+    env: Env,
+    id: BytesN<32>,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<PaymentHistory>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let history: Vec<PaymentHistory> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::GroupPaymentHistory(id))
+        .unwrap_or(Vec::new(&env));
+
+    let total = history.len();
+    let mut result: Vec<PaymentHistory> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(history.get(i).unwrap());
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` audit records for a specific notification,
+/// starting at `offset`.
+///
+/// Filters the full audit log to records whose `notification_id` matches;
+/// pagination applies to the filtered slice.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_notification_audit_paged(
+    env: Env,
+    notification_id: BytesN<32>,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<AuditRecord>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let log: Vec<AuditRecord> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::AuditLog)
+        .unwrap_or(Vec::new(&env));
+
+    // Collect matching records (filtered list is typically small).
+    let mut matching: Vec<AuditRecord> = Vec::new(&env);
+    for record in log.iter() {
+        if record.notification_id == notification_id {
+            matching.push_back(record);
+        }
+    }
+
+    let total = matching.len();
+    let mut result: Vec<AuditRecord> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(matching.get(i).unwrap());
+    }
+    Ok(result)
 }
 
 pub fn is_category_registered(env: Env, category: NotificationCategory) -> bool {
