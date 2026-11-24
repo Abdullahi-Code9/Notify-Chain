@@ -158,7 +158,12 @@ describe('HistoricalBackfillService', () => {
         'contract',
         false,         // no discord
         'PROCESSED',
-        undefined
+        undefined,
+        expect.objectContaining({
+          txHash: 'tx-E1',
+          ledgerSequence: 100,
+          metadataStatus: 'complete',
+        })
       );
     });
 
@@ -255,7 +260,8 @@ describe('HistoricalBackfillService', () => {
         expect.any(String),
         expect.any(Boolean),
         'PROCESSED',
-        undefined
+        undefined,
+        expect.objectContaining({ metadataStatus: 'complete' })
       );
     });
 
@@ -736,7 +742,12 @@ describe('HistoricalBackfillService', () => {
         'contract',
         false,
         'ERROR',
-        'webhook down'
+        'webhook down',
+        expect.objectContaining({
+          txHash: 'tx-E1',
+          ledgerSequence: 100,
+          metadataStatus: 'complete',
+        })
       );
     });
 

@@ -254,7 +254,13 @@ CREATE TABLE IF NOT EXISTS processed_events (
   -- Status and metadata
   status VARCHAR(20) NOT NULL DEFAULT 'PROCESSED' CHECK (status IN ('PROCESSED', 'SKIPPED', 'ERROR')),
   notification_sent BOOLEAN NOT NULL DEFAULT 0 CHECK (notification_sent IN (0, 1)),
-  error_reason TEXT                         -- If status is ERROR, what went wrong
+  error_reason TEXT,                        -- If status is ERROR, what went wrong
+
+  -- Enriched blockchain transaction metadata (JSON) and its completeness marker.
+  -- metadata_status is one of 'complete' | 'partial' | 'unavailable'; NULL for
+  -- rows recorded before enrichment existed.
+  tx_metadata TEXT,
+  metadata_status TEXT
 );
 
 -- Indexes for efficient lookups
