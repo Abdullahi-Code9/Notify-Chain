@@ -79,6 +79,7 @@ import { ValidationError, validationErrorBody } from '../utils/validation';
 import { ResponseTimeMiddleware } from '../middleware/response-time';
 import { addSecurityHeaders } from '../middleware/security-headers';
 import { DEFAULT_MAX_BODY_BYTES, enforceBodyLimit } from '../middleware/body-limit';
+import { validateRequestFraming } from '../middleware/request-framing';
 import { sanitizeUrl } from '../utils/logger';
 import { sanitizeCredentials } from '../utils/credential-sanitizer';
 import { DiscordNotificationProvider } from '../services/providers/discord-provider';
@@ -500,6 +501,21 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
     // Start response-time tracking for this request (#491)
     responseTime.start(res);
+
+    // Request framing (#1208): reject ambiguous Content-Length /
+    // Transfer-Encoding combinations before any body is read so proxies and
+    // this server always agree on request boundaries.
+    const framing = validateRequestFraming(req, res);
+    if (!framing.allowed) {
+      logger.warn('Rejected ambiguous HTTP request framing', {
+        requestId,
+        correlationId,
+        method: req.method,
+        url: sanitizeUrl(req.url ?? '/'),
+        reason: framing.reason,
+      });
+      return;
+    }
 
     // Request body size limit.
     //
