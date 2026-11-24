@@ -1044,6 +1044,7 @@ mod tests {
     mod channel_metadata_test;
     mod channel_subscription_test;
     mod clock_test;
+    mod config_authorization_test;
     mod event_regression_test;
     mod expiration_test;
     mod extended_coverage_test;

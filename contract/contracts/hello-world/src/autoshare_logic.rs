@@ -2276,19 +2276,6 @@ pub fn configure_notification_limits(
     admin.require_auth();
     require_admin(&env, &admin)?;
 
-    // Verify caller is admin
-    let current_admin = get_admin(env.clone())?;
-    if admin != current_admin {
-        AuthorizationFailure {
-            caller: admin,
-            category: NotificationCategory::Admin,
-            priority: NotificationPriority::Critical,
-            action: String::from_str(&env, "configure_notification_limits"),
-        }
-        .publish(&env);
-        return Err(Error::Unauthorized);
-    }
-
     // Validate that min <= max expiration
     if min_expiration_seconds > max_expiration_seconds {
         return Err(Error::InvalidExpirationDuration);
@@ -2365,11 +2352,7 @@ const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 1;
 /// - [`Error::InvalidInput`]  – `schema_version` is outside the supported range.
 pub fn set_schema_version(env: Env, admin: Address, schema_version: u32) -> Result<(), Error> {
     admin.require_auth();
-
-    let stored_admin = get_admin(env.clone())?;
-    if admin != stored_admin {
-        return Err(Error::Unauthorized);
-    }
+    require_admin(&env, &admin)?;
 
     if schema_version < MIN_SUPPORTED_SCHEMA_VERSION
         || schema_version > MAX_SUPPORTED_SCHEMA_VERSION
@@ -2480,6 +2463,7 @@ pub fn update_channel_metadata(
 
     let group = get_autoshare(env.clone(), channel_id.clone())?;
     if caller != group.creator {
+        publish_authorization_failure(&env, &caller, "update_channel_metadata");
         return Err(Error::Unauthorized);
     }
 
