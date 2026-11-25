@@ -9,6 +9,7 @@ use crate::base::events::{
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
     NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
     ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
+    publish_operation_correlation,
 };
 use crate::base::metadata_validation::{validate_metadata, NotificationMetadata};
 use crate::base::types::{
@@ -1333,6 +1334,13 @@ pub fn schedule_notification(
         creator.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_scheduled",
+        NotificationCategory::Notification,
+        priority,
+    );
     NotificationScheduled {
         creator,
         category: NotificationCategory::Notification,
@@ -1431,6 +1439,13 @@ pub fn expire_notification(env: Env, notification_id: BytesN<32>) -> Result<(), 
         env.current_contract_address(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_expired",
+        NotificationCategory::Notification,
+        NOTIFICATION_PRIORITY,
+    );
     NotificationExpired {
         notification_id,
         category: NotificationCategory::Notification,
@@ -1510,6 +1525,13 @@ pub fn cancel_notification(
         caller.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_cancelled",
+        NotificationCategory::Notification,
+        NotificationPriority::Low,
+    );
     ScheduledNotificationCancelled {
         caller,
         category: NotificationCategory::Notification,
@@ -1647,6 +1669,13 @@ pub fn batch_schedule_notifications(
 
         append_audit_record(&env, id.clone(), AuditAction::Created, creator.clone());
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_scheduled",
+            NotificationCategory::Notification,
+            priority,
+        );
         NotificationScheduled {
             creator: creator.clone(),
             category: NotificationCategory::Notification,
@@ -1731,6 +1760,13 @@ pub fn confirm_notification_delivery(
     // concurrent duplicate request observes the recorded state and is rejected.
     record_delivery_idempotency(&env, &idempotency_key, &notification_id, &caller);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_delivered",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationDelivered {
         notification_id: notification_id.clone(),
         delivered_by: caller,
@@ -1852,6 +1888,13 @@ pub fn recall_notification(
 
     env.storage().persistent().set(&key, &notification);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_recalled",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRecalled {
         notification_id,
         recalled_by: caller,
@@ -1907,6 +1950,13 @@ pub fn revoke_notification(
     env.storage().persistent().set(&key, &notification);
 
     // Emit revocation event
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_revoked",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRevoked {
         notification_id,
         revoked_by: caller,
@@ -2154,6 +2204,13 @@ pub fn acknowledge_notifications(
             return Err(Error::NotificationExpired);
         }
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_acknowledged",
+            NotificationCategory::Notification,
+            NOTIFICATION_PRIORITY,
+        );
         NotificationAcknowledged {
             notification_id: id,
             acknowledger: caller.clone(),
