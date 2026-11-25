@@ -686,6 +686,10 @@ Contributions are welcome! Please follow these steps (or start with the canonica
 - [`CONTRIBUTOR_DEVELOPMENT_WORKFLOW_GUIDE.md`](CONTRIBUTOR_DEVELOPMENT_WORKFLOW_GUIDE.md)
 - [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md) — branching strategy, commit conventions, and the PR process
 - [`docs/CONTRIBUTOR_TROUBLESHOOTING.md`](docs/CONTRIBUTOR_TROUBLESHOOTING.md) — fixes for common build, test, and workflow problems
+- [`docs/STELLAR_RPC_PROVIDER_GUIDE.md`](docs/STELLAR_RPC_PROVIDER_GUIDE.md) — configuring Stellar RPC providers, failover and rate limits
+- [`docs/EVENT_PROCESSING_TROUBLESHOOTING.md`](docs/EVENT_PROCESSING_TROUBLESHOOTING.md) — missing/delayed events, ledger cursors, RPC and database recovery
+- [`docs/CONTRACT_ERROR_TABLE.md`](docs/CONTRACT_ERROR_TABLE.md) — contract error codes and recovery (checked by `npm run check:contract-errors`)
+- [`Documents/Task Bounty/EXPIRY_AND_REFUND.md`](Documents/Task%20Bounty/EXPIRY_AND_REFUND.md) — TaskBounty deadlines, expiry and refunds
 - [`docs/adr/README.md`](docs/adr/README.md) — architecture decision records; read these before proposing a significant design change
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — planned features and milestones
 
