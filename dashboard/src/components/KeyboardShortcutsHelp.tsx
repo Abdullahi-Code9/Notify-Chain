@@ -17,6 +17,7 @@ const SHORTCUTS = [
     key: String(i + 1),
     label: item.label,
   })),
+  { key: 'Ctrl/⌘ K', label: 'Open command palette' },
   { key: 'T', label: 'Toggle theme (dark/light)' },
   { key: 'R', label: 'Refresh events' },
   { key: '?', label: 'Show/hide this help' },
