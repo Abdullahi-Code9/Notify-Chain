@@ -3,6 +3,7 @@
 //! Complements the unit tests in `metadata_validation.rs` by exercising
 //! validation through the public `schedule_notification` entrypoint.
 
+use crate::base::events::NotificationPriority;
 use crate::test_utils::setup_test_env;
 use crate::AutoShareContractClient;
 
@@ -31,6 +32,7 @@ fn test_schedule_rejects_empty_title() {
         &creator,
         &ONE_HOUR,
         &String::from_str(&test_env.env, ""),
+        &NotificationPriority::Medium,
     );
 }
 
@@ -46,6 +48,7 @@ fn test_schedule_accepts_valid_title() {
         &creator,
         &ONE_HOUR,
         &String::from_str(&test_env.env, "Valid title"),
+        &NotificationPriority::Medium,
     );
 
     let stored = client.get_notification(&id);
@@ -62,10 +65,12 @@ fn test_batch_rejects_empty_title() {
     let mut ids = soroban_sdk::Vec::new(&test_env.env);
     let mut ttls = soroban_sdk::Vec::new(&test_env.env);
     let mut titles = soroban_sdk::Vec::new(&test_env.env);
+    let mut priorities = soroban_sdk::Vec::new(&test_env.env);
 
     ids.push_back(make_id(&test_env.env, 3));
     ttls.push_back(ONE_HOUR);
     titles.push_back(String::from_str(&test_env.env, ""));
+    priorities.push_back(NotificationPriority::Medium);
 
-    client.batch_schedule_notifications(&ids, &creator, &ttls, &titles);
+    client.batch_schedule_notifications(&ids, &creator, &ttls, &titles, &priorities);
 }

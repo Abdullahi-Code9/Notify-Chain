@@ -3,6 +3,7 @@
 /// Stores per-recipient preferences for notification delivery channels
 /// and category toggles. Designed to be read by off-chain services
 /// (email, in-app) as well as on-chain consumers (wallet notifications).
+use crate::base::clock::current_time;
 use soroban_sdk::{contracttype, Address, Env, Vec};
 
 // ============================================================================
@@ -133,7 +134,7 @@ pub fn load_preferences(env: &Env, recipient: &Address) -> RecipientPreferences 
             recipient: recipient.clone(),
             channels: default_channels(env),
             categories: default_categories(env),
-            updated_at: env.ledger().timestamp(),
+            updated_at: current_time(env),
         })
 }
 

@@ -8,6 +8,10 @@ function makeRequest(method: string, url: string, body?: unknown): http.Incoming
   const req = new EventEmitter() as http.IncomingMessage;
   req.method = method;
   req.url = url;
+  (req as http.IncomingMessage & { authPrincipal?: { type: 'legacy'; clientId: string } }).authPrincipal = {
+    type: 'legacy',
+    clientId: 'test-client',
+  };
   process.nextTick(() => {
     if (body !== undefined) {
       req.emit('data', Buffer.from(JSON.stringify(body)));
@@ -21,6 +25,10 @@ function makeRawRequest(method: string, url: string, rawBody: string): http.Inco
   const req = new EventEmitter() as http.IncomingMessage;
   req.method = method;
   req.url = url;
+  (req as http.IncomingMessage & { authPrincipal?: { type: 'legacy'; clientId: string } }).authPrincipal = {
+    type: 'legacy',
+    clientId: 'test-client',
+  };
   process.nextTick(() => {
     req.emit('data', Buffer.from(rawBody));
     req.emit('end');

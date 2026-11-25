@@ -1,0 +1,58 @@
+# cargo-deny configuration for Notify-Chain contract workspace.
+# See: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Evaluate all feature combinations
+all-features = false
+
+[licenses]
+# Minimum confidence threshold for license detection
+confidence-threshold = 0.8
+
+# Approved SPDX identifiers — must match license-policy.json
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "0BSD",
+  "CC0-1.0",
+  "Unicode-DFS-2016",
+  "Unlicense",
+  "BlueOak-1.0.0",
+]
+
+# Hard-blocked licenses
+deny = [
+  "GPL-2.0",
+  "GPL-3.0",
+  "LGPL-2.0",
+  "LGPL-2.1",
+  "LGPL-3.0",
+  "AGPL-3.0",
+  "SSPL-1.0",
+  "BUSL-1.1",
+]
+
+
+[bans]
+# Warn on duplicate dependency versions in the graph
+multiple-versions = "warn"
+# Deny wildcard dependency specifiers
+wildcards = "deny"
+
+[advisories]
+# Check against the RustSec advisory database
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Treat unmaintained crates as warnings, not errors
+unmaintained = "warn"
+yanked = "deny"
+notice = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

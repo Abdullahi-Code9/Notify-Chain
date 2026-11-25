@@ -8,6 +8,11 @@ NotifyChain is an open-source event monitoring and notification system designed 
 
 The project enables developers to build reactive decentralized applications without continuously polling the blockchain.
 
+CI quality checks: [dashboard accessibility](docs/accessibility-automation.md),
+[listener Node.js support](listener/docs/node-compatibility.md),
+[critical event mutation testing](listener/docs/mutation-testing.md), and
+[contract build reproducibility](docs/CONTRACT_BUILD_REPRODUCIBILITY.md).
+
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)

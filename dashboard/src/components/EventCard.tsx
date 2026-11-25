@@ -1,6 +1,7 @@
 import { memo, type KeyboardEvent } from 'react';
 import type { BlockchainEvent } from '../types/event';
-import { formatRelativeTimestamp, formatTimestamp } from '../utils/formatTime';
+import { formatRelativeTimestamp, formatTimestamp, formatUtcTimestamp } from '../utils/formatTime';
+import { useActiveTimeZone } from '../store/timezoneStore';
 import { CopyButton } from './CopyButton';
 
 export type EventCardVariant = 'compact' | 'expanded';
@@ -84,13 +85,6 @@ function handleActivationKey(onClick: (e: BlockchainEvent) => void, event: Block
   };
 }
 
-function CompactCard({
-  event,
-  onClick,
-}: {
-  event: BlockchainEvent;
-  onClick?: (e: BlockchainEvent) => void;
-}) {
 function IdValue({ value, label }: { value: string; label: string }) {
   return (
     <dd className="event-card__id-value" title={value}>
@@ -101,6 +95,7 @@ function IdValue({ value, label }: { value: string; label: string }) {
 }
 
 function CompactCard({ event, onClick }: { event: BlockchainEvent; onClick?: (e: BlockchainEvent) => void }) {
+  const timeZone = useActiveTimeZone();
   const displayName = event.eventName ?? event.type;
   const badgeClass = getEventBadgeClass(event.eventName);
   const Wrapper = onClick ? 'div' : 'article';
@@ -123,8 +118,11 @@ function CompactCard({ event, onClick }: { event: BlockchainEvent; onClick?: (e:
         <span className="event-card__address" title={event.contractAddress}>
           {shortenAddress(event.contractAddress)}
         </span>
-        <span className="event-card__time" title={formatTimestamp(event.receivedAt)}>
-          {formatRelativeTimestamp(event.receivedAt)}
+        <span
+          className="event-card__time"
+          title={`${formatTimestamp(event.receivedAt, timeZone)} (UTC: ${formatUtcTimestamp(event.receivedAt)})`}
+        >
+          {formatRelativeTimestamp(event.receivedAt, Date.now(), timeZone)}
         </span>
       </div>
       <div className="event-card__details">
@@ -151,6 +149,7 @@ function ExpandedCard({
   event: BlockchainEvent;
   onClick?: (e: BlockchainEvent) => void;
 }) {
+  const timeZone = useActiveTimeZone();
   const displayName = event.eventName ?? event.type;
   const badgeClass = getEventBadgeClass(event.eventName);
   const Wrapper = onClick ? 'div' : 'article';
@@ -215,7 +214,14 @@ function ExpandedCard({
 
           <div className="event-card__field">
             <dt>Received</dt>
-            <dd>{formatTimestamp(event.receivedAt)}</dd>
+            <dd>{formatTimestamp(event.receivedAt, timeZone)}</dd>
+          </div>
+
+          <div className="event-card__field">
+            <dt>Received (UTC)</dt>
+            <dd>
+              <code>{formatUtcTimestamp(event.receivedAt)}</code>
+            </dd>
           </div>
 
           <div className="event-card__field">

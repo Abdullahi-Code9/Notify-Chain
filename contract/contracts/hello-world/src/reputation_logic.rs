@@ -1,3 +1,4 @@
+use crate::base::clock::current_time;
 use crate::base::events::{
     NotificationCategory, NotificationPriority, ReputationTierChanged, ReputationUpdated,
 };
@@ -34,7 +35,7 @@ pub fn get_or_create_reputation(
     {
         Some(rep) => Ok(rep),
         None => {
-            let current_time = env.ledger().timestamp();
+            let current_time = current_time(env);
             Ok(SenderReputation::new(sender.clone(), current_time))
         }
     }
@@ -52,7 +53,7 @@ pub fn record_successful_delivery(
 ) -> Result<(), soroban_sdk::Error> {
     let mut reputation = get_or_create_reputation(env, sender)?;
     let old_tier = tier_as_u32(reputation.get_tier());
-    reputation.record_successful_delivery(env.ledger().timestamp());
+    reputation.record_successful_delivery(current_time(env));
     let new_tier = tier_as_u32(reputation.get_tier());
     save_reputation(env, &reputation);
 
@@ -85,7 +86,7 @@ pub fn record_successful_delivery(
 pub fn record_failed_delivery(env: &Env, sender: &Address) -> Result<(), soroban_sdk::Error> {
     let mut reputation = get_or_create_reputation(env, sender)?;
     let old_tier = tier_as_u32(reputation.get_tier());
-    reputation.record_failed_delivery(env.ledger().timestamp());
+    reputation.record_failed_delivery(current_time(env));
     let new_tier = tier_as_u32(reputation.get_tier());
     save_reputation(env, &reputation);
 

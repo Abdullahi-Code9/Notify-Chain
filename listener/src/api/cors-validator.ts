@@ -7,10 +7,34 @@
 
 import cors, { CorsOptions } from 'cors';
 
+export type CorsEnvironment = 'development' | 'staging' | 'production';
+
 export interface ValidatedCorsConfig {
+  environment: CorsEnvironment;
   allowedOrigins: string[] | '*';
   isWildcard: boolean;
   corsMiddleware: ReturnType<typeof cors>;
+}
+
+/**
+ * Environment-specific default origins used when CORS_ALLOWED_ORIGINS is unset.
+ * Production intentionally has NO defaults: origins must be explicitly configured.
+ */
+const ENVIRONMENT_DEFAULT_ORIGINS: Record<CorsEnvironment, string[]> = {
+  development: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000'],
+  staging: ['https://staging.example.com'],
+  production: [],
+};
+
+/**
+ * Normalizes an arbitrary NODE_ENV value into a supported CorsEnvironment.
+ * Unknown values are treated as production (fail-closed / most restrictive).
+ */
+export function resolveCorsEnvironment(nodeEnv: string | undefined): CorsEnvironment {
+  const normalized = (nodeEnv || '').trim().toLowerCase();
+  if (normalized === 'development' || normalized === 'dev') return 'development';
+  if (normalized === 'staging' || normalized === 'stage') return 'staging';
+  return 'production';
 }
 
 /**
@@ -22,21 +46,22 @@ export function validateAndBuildCorsConfig(
   nodeEnv: string | undefined = process.env.NODE_ENV,
   allowProductionWildcard = false
 ): ValidatedCorsConfig {
-  const isProduction = nodeEnv === 'production';
+  const environment = resolveCorsEnvironment(nodeEnv);
+  const isProduction = environment === 'production';
 
-  // If unset, provide safe default origins
+  // If unset, provide environment-specific defaults (production has none)
   if (!rawOrigins || rawOrigins.trim() === '') {
     if (isProduction) {
       throw new Error(
         'CORS Configuration Error: CORS_ALLOWED_ORIGINS must be explicitly configured in production environments.'
       );
     }
-    // Development default: allow local dashboard and listener ports
-    const devOrigins = ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000'];
+    const defaultOrigins = ENVIRONMENT_DEFAULT_ORIGINS[environment];
     return {
-      allowedOrigins: devOrigins,
+      environment,
+      allowedOrigins: defaultOrigins,
       isWildcard: false,
-      corsMiddleware: cors({ origin: devOrigins, credentials: true }),
+      corsMiddleware: buildCorsMiddleware(defaultOrigins),
     };
   }
 
@@ -50,6 +75,7 @@ export function validateAndBuildCorsConfig(
       );
     }
     return {
+      environment,
       allowedOrigins: '*',
       isWildcard: true,
       corsMiddleware: cors({ origin: '*' }),
@@ -85,23 +111,51 @@ export function validateAndBuildCorsConfig(
       if (url.pathname !== '' && url.pathname !== '/') {
         throw new Error(`Origin cannot contain path segments (received ${url.pathname})`);
       }
+      if (isProduction && isLocalhostOrigin(url)) {
+        throw new Error(
+          `Localhost origin "${origin}" is not permitted in production. Configure an explicit public origin.`
+        );
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`CORS Configuration Error: Invalid origin URL "${origin}". Reason: ${msg}`);
     }
   }
 
+  return {
+    environment,
+    allowedOrigins: originsList,
+    isWildcard: false,
+    corsMiddleware: buildCorsMiddleware(originsList),
+  };
+}
+
+function isLocalhostOrigin(url: URL): boolean {
+  const host = url.hostname.toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+}
+
+/**
+ * Builds CORS middleware that validates the request Origin on both preflight
+ * (OPTIONS) and actual requests. Requests from disallowed origins are rejected
+ * by omitting the Access-Control-Allow-Origin header (browser blocks them).
+ */
+function buildCorsMiddleware(allowedOrigins: string[]): ReturnType<typeof cors> {
+  const allowedSet = new Set(allowedOrigins);
   const options: CorsOptions = {
-    origin: originsList,
+    origin: (origin, callback) => {
+      // Allow same-origin / non-browser requests that omit the Origin header.
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      callback(null, allowedSet.has(origin));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-API-Key'],
     credentials: true,
     maxAge: 86400, // 24 hours
+    optionsSuccessStatus: 204,
   };
-
-  return {
-    allowedOrigins: originsList,
-    isWildcard: false,
-    corsMiddleware: cors(options),
-  };
+  return cors(options);
 }

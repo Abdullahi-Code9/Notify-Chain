@@ -1,386 +1,1179 @@
-# Design Document: Notification Type Filtering
+# Notification Type Filtering - Design Document
 
 ## Overview
 
-This document defines the technical architecture for adding notification type filtering to the AutoShare smart contract. The feature enables off-chain consumers to identify and filter events by notification type (Creation, Delivery, Acknowledgment, Expiration, Pause, Unpause) without processing irrelevant events.
+The notification type filtering system enables off-chain consumers (indexers, dashboards, webhook handlers) to efficiently subscribe to specific notification categories and priority levels without decoding event payloads. The system attaches standardized metadata—`NotificationCategory` and `NotificationPriority`—to all emitted events as indexed topics, enabling consumers to filter events at the indexing layer.
 
-**Key Goals:**
-- Emit metadata identifying the notification type with each event
-- Enable efficient filtering of events by type in off-chain consumers
-- Maintain backward compatibility with existing event listeners
-- Provide a reusable filtering consumer library
+### Key Design Principles
+
+1. **Metadata-First Filtering**: Categories and priorities are indexed topics, enabling efficient subscription at the blockchain indexer level
+2. **Five-Category Taxonomy**: Group, Admin, Financial, Notification, and System provide clear business domain segmentation
+3. **Backward Compatibility**: New metadata topics are appended as trailing topics, ensuring existing listeners continue functioning without modification
+4. **Consistency Guarantees**: Every event type has exactly one immutable category and priority assignment, enforced at build time
+5. **Comprehensive Documentation**: All events are catalogued with their categories, priorities, and business purposes
+6. **Consumer Flexibility**: Consumers can migrate to filtering at their own pace during a gradual transition period
 
 ---
 
 ## Architecture
 
-### High-Level Flow
+### Event Metadata Attachment Pattern
 
 ```
-Contract Event Emission
-    ↓
-Event contains notificationType metadata
-    ↓
-Off-chain Listener receives event
-    ↓
-Consumer Library filters by type
-    ↓
-Type-specific handlers process event
+┌─────────────────────────────────────────────────────────────────┐
+│                    Contract Event Emission                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Existing Event Structure (backward compatible):                │
+│  ┌─────────────────────────────────────────────┐                │
+│  │ Topic 0 (Event Signature):                   │                │
+│  │   keccak256("NotificationScheduled(u64,...")  │                │
+│  ├─────────────────────────────────────────────┤                │
+│  │ Topic 1 (Indexed Field 1):                   │                │
+│  │   org_id                                      │                │
+│  ├─────────────────────────────────────────────┤                │
+│  │ Topic 2 (Indexed Field 2):                   │                │
+│  │   recipient_id                                │                │
+│  ├─────────────────────────────────────────────┤                │
+│  │ Data (Non-indexed fields):                   │                │
+│  │   [payload, timestamp, ...]                  │                │
+│  └─────────────────────────────────────────────┘                │
+│                                                                 │
+│  Enhanced Event Structure (with metadata):                      │
+│  ┌─────────────────────────────────────────────┐                │
+│  │ Topic 0 (Event Signature):                   │                │
+│  │   keccak256("NotificationScheduled(u64,...") │                │
+│  ├─────────────────────────────────────────────┤                │
+│  │ Topic 1 (Indexed Field 1):                   │                │
+│  │   org_id                                      │                │
+│  ├─────────────────────────────────────────────┤                │
+│  │ Topic 2 (Indexed Field 2):                   │                │
+│  │   recipient_id                                │                │
+│  ├─────────────────────────────────────────────┤ ◄── Appended   │
+│  │ Topic 3 (NotificationCategory):              │    (new)      │
+│  │   Notification                                │                │
+│  ├─────────────────────────────────────────────┤ ◄── Appended   │
+│  │ Topic 4 (NotificationPriority):              │    (new)      │
+│  │   Medium                                      │                │
+│  ├─────────────────────────────────────────────┤                │
+│  │ Data (Non-indexed fields):                   │                │
+│  │   [payload, timestamp, ...]                  │                │
+│  └─────────────────────────────────────────────┘                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+Key Points:
+- Trailing topics enable backward compatibility
+- Old listeners reading only first 2-3 topics ignore new metadata
+- New listeners can subscribe directly to category/priority filters
+- No change to event signature or data fields
 ```
 
-### Component Interaction
+### Consumer Filtering Architecture
 
-```mermaid
-graph TD
-    A["Smart Contract"] -->|Emit Event| B["Event Stream"]
-    B -->|Raw Event| C["Event Consumer Library"]
-    C -->|Filter by Type| D["Type-Specific Handlers"]
-    D -->|Creation| E["Creation Handler"]
-    D -->|Delivery| F["Delivery Handler"]
-    D -->|Acknowledgment| G["Ack Handler"]
-    D -->|Expiration| H["Expiration Handler"]
-    D -->|Pause/Unpause| I["State Handler"]
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    Off-Chain Consumer Layer                      │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌────────────────────────────────────────────┐                 │
+│  │  Blockchain Node / Indexer                  │                 │
+│  │  (emits events with all topics)             │                 │
+│  └────────────────────────────────────────────┘                 │
+│                           ▼                                      │
+│  ┌────────────────────────────────────────────┐                 │
+│  │  Event Filter Layer                         │                 │
+│  │                                              │                 │
+│  │  Subscription Rules:                        │                 │
+│  │  - WHERE category = "Admin"                 │                 │
+│  │  - WHERE priority IN ("High", "Critical")   │                 │
+│  │  - WHERE (category="Financial" OR priority ="Critical")       │
+│  └────────────────────────────────────────────┘                 │
+│                           ▼                                      │
+│  ┌────────────────────────────────────────────┐                 │
+│  │  Filtered Event Stream                      │                 │
+│  │                                              │                 │
+│  │  Only events matching subscription reach    │                 │
+│  │  downstream processors                      │                 │
+│  └────────────────────────────────────────────┘                 │
+│                           ▼                                      │
+│  ┌────────────────────────────────────────────┐                 │
+│  │  Consumer Application                       │                 │
+│  │                                              │                 │
+│  │  - Dashboards (only Admin events)           │                 │
+│  │  - Alerts (only High/Critical)              │                 │
+│  │  - Compliance logging (Financial + Admin)   │                 │
+│  │  - Webhooks (category-specific handlers)    │                 │
+│  └────────────────────────────────────────────┘                 │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Components and Interfaces
 
-### 1. Notification Type Enumeration
+### 1. NotificationCategory Enumeration
 
-**File:** `contract/contracts/hello-world/src/base/events.rs`
+Defines five top-level business domains for event classification:
 
 ```rust
-/// Represents the classification of an emitted event
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum NotificationType {
-    /// Emitted when a notification is created (creation event)
-    Creation,
-    /// Emitted when a notification is delivered to a recipient
-    Delivery,
-    /// Emitted when a recipient acknowledges receipt
-    Acknowledgment,
-    /// Emitted when a notification expires
-    Expiration,
-    /// Emitted when the contract is paused
-    Pause,
-    /// Emitted when the contract is unpaused
-    Unpause,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NotificationCategory {
+    /// Group-related lifecycle events (autoshare creation/updates, group activation/deactivation)
+    Group = 0,
+    
+    /// Administrative and governance events (contract pause, transfers, auth failures)
+    Admin = 1,
+    
+    /// Financial transactions and reputation changes (withdrawals, reputation tiers)
+    Financial = 2,
+    
+    /// Notification-specific lifecycle events (scheduling, delivery, acknowledgment)
+    Notification = 3,
+    
+    /// System-level operations (batch processing, audits, schema updates)
+    System = 4,
 }
 
-impl NotificationType {
-    /// Returns the string representation of the notification type
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Creation => "Creation",
-            Self::Delivery => "Delivery",
-            Self::Acknowledgment => "Acknowledgment",
-            Self::Expiration => "Expiration",
-            Self::Pause => "Pause",
-            Self::Unpause => "Unpause",
-        }
-    }
-
-    /// Parses a notification type from a string
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "Creation" => Some(Self::Creation),
-            "Delivery" => Some(Self::Delivery),
-            "Acknowledgment" => Some(Self::Acknowledgment),
-            "Expiration" => Some(Self::Expiration),
-            "Pause" => Some(Self::Pause),
-            "Unpause" => Some(Self::Unpause),
-            _ => None,
-        }
-    }
-
-    /// Returns all valid notification types
-    pub fn all() -> [Self; 6] {
-        [
-            Self::Creation,
-            Self::Delivery,
-            Self::Acknowledgment,
-            Self::Expiration,
-            Self::Pause,
-            Self::Unpause,
-        ]
-    }
+impl NotificationCategory {
+    /// Convert u8 to category; fails if value > 4
+    pub fn from_u8(val: u8) -> Option<Self> { ... }
+    
+    /// Get human-readable category name
+    pub fn as_str(&self) -> &'static str { ... }
+    
+    /// Get category description for documentation
+    pub fn description(&self) -> &'static str { ... }
 }
 ```
 
-### 2. Extended Event Structure
+### 2. NotificationPriority Enumeration
 
-**File:** `contract/contracts/hello-world/src/base/events.rs`
+Defines four priority levels indicating event urgency:
 
 ```rust
-/// Represents an event with notification type metadata
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TypedEvent {
-    /// The notification type identifying the event category
-    pub notification_type: NotificationType,
-    /// The timestamp when the event was emitted (block timestamp)
-    pub timestamp: u64,
-    /// Original event data - can be deserialized based on notification_type
-    pub data: String, // JSON-encoded payload
+#[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
+pub enum NotificationPriority {
+    /// Informational events (most lifecycle events)
+    Low = 0,
+    
+    /// Routine operational events
+    Medium = 1,
+    
+    /// Events requiring prompt review
+    High = 2,
+    
+    /// Security, critical operational, or financial events
+    Critical = 3,
 }
 
-impl TypedEvent {
-    /// Creates a new typed event with current timestamp
-    pub fn new(notification_type: NotificationType, data: String) -> Self {
-        Self {
-            notification_type,
-            timestamp: 0, // Will be set by contract via env.ledger().timestamp()
-            data,
-        }
-    }
-
-    /// Returns the notification type as a string for filtering
-    pub fn type_str(&self) -> &'static str {
-        self.notification_type.as_str()
+impl NotificationPriority {
+    /// Convert u8 to priority; fails if value > 3
+    pub fn from_u8(val: u8) -> Option<Self> { ... }
+    
+    /// Get human-readable priority name
+    pub fn as_str(&self) -> &'static str { ... }
+    
+    /// Check if priority meets threshold for alerting
+    pub fn should_alert(&self, threshold: NotificationPriority) -> bool {
+        self >= &threshold
     }
 }
 ```
 
-### 3. Event Emission Implementation
+### 3. EventEmitter Trait Enhancement
 
-The contract will emit events with notification type metadata at key lifecycle points:
+Provides standard emission patterns for categorized events:
 
-**Creation Event:**
 ```rust
-// When schedule_notification is called
-pub fn emit_creation_event(env: &Env, notification_id: BytesN<32>, creator: Address) {
-    let event_data = serde_json::json!({
-        "notification_id": notification_id,
-        "creator": creator.to_string(),
-    });
-    
-    let typed_event = TypedEvent {
-        notification_type: NotificationType::Creation,
-        timestamp: env.ledger().timestamp(),
-        data: event_data.to_string(),
-    };
-    
-    env.events().publish(("notification", "created"), typed_event);
+/// Standard trait for emitting categorized events
+pub trait EventEmitter {
+    /// Emit an event with category and priority metadata
+    /// 
+    /// Implementation automatically appends category and priority as trailing topics
+    /// after any pre-existing indexed topics.
+    fn emit_categorized_event<T: Soroban Event + Serialize>(
+        &self,
+        event: T,
+        category: NotificationCategory,
+        priority: NotificationPriority,
+    );
+}
+
+/// Macro for ensuring events are emitted with proper metadata
+#[macro_export]
+macro_rules! emit_notification_event {
+    (
+        $contract:expr,
+        $category:expr,
+        $priority:expr,
+        $event:expr
+    ) => {{
+        // Validate metadata before emission
+        debug_assert!(
+            is_valid_category_for_event(stringify!($event), $category),
+            "Event {} cannot have category {}",
+            stringify!($event),
+            $category.as_str()
+        );
+        
+        // Emit with metadata
+        $contract.emit_categorized_event($event, $category, $priority);
+    }};
 }
 ```
 
-**Delivery Event:**
+### 4. Event Structure Reference
+
+All contract events follow this extended structure:
+
 ```rust
-pub fn emit_delivery_event(env: &Env, notification_id: BytesN<32>, recipient: Address) {
-    let typed_event = TypedEvent {
-        notification_type: NotificationType::Delivery,
-        timestamp: env.ledger().timestamp(),
-        data: serde_json::json!({
-            "notification_id": notification_id,
-            "recipient": recipient.to_string(),
-        }).to_string(),
-    };
+// Example: NotificationScheduled event
+#[event]
+pub struct NotificationScheduled {
+    #[indexed]
+    pub org_id: u64,
     
-    env.events().publish(("notification", "delivered"), typed_event);
-}
-```
-
-**Acknowledgment Event:**
-```rust
-pub fn emit_acknowledgment_event(env: &Env, notification_id: BytesN<32>, recipient: Address) {
-    let typed_event = TypedEvent {
-        notification_type: NotificationType::Acknowledgment,
-        timestamp: env.ledger().timestamp(),
-        data: serde_json::json!({
-            "notification_id": notification_id,
-            "recipient": recipient.to_string(),
-        }).to_string(),
-    };
+    #[indexed]
+    pub recipient_id: u64,
     
-    env.events().publish(("notification", "acknowledged"), typed_event);
-}
-```
-
-**Expiration Event:**
-```rust
-pub fn emit_expiration_event(env: &Env, notification_id: BytesN<32>) {
-    let typed_event = TypedEvent {
-        notification_type: NotificationType::Expiration,
-        timestamp: env.ledger().timestamp(),
-        data: serde_json::json!({
-            "notification_id": notification_id,
-        }).to_string(),
-    };
+    #[indexed]
+    pub notification_id: u128,
     
-    env.events().publish(("notification", "expired"), typed_event);
-}
-```
-
-**Pause Event:**
-```rust
-pub fn emit_pause_event(env: &Env, admin: Address) {
-    let typed_event = TypedEvent {
-        notification_type: NotificationType::Pause,
-        timestamp: env.ledger().timestamp(),
-        data: serde_json::json!({
-            "admin": admin.to_string(),
-        }).to_string(),
-    };
+    // NEW: Category metadata (indexed, trailing topic)
+    #[indexed]
+    pub category: NotificationCategory,  // = Notification
     
-    env.events().publish(("contract", "paused"), typed_event);
-}
-```
-
-**Unpause Event:**
-```rust
-pub fn emit_unpause_event(env: &Env, admin: Address) {
-    let typed_event = TypedEvent {
-        notification_type: NotificationType::Unpause,
-        timestamp: env.ledger().timestamp(),
-        data: serde_json::json!({
-            "admin": admin.to_string(),
-        }).to_string(),
-    };
+    // NEW: Priority metadata (indexed, trailing topic)
+    #[indexed]
+    pub priority: NotificationPriority,  // = Medium
     
-    env.events().publish(("contract", "unpaused"), typed_event);
+    // Event-specific data (not indexed)
+    pub scheduled_for: u64,
+    pub payload_hash: [u8; 32],
+    pub version: u32,
 }
+
+// In contract code:
+EventEmitter::emit_categorized_event(
+    event,
+    NotificationCategory::Notification,
+    NotificationPriority::Medium,
+);
 ```
 
-### 4. Consumer Filtering Library
+---
 
-**File:** `consumer-library/src/event_filter.rs` (TypeScript/JavaScript)
+## Event Categorization Model
 
-```typescript
-/**
- * Represents a notification event with type metadata
- */
-export interface TypedEvent {
-  notification_type: 'Creation' | 'Delivery' | 'Acknowledgment' | 'Expiration' | 'Pause' | 'Unpause';
-  timestamp: number;
-  data: Record<string, any>;
-}
+### Category Taxonomy
 
-/**
- * Filters an array of events by one or more notification types
- * @param events - Array of events to filter
- * @param types - One or more notification types to match
- * @returns Array of events matching the specified types
- * 
- * Time Complexity: O(n) where n is the number of events
- * Space Complexity: O(m) where m is the number of matching events
- */
-export function filterEventsByType(
-  events: TypedEvent[],
-  types: NotificationType | NotificationType[]
-): TypedEvent[] {
-  const typeSet = new Set(Array.isArray(types) ? types : [types]);
-  return events.filter(event => typeSet.has(event.notification_type));
-}
+#### 1. Group Category
+**Purpose**: Events related to group lifecycle and autoshare operations
 
-/**
- * Type-specific filter functions for convenience
- */
-export const EventFilters = {
-  creationEvents: (events: TypedEvent[]) => filterEventsByType(events, 'Creation'),
-  deliveryEvents: (events: TypedEvent[]) => filterEventsByType(events, 'Delivery'),
-  acknowledgmentEvents: (events: TypedEvent[]) => filterEventsByType(events, 'Acknowledgment'),
-  expirationEvents: (events: TypedEvent[]) => filterEventsByType(events, 'Expiration'),
-  pauseEvents: (events: TypedEvent[]) => filterEventsByType(events, 'Pause'),
-  unpauseEvents: (events: TypedEvent[]) => filterEventsByType(events, 'Unpause'),
-  
-  // Combined filters
-  lifecycleEvents: (events: TypedEvent[]) => 
-    filterEventsByType(events, ['Delivery', 'Acknowledgment', 'Expiration']),
-  
-  stateChangeEvents: (events: TypedEvent[]) => 
-    filterEventsByType(events, ['Pause', 'Unpause']),
-};
+**Events**:
+- `AutoshareCreated` (Priority: Low)
+- `AutoshareUpdated` (Priority: Low)
+- `GroupDeactivated` (Priority: Low)
+- `GroupActivated` (Priority: Low)
 
-/**
- * Event listener that processes only specific notification types
- */
-export class TypedEventListener {
-  private handlers: Map<NotificationType, (event: TypedEvent) => void> = new Map();
+**Use Cases**:
+- Tracking group lifecycle for reporting
+- Monitoring autoshare policy changes
+- Group membership auditing
 
-  /**
-   * Register a handler for a specific notification type
-   */
-  on(type: NotificationType, handler: (event: TypedEvent) => void): void {
-    this.handlers.set(type, handler);
-  }
+#### 2. Admin Category
+**Purpose**: Administrative operations, governance, and authorization events
 
-  /**
-   * Process an event, routing to the appropriate handler
-   */
-  process(event: TypedEvent): void {
-    const handler = this.handlers.get(event.notification_type);
-    if (handler) {
-      handler(event);
-    }
-  }
+**Events**:
+- `ContractPaused` (Priority: High)
+- `ContractUnpaused` (Priority: High)
+- `AdminTransferred` (Priority: Critical)
+- `AuthorizationFailure` (Priority: Critical)
+- `CategoryRegistered` (Priority: Low)
+- `ChannelPreferenceUpdated` (Priority: Medium)
 
-  /**
-   * Process multiple events
-   */
-  processMany(events: TypedEvent[]): void {
-    events.forEach(event => this.process(event));
-  }
-}
-```
+**Use Cases**:
+- Administrative monitoring dashboards
+- Security incident detection
+- Governance audit trails
+- Authorization failure alerts
+
+#### 3. Financial Category
+**Purpose**: Money movement, economic transactions, and reputation tier changes
+
+**Events**:
+- `Withdrawal` (Priority: Critical)
+- `ReputationUpdated` (Priority: Medium)
+- `ReputationTierChanged` (Priority: High)
+
+**Use Cases**:
+- Compliance and audit logging
+- Financial reconciliation
+- Reputation monitoring
+- Treasury alerts
+
+#### 4. Notification Category
+**Purpose**: Notification-specific lifecycle events from creation through acknowledgment
+
+**Events**:
+- `NotificationScheduled` (Priority: Medium)
+- `NotificationExpired` (Priority: Medium)
+- `ScheduledNotificationCancelled` (Priority: Low)
+- `NotificationDelivered` (Priority: Medium)
+- `NotificationRecalled` (Priority: Medium)
+- `NotificationRevoked` (Priority: High)
+- `NotificationExtended` (Priority: Low)
+- `NotificationAcknowledged` (Priority: Low)
+- `SubscriptionCancelled` (Priority: Medium)
+- `NotificationAccessed` (Priority: Low)
+- `NotificationArchived` (Priority: Low)
+
+**Use Cases**:
+- Notification status tracking
+- Delivery monitoring
+- User engagement metrics
+- Notification analytics
+
+#### 5. System Category
+**Purpose**: System-level operations, configuration, and infrastructure events
+
+**Events**:
+- `BatchNotificationsCreated` (Priority: Low)
+- `BatchProcessingCompleted` (Priority: Low)
+- `AuditRecordAppended` (Priority: Low)
+- `OwnershipTransferInitiated` (Priority: Critical)
+- `OwnershipTransferred` (Priority: Critical)
+- `NotificationLimitsConfigured` (Priority: High)
+- `SchemaVersionSet` (Priority: High)
+- `ChannelMetadataUpdated` (Priority: Medium)
+- `TemplateRegistered` (Priority: Low)
+- `TemplateUpdated` (Priority: Low)
+
+**Use Cases**:
+- System maintenance monitoring
+- Configuration auditing
+- Ownership transfer tracking
+- Schema version management
+- Infrastructure event logging
+
+### Priority Level Assignment Reference
+
+**Critical Priority** (Immediate alerting required):
+- `AuthorizationFailure` - Security threat
+- `AdminTransferred` - Governance change
+- `Withdrawal` - Financial movement
+- `OwnershipTransferInitiated` - Operational control change
+- `OwnershipTransferred` - Operational control change
+
+**High Priority** (Prompt review needed):
+- `ContractPaused` - Service availability
+- `ContractUnpaused` - Service availability
+- `NotificationRevoked` - Notification state critical change
+- `ReputationTierChanged` - User status change
+- `SchemaVersionSet` - System capability change
+- `NotificationLimitsConfigured` - Operational configuration
+
+**Medium Priority** (Routine operational monitoring):
+- `NotificationScheduled` - Workflow tracking
+- `NotificationExpired` - Workflow tracking
+- `NotificationDelivered` - Workflow tracking
+- `NotificationRecalled` - Workflow tracking
+- `SubscriptionCancelled` - Subscription state
+- `ReputationUpdated` - User reputation state
+- `NotificationAccessed` - User engagement
+- `NotificationArchived` - Storage management
+- `ChannelMetadataUpdated` - Configuration change
+- `ChannelPreferenceUpdated` - User preference change
+
+**Low Priority** (Informational lifecycle events):
+- `AutoshareCreated` - Lifecycle event
+- `AutoshareUpdated` - Lifecycle event
+- `GroupDeactivated` - Lifecycle event
+- `GroupActivated` - Lifecycle event
+- `CategoryRegistered` - System configuration
+- `ScheduledNotificationCancelled` - Lifecycle event
+- `NotificationAcknowledged` - User action
+- `BatchNotificationsCreated` - Operational batch
+- `BatchProcessingCompleted` - Operational batch
+- `AuditRecordAppended` - Audit log
+- `TemplateRegistered` - System configuration
+- `TemplateUpdated` - System configuration
+- `NotificationExtended` - Lifecycle event
 
 ---
 
 ## Data Models
 
-### Event Registry Entry
+### Event Metadata Structure
+
+Every event carries immutable metadata at emission time:
 
 ```rust
-pub struct EventRegistryEntry {
-    pub id: u64,                              // Sequential event ID
-    pub contract_address: String,             // Address of emitting contract
-    pub ledger_sequence: u32,                 // Ledger sequence number
-    pub event_type: String,                   // Original event type (e.g., "notification")
-    pub notification_type: NotificationType,  // NEW: The notification type classification
-    pub timestamp: u64,                       // NEW: Block timestamp
-    pub topic: Vec<String>,                   // Event topics
-    pub value: String,                        // Serialized event value
-    pub transaction_hash: String,             // Transaction hash
-}
-```
-
-### Backward Compatibility
-
-**Old Event Structure (still supported):**
-```rust
-pub struct Event {
-    pub id: u64,
-    pub contractAddress: String,
-    pub ledger: u32,
-    pub type: String,
-    pub topic: Vec<String>,
-    pub value: String,
-    pub txHash: String,
-}
-```
-
-**New Event Structure (with metadata):**
-```rust
-pub struct EventWithMetadata {
-    // All existing fields remain unchanged
-    pub id: u64,
-    pub contractAddress: String,
-    pub ledger: u32,
-    pub type: String,
-    pub topic: Vec<String>,
-    pub value: String,
-    pub txHash: String,
+/// Event metadata structure (not stored on-chain, emitted with events)
+pub struct EventMetadata {
+    /// Classification of event by business domain
+    pub category: NotificationCategory,
     
-    // New fields for filtering
-    pub notificationType: String,     // "Creation", "Delivery", etc.
-    pub timestamp: u64,               // Block timestamp
+    /// Urgency/importance level of event
+    pub priority: NotificationPriority,
+    
+    /// Version of metadata schema (for evolution)
+    pub metadata_version: u32,
+    
+    /// Timestamp when event was emitted
+    pub emitted_at: u64,
+}
+
+impl EventMetadata {
+    /// Create metadata for a known event type
+    pub fn for_event(event_name: &str) -> Result<Self, &'static str> {
+        // Returns static metadata for known event names
+        // Build fails if new event added without metadata
+    }
+    
+    /// Verify metadata consistency for repeated emissions
+    pub fn verify_consistency(&self, previous: &EventMetadata) -> bool {
+        // Category and priority must remain constant
+        self.category == previous.category &&
+        self.priority == previous.priority
+    }
 }
 ```
 
-**Deserialization Strategy:**
-- `notificationType` field is optional during deserialization
-- Existing listeners that don't read this field continue to work
-- When present, the field is populated; when absent, defaults to an inferred value or remains null
+### Off-Chain Consumer Filter Specification
+
+```typescript
+// TypeScript/JavaScript representation of filtering capability
+interface EventFilter {
+    // Filter by one or more categories
+    categories?: NotificationCategory[];
+    
+    // Filter by minimum priority threshold
+    minPriority?: NotificationPriority;
+    
+    // Combine multiple filters with AND/OR logic
+    operator?: 'AND' | 'OR';
+    
+    // Additional payload-based filters (optional)
+    payloadFilters?: {
+        org_id?: number;
+        recipient_id?: number;
+        [key: string]: any;
+    };
+}
+
+// Example filters:
+const adminAlerts = {
+    categories: ['Admin'],
+    minPriority: 'High',
+    operator: 'AND'
+};
+
+const complianceLogging = {
+    categories: ['Financial', 'Admin'],
+    minPriority: 'Medium',
+    operator: 'OR'
+};
+
+const criticalAlerts = {
+    minPriority: 'Critical'
+};
+```
+
+---
+
+## Backward Compatibility Strategy
+
+### Topic Ordering Guarantee
+
+The design maintains backward compatibility through **topic appending**:
+
+1. **Existing Topics** (unchanged):
+   - Topic 0: Event signature
+   - Topic 1-N: Pre-existing indexed fields (org_id, recipient_id, etc.)
+
+2. **New Topics** (appended):
+   - Topic N+1: NotificationCategory (new)
+   - Topic N+2: NotificationPriority (new)
+
+3. **Data Fields** (unchanged):
+   - All non-indexed event data remains identical
+
+### Compatibility Verification
+
+```rust
+#[cfg(test)]
+mod backward_compatibility_tests {
+    #[test]
+    fn test_old_listeners_ignore_extra_topics() {
+        // Old code that reads only first 3 topics should work
+        let event = parse_event_topics(&raw_event_data, 3);
+        assert!(event.is_ok()); // Should not fail on extra topics
+    }
+    
+    #[test]
+    fn test_no_payload_changes() {
+        // Event data fields must be identical before/after
+        let old_format = emit_old_event(&contract);
+        let new_format = emit_new_event(&contract);
+        assert_eq!(old_format.data, new_format.data);
+    }
+    
+    #[test]
+    fn test_topic_order_preserved() {
+        // Pre-existing topics maintain their positions
+        let event = &parse_event(&raw_data);
+        assert_eq!(event.topic(1), expected_org_id);
+        assert_eq!(event.topic(2), expected_recipient_id);
+        // New topics appear at positions 3-4
+    }
+}
+```
+
+### Migration Timeline
+
+```
+Phase 1: Baseline (Week 0)
+├─ Document all event metadata assignments
+├─ Review existing event structures
+└─ Identify gaps in coverage
+
+Phase 2: Implementation (Week 1-2)
+├─ Add metadata to all event emissions
+├─ Implement build-time verification
+├─ Add unit tests for metadata consistency
+└─ Update documentation
+
+Phase 3: Validation (Week 2-3)
+├─ Run backward compatibility tests
+├─ Test with pre-metadata listeners
+├─ Verify filtering in integration environment
+└─ Update off-chain consumer examples
+
+Phase 4: Rollout (Week 3+)
+├─ Deploy with metadata
+├─ Monitor for listener compatibility issues
+├─ Publish consumer migration guides
+└─ Gradually retire support for non-filtering listeners
+```
+
+---
+
+## Event Type Mapping Reference
+
+### Complete Event-to-Category-Priority Mapping
+
+| Event Name | Category | Priority | Business Purpose |
+|---|---|---|---|
+| AutoshareCreated | Group | Low | Group autoshare policy created |
+| AutoshareUpdated | Group | Low | Group autoshare policy modified |
+| GroupDeactivated | Group | Low | Group lifecycle state change |
+| GroupActivated | Group | Low | Group lifecycle state change |
+| ContractPaused | Admin | High | Service availability control |
+| ContractUnpaused | Admin | High | Service availability control |
+| AdminTransferred | Admin | Critical | Governance change |
+| AuthorizationFailure | Admin | Critical | Security event |
+| CategoryRegistered | Admin | Low | System configuration |
+| ChannelPreferenceUpdated | Admin | Medium | User preference change |
+| Withdrawal | Financial | Critical | Money movement |
+| ReputationUpdated | Financial | Medium | User reputation state |
+| ReputationTierChanged | Financial | High | User tier change |
+| NotificationScheduled | Notification | Medium | Workflow tracking |
+| NotificationExpired | Notification | Medium | Workflow tracking |
+| ScheduledNotificationCancelled | Notification | Low | Lifecycle event |
+| NotificationDelivered | Notification | Medium | Workflow tracking |
+| NotificationRecalled | Notification | Medium | Workflow tracking |
+| NotificationRevoked | Notification | High | Notification state change |
+| NotificationExtended | Notification | Low | Lifecycle event |
+| NotificationAcknowledged | Notification | Low | User action |
+| SubscriptionCancelled | Notification | Medium | Subscription state |
+| NotificationAccessed | Notification | Low | User engagement |
+| NotificationArchived | Notification | Low | Storage management |
+| BatchNotificationsCreated | System | Low | Operational batch |
+| BatchProcessingCompleted | System | Low | Operational batch |
+| AuditRecordAppended | System | Low | Audit trail |
+| OwnershipTransferInitiated | System | Critical | Operational control |
+| OwnershipTransferred | System | Critical | Operational control |
+| NotificationLimitsConfigured | System | High | Operational configuration |
+| SchemaVersionSet | System | High | System capability |
+| ChannelMetadataUpdated | System | Medium | Configuration change |
+| TemplateRegistered | System | Low | System configuration |
+| TemplateUpdated | System | Low | System configuration |
+
+---
+
+## Event Emission Patterns
+
+### Standard Emission Pattern
+
+```rust
+// Pattern 1: Using the emit_notification_event macro (recommended)
+emit_notification_event!(
+    contract,
+    NotificationCategory::Notification,
+    NotificationPriority::Medium,
+    NotificationScheduled {
+        org_id: 123,
+        recipient_id: 456,
+        notification_id: 789,
+        category: NotificationCategory::Notification,
+        priority: NotificationPriority::Medium,
+        scheduled_for: now + 3600,
+        payload_hash: compute_hash(&payload),
+        version: 1,
+    }
+);
+
+// Pattern 2: Direct event emission with explicit metadata
+Event::emit_categorized_event(
+    &e,
+    NotificationScheduled {
+        org_id,
+        recipient_id,
+        notification_id,
+        category: NotificationCategory::Notification,
+        priority: NotificationPriority::Medium,
+        scheduled_for,
+        payload_hash,
+        version,
+    },
+    NotificationCategory::Notification,
+    NotificationPriority::Medium,
+);
+```
+
+### Validation at Emission
+
+```rust
+/// Verify that event metadata is consistent with event type
+fn validate_event_metadata(
+    event_name: &str,
+    category: NotificationCategory,
+    priority: NotificationPriority,
+) -> Result<(), String> {
+    let expected = METADATA_REGISTRY.get(event_name)
+        .ok_or(format!("Unknown event: {}", event_name))?;
+    
+    if category != expected.category {
+        return Err(format!(
+            "Event {} expects category {:?}, got {:?}",
+            event_name, expected.category, category
+        ));
+    }
+    
+    if priority != expected.priority {
+        return Err(format!(
+            "Event {} expects priority {:?}, got {:?}",
+            event_name, expected.priority, priority
+        ));
+    }
+    
+    Ok(())
+}
+```
+
+### Build-Time Verification
+
+```rust
+// In build.rs or compilation phase
+fn verify_all_events_have_metadata() -> Result<(), Box<dyn Error>> {
+    for event in REGISTERED_EVENTS.iter() {
+        if !METADATA_REGISTRY.contains_key(event) {
+            return Err(format!(
+                "Event '{}' is missing category and priority metadata. \
+                 Add metadata to {}",
+                event,
+                format!("EVENT_METADATA.rs")
+            ).into());
+        }
+    }
+    Ok(())
+}
+
+// Build will fail with clear error if metadata is missing
+```
+
+---
+
+## Off-Chain Filtering Logic
+
+### Consumer-Side Implementation Examples
+
+#### Example 1: Subscription to Admin Alerts
+
+```typescript
+// TypeScript - Subscribe to all Admin category events
+const adminSubscriber = new EventSubscriber({
+    filter: {
+        categories: ['Admin'],
+        minPriority: 'High'
+    }
+});
+
+adminSubscriber.on('event', (event) => {
+    console.log(`Admin alert: ${event.name} (${event.priority})`);
+    // Send to admin dashboard
+    adminDashboard.recordEvent(event);
+});
+```
+
+#### Example 2: Compliance Logging
+
+```python
+# Python - Subscribe to Financial and High-Priority Admin events
+class ComplianceLogger:
+    def __init__(self, indexer):
+        self.indexer = indexer
+        self.filter = {
+            'categories': ['Financial', 'Admin'],
+            'minPriority': 'High',
+            'operator': 'OR'
+        }
+    
+    def start_listening(self):
+        for event in self.indexer.subscribe(self.filter):
+            self.log_to_compliance_system(event)
+            self.validate_against_regulations(event)
+    
+    def log_to_compliance_system(self, event):
+        # Record financial transactions and admin actions
+        compliance_db.insert({
+            'event_type': event.name,
+            'category': event.category,
+            'priority': event.priority,
+            'org_id': event.org_id,
+            'timestamp': event.emitted_at,
+            'data': event.data
+        })
+```
+
+#### Example 3: Dashboard Filtering
+
+```javascript
+// React - Dashboard showing only critical operational events
+function CriticalAlertsDashboard() {
+    const [events, setEvents] = useState([]);
+    
+    useEffect(() => {
+        const subscription = contractEvents.subscribe({
+            filter: {
+                minPriority: 'Critical'
+            },
+            onEvent: (event) => {
+                setEvents(prev => [event, ...prev].slice(0, 100));
+            }
+        });
+        
+        return () => subscription.unsubscribe();
+    }, []);
+    
+    return (
+        <div className="alerts">
+            {events.map(e => (
+                <Alert
+                    key={e.transactionHash}
+                    type={e.category}
+                    severity={e.priority}
+                    message={e.name}
+                />
+            ))}
+        </div>
+    );
+}
+```
+
+#### Example 4: Indexer Subscription
+
+```rust
+// Rust - Indexer subscribing by category
+struct EventIndexer {
+    db: Database,
+    filters: Vec<EventFilter>,
+}
+
+impl EventIndexer {
+    pub fn subscribe_by_category(&mut self, category: NotificationCategory) {
+        self.filters.push(EventFilter {
+            categories: vec![category],
+            minPriority: None,
+        });
+    }
+    
+    pub fn process_event(&self, event: &ContractEvent) -> Result<()> {
+        // Extract metadata from trailing topics
+        let category = NotificationCategory::from_u8(event.topic(3))?;
+        let priority = NotificationPriority::from_u8(event.topic(4))?;
+        
+        // Apply subscription filters
+        if self.matches_filters(&category, &priority) {
+            self.db.insert_event(event, category, priority)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn matches_filters(&self, category: &NotificationCategory, priority: &NotificationPriority) -> bool {
+        self.filters.iter().any(|f| {
+            f.categories.contains(category) &&
+            f.minPriority.as_ref().map_or(true, |min| priority >= min)
+        })
+    }
+}
+```
+
+### Efficient Topic-Based Filtering
+
+The most efficient filtering happens at the blockchain indexer level by filtering on topics:
+
+```solidity
+// Pseudo-code: How indexers subscribe by topic
+// Most indexing services (The Graph, Alchemy, etc.) support topic filtering
+
+// Subscribe to all Notification category events (topic index 3 = 0x03)
+const filter = {
+    address: contractAddress,
+    topics: [
+        null,                    // Match any event signature
+        null,                    // Match any org_id
+        null,                    // Match any recipient_id
+        ethers.id('Notification')  // Topic 3 = category
+    ]
+};
+
+// Subscribe to only Critical priority events (topic index 4 = 0x03)
+const criticalFilter = {
+    address: contractAddress,
+    topics: [
+        null,                    // Any event
+        null,                    // Any org_id
+        null,                    // Any recipient_id
+        null,                    // Any category
+        ethers.id('Critical')    // Topic 4 = priority
+    ]
+};
+
+// Subscribe to Financial OR Critical (multiple event filters with OR)
+const financialOrCritical = [
+    { ...baseFilter, topics: [..., ethers.id('Financial'), null] },
+    { ...baseFilter, topics: [..., null, ethers.id('Critical')] }
+];
+```
+
+---
+
+## Testing Strategy
+
+### Metadata Consistency Tests
+
+```rust
+#[cfg(test)]
+mod metadata_tests {
+    #[test]
+    fn test_all_events_emit_category_and_priority() {
+        // Verify every event type emits metadata
+        for event_type in &REGISTERED_EVENT_TYPES {
+            let result = emit_test_event(event_type);
+            assert!(result.category.is_some(), 
+                    "Event {} missing category", event_type);
+            assert!(result.priority.is_some(), 
+                    "Event {} missing priority", event_type);
+        }
+    }
+    
+    #[test]
+    fn test_category_consistency_across_emissions() {
+        // Same event type always has same category
+        for event_type in &REGISTERED_EVENT_TYPES {
+            let emit1 = emit_test_event(event_type);
+            let emit2 = emit_test_event(event_type);
+            
+            assert_eq!(emit1.category, emit2.category,
+                      "Category mismatch for {}", event_type);
+        }
+    }
+    
+    #[test]
+    fn test_priority_consistency_across_emissions() {
+        // Same event type always has same priority
+        for event_type in &REGISTERED_EVENT_TYPES {
+            let emit1 = emit_test_event(event_type);
+            let emit2 = emit_test_event(event_type);
+            
+            assert_eq!(emit1.priority, emit2.priority,
+                      "Priority mismatch for {}", event_type);
+        }
+    }
+}
+```
+
+### Backward Compatibility Tests
+
+```rust
+#[cfg(test)]
+mod compatibility_tests {
+    #[test]
+    fn test_old_listeners_can_parse_new_events() {
+        // Simulate old listener reading only first N topics
+        let event = emit_test_event("NotificationScheduled");
+        
+        // Old code reads 3 topics (signature + 2 indexed fields)
+        let old_parse_result = parse_first_n_topics(&event, 3);
+        assert!(old_parse_result.is_ok());
+        
+        // New topics (category, priority) should not break parsing
+        assert_eq!(old_parse_result.unwrap().org_id, event.org_id);
+    }
+    
+    #[test]
+    fn test_no_changes_to_event_data_fields() {
+        // Event data must be identical before/after metadata addition
+        let event = emit_test_event("NotificationScheduled");
+        
+        assert_eq!(event.scheduled_for, EXPECTED_SCHEDULED_FOR);
+        assert_eq!(event.payload_hash, EXPECTED_PAYLOAD_HASH);
+        assert_eq!(event.version, EXPECTED_VERSION);
+    }
+    
+    #[test]
+    fn test_metadata_topics_are_appended_not_inserted() {
+        // Category/priority should be at positions 3 and 4
+        let event = emit_test_event("NotificationScheduled");
+        
+        // Pre-existing topics unchanged
+        assert_eq!(event.topic(1), event.org_id);
+        assert_eq!(event.topic(2), event.recipient_id);
+        
+        // New topics at end
+        assert_eq!(event.topic(3), NotificationCategory::Notification);
+        assert_eq!(event.topic(4), NotificationPriority::Medium);
+    }
+}
+```
+
+### Event Coverage Tests
+
+```rust
+#[cfg(test)]
+mod coverage_tests {
+    #[test]
+    fn test_all_events_have_metadata_mapping() {
+        let unmapped_events: Vec<_> = REGISTERED_EVENT_TYPES
+            .iter()
+            .filter(|evt| !METADATA_REGISTRY.contains_key(*evt))
+            .collect();
+        
+        assert!(
+            unmapped_events.is_empty(),
+            "Events missing metadata: {:?}",
+            unmapped_events
+        );
+    }
+    
+    #[test]
+    fn test_metadata_registry_completeness() {
+        // All entries in registry must correspond to real events
+        for (event_name, metadata) in METADATA_REGISTRY.iter() {
+            assert!(
+                REGISTERED_EVENT_TYPES.contains(&event_name),
+                "Registry contains unknown event: {}",
+                event_name
+            );
+        }
+    }
+    
+    #[test]
+    fn test_category_priority_pairings_valid() {
+        // Verify priority assignments match category rules
+        for (event_name, metadata) in METADATA_REGISTRY.iter() {
+            match metadata.category {
+                NotificationCategory::System => {
+                    // System events that are Critical must be control-related
+                    if metadata.priority == NotificationPriority::Critical {
+                        assert!(
+                            event_name.contains("Ownership") ||
+                            event_name.contains("Transfer"),
+                            "Critical System event '{}' not control-related",
+                            event_name
+                        );
+                    }
+                }
+                NotificationCategory::Financial => {
+                    // Financial Critical events must be money movement
+                    if metadata.priority == NotificationPriority::Critical {
+                        assert_eq!(
+                            event_name, "Withdrawal",
+                            "Critical Financial event must be Withdrawal"
+                        );
+                    }
+                }
+                _ => {} // Other categories have flexible priority
+            }
+        }
+    }
+}
+```
+
+### Property-Based Testing
+
+See the Correctness Properties section for property-based test specifications.
+
+---
+
+## Migration Guide
+
+### For Existing Integrations
+
+#### Step 1: Identify Current Event Listening Code
+
+```typescript
+// Before: Current listener without filtering
+const listener = web3.eth.subscribe('logs', {
+    address: contractAddress
+}, (error, event) => {
+    if (error) console.log(error);
+    else {
+        // Process ALL events, regardless of type
+        processEvent(event);
+    }
+});
+```
+
+#### Step 2: Add Filtering by Category
+
+```typescript
+// After: Listener with category filtering
+const listener = web3.eth.subscribe('logs', {
+    address: contractAddress,
+    topics: [
+        null,  // Any event signature
+        null,  // Any org_id
+        null,  // Any recipient_id
+        web3.utils.keccak256(
+            web3.eth.abi.encodeParameter('string', 'Notification')
+        )  // Filter to Notification category only
+    ]
+}, (error, event) => {
+    if (error) console.log(error);
+    else {
+        // Now only processing Notification category events
+        processNotificationEvent(event);
+    }
+});
+```
+
+#### Step 3: Add Priority Threshold Filtering
+
+```typescript
+// Tier 1: Add critical-only alerts
+const criticalAlerts = web3.eth.subscribe('logs', {
+    address: contractAddress,
+    topics: [
+        null,  // Any event
+        null,  // Any org_id
+        null,  // Any recipient_id
+        null,  // Any category
+        web3.utils.keccak256(
+            web3.eth.abi.encodeParameter('uint8', 3)  // Critical = 3
+        )  // Filter to Critical priority only
+    ]
+});
+
+// Tier 2: Combine category + priority filters
+const adminHighPriority = web3.eth.subscribe('logs', {
+    address: contractAddress,
+    topics: [
+        null,
+        null,
+        null,
+        web3.utils.keccak256(web3.eth.abi.encodeParameter('string', 'Admin')),
+        web3.utils.keccak256(web3.eth.abi.encodeParameter('uint8', 2))  // High or Critical
+    ]
+});
+```
+
+### For New Integrations
+
+#### Integration Checklist
+
+- [ ] Understand the five notification categories
+- [ ] Review event-to-category-priority mapping table
+- [ ] Define your filtering requirements (which categories/priorities do you need?)
+- [ ] Implement topic-based filtering at the indexer level
+- [ ] Add tests verifying you receive only expected events
+- [ ] Document your filtering logic for maintenance
+- [ ] Monitor for unexpected event types (set up alerting)
+
+#### Setup Template
+
+```typescript
+import { ContractEventSubscriber } from '@notification-system/sdk';
+
+class MyNotificationConsumer {
+    private subscriber: ContractEventSubscriber;
+    
+    constructor(contractAddress: string) {
+        // Define your filtering rules
+        this.subscriber = new ContractEventSubscriber(contractAddress, {
+            // Example: financial + critical admin events for compliance
+            filters: [
+                {
+                    category: 'Financial',
+                    minPriority: 'Medium'
+                },
+                {
+                    category: 'Admin',
+                    minPriority: 'Critical'
+                }
+            ],
+            combineMode: 'OR'  // Match ANY filter
+        });
+    }
+    
+    async start() {
+        this.subscriber.on('event', this.handleEvent.bind(this));
+        await this.subscriber.connect();
+    }
+    
+    private handleEvent(event: ContractEvent) {
+        // Event is pre-filtered, guaranteed to match our criteria
+        console.log(`Received: ${event.name} (${event.category}/${event.priority})`);
+        
+        // Route to appropriate handler
+        switch (event.category) {
+            case 'Financial':
+                this.handleFinancialEvent(event);
+                break;
+            case 'Admin':
+                this.handleAdminEvent(event);
+                break;
+        }
+    }
+}
+```
+
+### Deployment Phases
+
+**Phase 1: Preparation** (Week 0)
+- Update all event structs with metadata fields
+- Add build-time verification
+- Deploy with backward-compatible changes
+
+**Phase 2: Documentation & Examples** (Week 0-1)
+- Publish consumer migration guide
+- Release SDK updates with filtering support
+- Provide code examples
+
+**Phase 3: Consumer Migration** (Week 1-4)
+- Existing consumers update at own pace
+- No forced migration required
+- Both filtered and unfiltered listeners continue working
+
+**Phase 4: Optimization** (Week 4+)
+- Monitor adoption rates
+- Deprecate old listener patterns (with timeline)
+- Eventually retire support for non-filtering listeners
 
 ---
 
@@ -388,413 +1181,655 @@ pub struct EventWithMetadata {
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-### Property 1: Notification Type Metadata Presence
+Before defining correctness properties, I'll analyze each acceptance criterion for testability using the prework tool.
+### Acceptance Criteria Testability Analysis
 
-*For any* event emitted from the contract, the event data SHALL contain a notificationType field with a value from the set {Creation, Delivery, Acknowledgment, Expiration, Pause, Unpause}.
+Based on the prework analysis, the following acceptance criteria are testable as properties or examples:
 
-**Validates: Requirements 1.1, 1.2**
+**Key Testable Properties** (Universal properties that hold for all inputs):
+- All events must have exactly one category and priority
+- Category and priority must be consistent across multiple emissions of the same event
+- Metadata topics must be appended as trailing topics (not inserted)
+- Event data fields must remain unchanged
+- Old listeners reading only first N topics must continue working
+- Critical priority only assigned to specific event types
 
-### Property 2: Single Type per Event
+**Testable Examples/Verification**:
+- Category/priority assignments for all events
+- Metadata registry completeness
+- Build-time verification of metadata presence
+- Event mapping to categories and priorities
 
-*For any* event emitted from the contract, exactly one notification type value SHALL be assigned (no multi-type events).
+---
 
-**Validates: Requirements 1.4**
+### Correctness Properties
 
-### Property 3: Type Preservation on Retrieval
+#### Property 1: Universal Category Assignment
 
-*For any* event that is emitted and then queried/replayed from storage, the notificationType field SHALL remain unchanged.
+**For all** events emitted from the contract, each event SHALL carry exactly one NotificationCategory value (never empty, never multiple).
 
-**Validates: Requirements 1.5**
+**Validates: Requirements 1.6, 4.1**
 
-### Property 4: Schema Includes Notification Type
+**Implementation**: Generate random contract state and trigger various events. Verify that each emitted event has exactly one category value in its metadata.
 
-*For any* event deserialized from the Event Registry, the schema SHALL include the notificationType field without deserialization errors.
+**Property Test Configuration**:
+- Minimum iterations: 100
+- Test tag: **Feature: notification-type-filtering, Property 1: Universal category assignment**
 
-**Validates: Requirements 2.1, 2.4**
+---
 
-### Property 5: All New Events Populated
+#### Property 2: Universal Priority Assignment
 
-*For any* event created after the feature implementation, the notificationType field SHALL be populated (non-null, non-empty).
+**For all** events emitted from the contract, each event SHALL carry exactly one NotificationPriority value selected from {Low, Medium, High, Critical}.
 
-**Validates: Requirements 2.2**
+**Validates: Requirements 2.2, 5.1**
 
-### Property 6: Backward Compatibility - Old Field Preservation
+**Implementation**: Generate random contract state and trigger various events. Verify that each emitted event has exactly one priority value and that the value is within the valid set.
 
-*For any* event structure, all existing fields (id, contractAddress, ledger, type, topic, value, txHash) SHALL remain unchanged in name and type.
+**Property Test Configuration**:
+- Minimum iterations: 100
+- Test tag: **Feature: notification-type-filtering, Property 2: Universal priority assignment**
 
-**Validates: Requirements 2.3, 3.4**
+---
 
-### Property 7: Backward Compatibility - Old Parser Continues
+#### Property 3: Category Consistency Across Emissions
 
-*For any* event and old listener code that ignores notificationType, the listener's core functionality SHALL remain unaffected when processing new events.
+**For all** event types, emitting the same event type multiple times from different code paths SHALL produce identical NotificationCategory values.
 
-**Validates: Requirements 3.1, 3.3**
+**Validates: Requirements 4.2, 4.3, 4.6**
 
-### Property 8: Old Listeners Receive All Fields
+**Implementation**: For each known event type, emit it multiple times from different contract functions/paths and verify that the category remains constant.
 
-*For any* event queried by pre-feature listeners, the event SHALL include all fields (including notificationType) without errors.
+**Property Test Configuration**:
+- Minimum iterations: 50 (per event type)
+- Test tag: **Feature: notification-type-filtering, Property 3: Category consistency**
 
-**Validates: Requirements 3.2, 3.5**
+---
 
-### Property 9: Creation Events Correct Type
+#### Property 4: Priority Consistency Across Emissions
 
-*For any* call to schedule_notification, the emitted event SHALL have notificationType = "Creation".
+**For all** event types, emitting the same event type multiple times SHALL produce identical NotificationPriority values.
 
-**Validates: Requirements 4.1**
+**Validates: Requirements 5.2, 9.4, 9.5**
 
-### Property 10: Delivery Events Correct Type
+**Implementation**: For each known event type, emit it multiple times and verify that the priority remains constant.
 
-*For any* call to confirm_notification_delivery, the emitted event SHALL have notificationType = "Delivery".
+**Property Test Configuration**:
+- Minimum iterations: 50 (per event type)
+- Test tag: **Feature: notification-type-filtering, Property 4: Priority consistency**
 
-**Validates: Requirements 4.2**
+---
 
-### Property 11: Acknowledgment Events Correct Type
+#### Property 5: Metadata as Trailing Topics
 
-*For any* call to acknowledge_notifications, the emitted event SHALL have notificationType = "Acknowledgment".
+**For all** events emitted from the contract, NotificationCategory SHALL be the second-to-last indexed topic and NotificationPriority SHALL be the last indexed topic.
 
-**Validates: Requirements 4.3**
+**Validates: Requirements 2.5, 6.1, 6.2, 9.6**
 
-### Property 12: Expiration Events Correct Type
+**Implementation**: Parse all emitted events and verify that topics N-1 and N (where N is topic count) contain category and priority respectively.
 
-*For any* call to expire_notification, the emitted event SHALL have notificationType = "Expiration".
+**Property Test Configuration**:
+- Minimum iterations: 100
+- Test tag: **Feature: notification-type-filtering, Property 5: Trailing topic position**
 
-**Validates: Requirements 4.4**
+---
 
-### Property 13: Pause Events Correct Type
+#### Property 6: Backward Compatibility - Topic Immutability
 
-*For any* call to pause, the emitted event SHALL have notificationType = "Pause".
+**For all** pre-existing indexed topics in events, adding metadata topics SHALL NOT change their position, value, or type.
 
-**Validates: Requirements 4.5**
+**Validates: Requirements 3.1, 3.2, 3.3, 3.4, 12.1, 12.6**
 
-### Property 14: Unpause Events Correct Type
+**Implementation**: Compare event emission before and after metadata addition. Verify that topics 0 through N-3 remain identical.
 
-*For any* call to unpause, the emitted event SHALL have notificationType = "Unpause".
+**Property Test Configuration**:
+- Minimum iterations: 100
+- Test tag: **Feature: notification-type-filtering, Property 6: Backward compatibility**
 
-**Validates: Requirements 4.6**
+---
 
-### Property 15: Filter Single Type Returns Matching Events
+#### Property 7: Event Data Field Preservation
 
-*For any* event array and single notification type, the filter function SHALL return only events whose notificationType matches the specified type.
+**For all** events emitted from the contract, the non-indexed event data fields SHALL remain identical before and after metadata addition (no field additions, removals, reordering, or type changes).
 
-**Validates: Requirements 5.2**
+**Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.5**
 
-### Property 16: Filter Multiple Types Returns Any Match
+**Implementation**: Parse event data before and after implementation. Verify all data fields match exactly.
 
-*For any* event array and multiple notification types, the filter function SHALL return events whose notificationType matches ANY of the specified types.
+**Property Test Configuration**:
+- Minimum iterations: 100
+- Test tag: **Feature: notification-type-filtering, Property 7: Data field preservation**
 
-**Validates: Requirements 5.3**
+---
 
-### Property 17: Filter Empty Array Returns Empty
+#### Property 8: Critical Priority Restriction
 
-*For any* filter operation on an empty event array, the filter SHALL return an empty array (edge case).
+**For all** events assigned NotificationPriority.Critical, the event SHALL be one of: {AuthorizationFailure, AdminTransferred, Withdrawal, OwnershipTransferInitiated, OwnershipTransferred}.
 
-**Validates: Requirements 5.4**
+**Validates: Requirements 5.4, 11.1**
 
-### Property 18: Filter Partial Match Returns Available Types
+**Implementation**: Scan metadata registry for all Critical priority events and verify they are in the allowed set.
 
-*For any* filter operation with multiple requested types where only some are present in the event array, the filter SHALL return events of the types that ARE present (edge case).
+**Property Test Configuration**:
+- Minimum iterations: 1 (deterministic check)
+- Test tag: **Feature: notification-type-filtering, Property 8: Critical priority restriction**
 
-**Validates: Requirements 5.5**
+---
 
-### Property 19: Filter Function Interface
+#### Property 9: Complete Event Coverage
 
-*For any* consumer library implementation, the filter function SHALL accept an event array and one or more notification types as parameters.
+**For all** registered event types in the contract, exactly one NotificationCategory and one NotificationPriority SHALL be assigned in the metadata registry.
 
-**Validates: Requirements 5.1**
+**Validates: Requirements 2.6, 9.1, 9.2, 13.1, 13.2**
 
-### Property 20: Filter Time Complexity
+**Implementation**: Iterate through all registered event types and verify that each has an entry in the metadata registry with category and priority defined.
 
-*For any* filter operation with n events and m notification types to match, the filtering operation SHALL complete in O(n) time complexity.
+**Property Test Configuration**:
+- Minimum iterations: 1 (deterministic check)
+- Test tag: **Feature: notification-type-filtering, Property 9: Complete event coverage**
 
-**Validates: Requirements 5.6**
+---
+
+#### Property 10: Event Category Mapping Completeness
+
+**For all** event types in the system, each SHALL appear in exactly one category within the documented category-to-events mapping.
+
+**Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 15.1, 15.5**
+
+**Implementation**: Parse category mapping and verify that:
+1. Each registered event appears in exactly one category list
+2. No event appears in multiple categories
+3. No unmapped events exist
+
+**Property Test Configuration**:
+- Minimum iterations: 1 (deterministic check)
+- Test tag: **Feature: notification-type-filtering, Property 10: Category mapping completeness**
+
+---
+
+#### Property 11: Old Listener Compatibility
+
+**For all** events, existing listener code that reads only the first N pre-metadata topics SHALL successfully parse events without errors or data corruption.
+
+**Validates: Requirements 3.1, 3.5, 3.6**
+
+**Implementation**: Simulate old listener parsing logic that reads only first N topics and verify it succeeds for all events.
+
+**Property Test Configuration**:
+- Minimum iterations: 100
+- Test tag: **Feature: notification-type-filtering, Property 11: Old listener compatibility**
+
+---
+
+#### Property 12: Build-Time Metadata Verification
+
+**For all** newly-added events to the contract codebase, the compilation process SHALL fail with a clear error message if either NotificationCategory or NotificationPriority is missing.
+
+**Validates: Requirements 13.2, 13.4**
+
+**Implementation**: Add test event without metadata and verify build fails. Add event with metadata and verify build succeeds.
+
+**Property Test Configuration**:
+- Minimum iterations: 2 (with/without metadata)
+- Test tag: **Feature: notification-type-filtering, Property 12: Build-time verification**
+
+---
+
+### Property Reflection and Consolidation
+
+All 12 properties provide unique validation value and do not significantly overlap:
+
+1. Properties 1-2 validate fundamental metadata presence
+2. Properties 3-4 validate consistency across emissions
+3. Properties 5-7 validate backward compatibility structure
+4. Property 8 validates priority assignment rules
+5. Properties 9-10 validate complete coverage and mapping
+6. Property 11 validates old listener compatibility
+7. Property 12 validates build-time enforcement
+
+No consolidation needed; each property tests a distinct aspect of the feature.
 
 ---
 
 ## Error Handling
 
-### Contract-Level Error Handling
+### Missing or Invalid Metadata
 
-**Invalid Event Emission:**
-- Validation: Ensure notificationType is one of the 6 enum values before emission
-- Error: Reject event emission if type is invalid
-- Message: "Invalid notification type. Must be one of: Creation, Delivery, Acknowledgment, Expiration, Pause, Unpause"
+#### Scenario: Event Emission Without Category
 
-**Missing Event Metadata:**
-- Validation: Verify timestamp is populated before emission
-- Error: Reject event if timestamp cannot be retrieved
-- Message: "Unable to retrieve ledger timestamp for event metadata"
-
-### Consumer Library Error Handling
-
-**Invalid Filter Type:**
-```typescript
-export function filterEventsByType(events: TypedEvent[], types: any): TypedEvent[] {
-  if (!Array.isArray(types) && !isValidNotificationType(types)) {
-    throw new Error(`Invalid notification type: ${types}. Must be one of: Creation, Delivery, Acknowledgment, Expiration, Pause, Unpause`);
-  }
-  
-  const typeArray = Array.isArray(types) ? types : [types];
-  const invalidTypes = typeArray.filter(t => !isValidNotificationType(t));
-  
-  if (invalidTypes.length > 0) {
-    throw new Error(`Invalid notification types: ${invalidTypes.join(', ')}`);
-  }
-  
-  // ... proceed with filtering
+```rust
+// Error case: Attempting to emit without category
+match emit_event(event, None, priority) {
+    Ok(_) => panic!("Should have failed without category"),
+    Err(e) => {
+        assert_eq!(e.kind(), ErrorKind::MissingMetadata);
+        assert!(e.message().contains("category"));
+    }
 }
+
+// Recovery: Must provide category
+let result = emit_event(event, Some(NotificationCategory::Admin), priority);
+assert!(result.is_ok());
 ```
 
-**Null/Undefined Events:**
-```typescript
-export function filterEventsByType(events: TypedEvent[] | null, types: NotificationType): TypedEvent[] {
-  if (!events || !Array.isArray(events)) {
-    throw new Error('Events must be a non-null array');
-  }
-  
-  if (!events.every(e => e && typeof e === 'object' && 'notification_type' in e)) {
-    throw new Error('All events must have notification_type property');
-  }
-  
-  return events.filter(event => event.notification_type === types);
-}
+#### Scenario: Invalid Priority Value
+
+```rust
+// At parsing time, invalid priority values fail gracefully
+let result = NotificationPriority::from_u8(99);
+assert!(result.is_none());
+
+// Valid values succeed
+assert!(NotificationPriority::from_u8(0).is_some()); // Low
+assert!(NotificationPriority::from_u8(3).is_some()); // Critical
 ```
 
----
+#### Scenario: Category-Priority Mismatch
 
-## Testing Strategy
+```rust
+// Build-time check prevents invalid category/priority combinations
+// Example: Events like "AuthorizationFailure" must use Critical priority
 
-### Unit Testing (Contract)
-
-**Notification Type Enum Tests:**
-- Verify all 6 types exist and are distinct
-- Verify string conversion works bidirectionally (as_str, from_str)
-- Test invalid type parsing returns None
-
-**Event Emission Tests:**
-- For each notification type, verify the emitted event has correct type value
-- Verify timestamp is populated at emission time
-- Verify event data can be serialized/deserialized
-
-**Backward Compatibility Tests:**
-- Deserialize new events with old parsing logic
-- Verify old fields remain accessible
-- Verify no errors occur during old listener processing
-
-### Unit Testing (Consumer Library)
-
-**Filter Function Tests:**
-- Single type filtering: filter events with one type, verify only matching events returned
-- Multiple type filtering: filter with multiple types, verify events matching ANY type returned
-- Empty array: filter empty array, verify empty array returned
-- Partial matches: filter with types some present and some absent, verify present types returned
-- Invalid types: filter with invalid type strings, verify error thrown
-
-**Event Listener Tests:**
-- Register handlers for different types
-- Process events, verify correct handler called
-- Process batch of events, verify all routed correctly
-
-### Property-Based Tests
-
-**Property 1-20 Implementation:**
-Each property will be implemented as a property-based test using fast-check (JavaScript) or QuickCheck (Rust equivalent):
-
-**Example Property Test (JavaScript):**
-```typescript
-import fc from 'fast-check';
-
-describe('Notification Type Filtering', () => {
-  // Property 1: All events have notification_type
-  it('all emitted events contain notification_type (Property 1)', () => {
-    fc.assert(
-      fc.property(
-        fc.array(arbitraryEvent()),
-        (events) => {
-          events.forEach(event => {
-            expect(['Creation', 'Delivery', 'Acknowledgment', 'Expiration', 'Pause', 'Unpause']).toContain(
-              event.notification_type
-            );
-          });
-          return true;
-        }
-      ),
-      { numRuns: 100 }
+#[test]
+#[should_panic(expected = "AuthorizationFailure requires Critical priority")]
+fn test_invalid_priority_for_critical_event() {
+    emit_categorized_event(
+        AuthorizationFailure { ... },
+        NotificationCategory::Admin,
+        NotificationPriority::Low,  // Wrong! Should be Critical
     );
-  });
+}
+```
 
-  // Property 15: Filter single type returns matching events
-  it('filter with single type returns only matching events (Property 15)', () => {
-    fc.assert(
-      fc.property(
-        fc.array(arbitraryEvent()),
-        fc.oneof(...NOTIFICATION_TYPES.map(fc.constant)),
-        (events, filterType) => {
-          const filtered = filterEventsByType(events, filterType);
-          const allMatch = filtered.every(e => e.notification_type === filterType);
-          return allMatch;
+### Handling Edge Cases
+
+#### Ambiguous Categorization
+
+```rust
+// When event could fit multiple categories, choose primary
+// Example: Withdrawal could be Financial OR Admin
+// Decision: Assign to Financial (primary) with code comment
+
+#[event]
+pub struct Withdrawal {
+    // Category: Financial (primary)
+    // Could also be: Admin (due to authorization)
+    // Chosen: Financial because primary purpose is money movement
+    
+    #[indexed]
+    pub category: NotificationCategory,  // = Financial
+    
+    #[indexed]
+    pub priority: NotificationPriority,  // = Critical
+}
+```
+
+#### New Events with Unknown Categories
+
+```rust
+// If future event cannot fit existing categories:
+
+// 1. Document the issue:
+// /// NEW EVENT: ReputationBurnEvent
+// /// Potential categories: Financial (user reputation change),
+// ///                       Notification (affects users),
+// ///                       System (internal audit)
+// /// Decision: Assign to Financial since it affects user economic standing
+
+// 2. Explicitly assign category (forces decision):
+emit_categorized_event(
+    ReputationBurnEvent { ... },
+    NotificationCategory::Financial,
+    NotificationPriority::Medium,
+);
+
+// 3. If truly cannot fit:
+// - Propose new category to stakeholders
+// - Document rationale
+// - Update taxonomy
+// - This is rare and requires deliberation
+```
+
+#### Filtering Failures
+
+```rust
+// Consumer-side error handling for filter failures
+
+class EventConsumer {
+    fn apply_filters(&self, event: &ContractEvent) -> Result<bool> {
+        let category = NotificationCategory::from_u8(event.topic(3))
+            .ok_or(Error::InvalidCategory)?;
+        
+        let priority = NotificationPriority::from_u8(event.topic(4))
+            .ok_or(Error::InvalidPriority)?;
+        
+        // Safely check filters
+        Ok(self.matches_subscription(&category, &priority))
+    }
+}
+```
+
+---
+
+## Implementation Details
+
+### Code Pattern: Emitting a Categorized Event
+
+```rust
+// Step 1: Define the event struct with metadata fields
+#[event]
+pub struct NotificationScheduled {
+    #[indexed]
+    pub org_id: u64,
+    
+    #[indexed]
+    pub recipient_id: u64,
+    
+    #[indexed]
+    pub category: NotificationCategory,      // NEW
+    
+    #[indexed]
+    pub priority: NotificationPriority,      // NEW
+    
+    pub scheduled_for: u64,
+    pub payload_hash: [u8; 32],
+}
+
+// Step 2: Emit with metadata
+pub fn schedule_notification(
+    env: &Env,
+    org_id: u64,
+    recipient_id: u64,
+    scheduled_for: u64,
+) -> Result<u128> {
+    let notification_id = generate_id();
+    
+    env.events().publish((
+        "NotificationScheduled",
+        org_id,
+        recipient_id,
+        NotificationCategory::Notification,
+        NotificationPriority::Medium,
+    ), (
+        scheduled_for,
+        compute_payload_hash(&data),
+    ));
+    
+    Ok(notification_id)
+}
+
+// Step 3: Consumers read and filter
+// Off-chain (TypeScript):
+const filter = {
+    topics: [
+        '0x...',  // NotificationScheduled signature
+        null,     // Any org_id
+        null,     // Any recipient_id
+        web3.utils.keccak256('Notification'),  // Topic 3 = Category
+        web3.utils.keccak256('2'),  // Topic 4 = Priority (Medium=2)
+    ]
+};
+```
+
+### Metadata Registry Structure
+
+```rust
+// Static registry mapping event names to metadata
+lazy_static! {
+    pub static ref METADATA_REGISTRY: HashMap<String, EventMetadata> = {
+        let mut m = HashMap::new();
+        
+        m.insert("AutoshareCreated".to_string(), EventMetadata {
+            category: NotificationCategory::Group,
+            priority: NotificationPriority::Low,
+        });
+        
+        m.insert("AdminTransferred".to_string(), EventMetadata {
+            category: NotificationCategory::Admin,
+            priority: NotificationPriority::Critical,
+        });
+        
+        m.insert("Withdrawal".to_string(), EventMetadata {
+            category: NotificationCategory::Financial,
+            priority: NotificationPriority::Critical,
+        });
+        
+        // ... all 33 events
+        
+        m
+    };
+}
+
+// Build-time verification function
+pub fn verify_all_events_have_metadata() -> Result<(), String> {
+    for event_name in &ALL_REGISTERED_EVENTS {
+        if !METADATA_REGISTRY.contains_key(*event_name) {
+            return Err(format!(
+                "Event '{}' missing from metadata registry. \
+                 Add entry to METADATA_REGISTRY in metadata.rs",
+                event_name
+            ));
         }
-      ),
-      { numRuns: 100 }
-    );
-  });
-
-  // Property 17: Filter empty array returns empty
-  it('filter empty array returns empty array (Property 17 - edge case)', () => {
-    const result = filterEventsByType([], 'Creation');
-    expect(result).toEqual([]);
-  });
-});
-```
-
-### Integration Testing
-
-**End-to-End Event Flow:**
-1. Trigger contract action (e.g., schedule_notification)
-2. Capture emitted event
-3. Verify event contains correct notificationType
-4. Pass event to consumer library filter
-5. Verify filter correctly categorizes event
-
-**Multiple Event Processing:**
-1. Trigger multiple contract actions
-2. Collect all emitted events
-3. Filter by multiple types
-4. Verify correct events returned
-5. Verify no events missed or duplicated
-
-**Backward Compatibility Verification:**
-1. Create events with new structure
-2. Run old listener code against new events
-3. Verify no errors and correct behavior
-
-### Test Configuration
-
-- **Minimum iterations per property test:** 100
-- **Tag format:** `Feature: notification-type-filtering, Property N: [property description]`
-- **Coverage target:** 95%+ for new notification type code
-- **Test locations:**
-  - Rust tests: `contract/contracts/hello-world/tests/notification_type_filtering_test.rs`
-  - Consumer library tests: `consumer-library/tests/event_filter.test.ts`
-
----
-
-## Implementation Approach
-
-### Phase 1: Core Type Definition
-1. Define NotificationType enum in `base/events.rs`
-2. Extend TypedEvent struct with metadata
-3. Add serialization/deserialization support
-
-### Phase 2: Contract Emission
-1. Update all event emission points in autoshare_logic.rs
-2. Ensure all 6 notification types are emitted at appropriate moments
-3. Add timestamp population
-
-### Phase 3: Consumer Library
-1. Create event_filter.rs module
-2. Implement filter function with O(n) complexity
-3. Add type-specific convenience filters
-4. Implement TypedEventListener class
-
-### Phase 4: Testing
-1. Write property-based tests for all 20 properties
-2. Write unit tests for filter function
-3. Write integration tests for end-to-end flows
-4. Verify backward compatibility
-
-### Phase 5: Documentation
-1. Update contract documentation
-2. Document consumer library API
-3. Provide migration guide for existing listeners
-
----
-
-## Backward Compatibility Strategy
-
-### Principle: Additive Only
-
-- No existing fields are removed, renamed, or changed in type
-- notificationType is added as a new optional field during deserialization
-- Existing listeners that don't read the field continue to work unchanged
-
-### Implementation Details
-
-**During Serialization:**
-```rust
-// New events always include notificationType
-pub fn emit_event(env: &Env, notification_type: NotificationType, data: TypedEvent) {
-    // Always include the metadata
-    env.events().publish(("notification", notification_type.as_str()), data);
+    }
+    Ok(())
 }
 ```
 
-**During Deserialization:**
+### Macro for Event Emission with Validation
+
 ```rust
-// Old code path: existing listeners ignore the extra field
-let event: OldEventFormat = serde_json::from_str(event_json)?;
-// Works fine - serde ignores unknown fields by default with #[serde(deny_unknown_fields = false)]
-
-// New code path: new listeners can access the metadata
-let event: EventWithMetadata = serde_json::from_str(event_json)?;
-let notification_type = event.notificationType;
-```
-
-### Migration Path
-
-**For Existing Listeners:**
-1. No changes required - they continue to work
-2. Optionally update to use filtering for improved performance
-
-**For New Listeners:**
-1. Use the new TypedEvent structure
-2. Apply filtering via consumer library
-3. Implement type-specific handlers
-
-### Version Tracking
-
-Track notification type feature readiness using schema versioning:
-```rust
-// In contract
-pub const SCHEMA_VERSION: u32 = 2; // Bump when adding notification_type
-
-// In listener
-pub fn can_handle(event: Event) -> bool {
-    event.schema_version >= 2
+/// Emit an event with validated metadata
+/// 
+/// Ensures category and priority are correct for the event type
+/// Fails at compile time if metadata is missing
+macro_rules! emit_typed_event {
+    (
+        $env:expr,
+        $event_name:expr,
+        $org_id:expr,
+        $recipient_id:expr,
+        $event_data:expr
+    ) => {{
+        let metadata = METADATA_REGISTRY
+            .get($event_name)
+            .expect(&format!("Unknown event: {}", $event_name));
+        
+        $env.events().publish((
+            $event_name,
+            $org_id,
+            $recipient_id,
+            metadata.category,
+            metadata.priority,
+        ), $event_data);
+    }};
 }
 ```
 
 ---
 
-## Security Considerations
+## Documentation Requirements
 
-### Event Type Validation
+### Required Documentation Artifacts
 
-- Enum is closed - only 6 valid types exist
-- Invalid types cannot be assigned
-- Type value is immutable after event creation
+1. **Event Taxonomy Reference**
+   - All 33 events listed with category and priority
+   - Business purpose for each event
+   - Example scenarios
 
-### Consumer Library Safety
+2. **Consumer Integration Guide**
+   - How to read metadata from events
+   - Topic indices for category/priority
+   - Filtering examples (TypeScript, Python, Rust)
+   - Performance recommendations
 
-- Filter function is side-effect free (pure)
-- Filter operation cannot modify events
-- Filter performance is predictable O(n)
+3. **Migration Guide**
+   - Step-by-step process for adopting filtering
+   - Before/after code examples
+   - Backward compatibility guarantees
 
-### Access Control
+4. **API Documentation**
+   - EventEmitter trait documentation
+   - NotificationCategory enum documentation
+   - NotificationPriority enum documentation
+   - Example implementations
 
-- Event emission requires proper authorization checks in contract
-- Consumer library doesn't perform authorization - that's caller's responsibility
+5. **Code Comments**
+   - Each event struct includes category/priority in comments
+   - Each enum variant includes description
+   - Rationale for category assignments documented
 
 ---
 
-## Deployment Checklist
+## Performance Impact Analysis
 
-- [ ] Add NotificationType enum to base/events.rs
-- [ ] Extend event structures with metadata
-- [ ] Update all event emission points (6 locations minimum)
-- [ ] Implement consumer library filter function
-- [ ] Add backward compatibility tests
-- [ ] Update event registry schema
-- [ ] Deploy with proper version signaling
-- [ ] Monitor event streams for correct type assignment
-- [ ] Document for off-chain consumers
+### Gas Cost Analysis
 
+**Metadata Addition Impact**:
+- Adding two indexed topics (category, priority) to each event
+- Each indexed topic adds ~375 gas (Ethereum equivalent; Soroban costs may differ)
+- Per-event overhead: ~750 gas
+- Impact on total contract gas: <1% (events represent <5% of total gas)
+
+**Result**: Negligible performance impact on gas consumption
+
+### Indexing Performance
+
+**Positive Impact**:
+- Off-chain consumers can filter at indexer level (O(1) topic matching)
+- Eliminates need to decode payloads for filtering (~10-100ms per event)
+- Reduces off-chain compute by 80-90% for filtered consumers
+
+**Network Impact**:
+- No change to event data size (only indexed topics added)
+- Indexed topics don't increase storage (stored in bloom filter)
+- Network transmission unchanged
+
+**Result**: Significant improvement for filtered consumers; no degradation for unfiltered
+
+### Storage Implications
+
+- Metadata stored in event topics, not contract storage
+- No increase to contract state size
+- No additional storage costs
+
+---
+
+## Migration Path Summary
+
+### Phased Rollout
+
+**Week 0**: Event struct updates, build verification
+**Week 1**: Unit test implementation, backward compatibility testing
+**Week 2**: Integration environment validation
+**Week 3+**: Production deployment, consumer migration
+
+### Consumer Adoption Timeline
+
+- **Immediate**: Unfiltered consumers continue unchanged
+- **Month 1**: Example implementations published
+- **Month 2**: First consumers adopt filtering (reduce load 80-90%)
+- **Month 3+**: Gradual migration to filtering; unfiltered deprecated
+
+### Rollback Plan
+
+If critical issue discovered:
+1. Deploy with metadata set to default values (no actual filtering)
+2. Existing listeners unaffected
+3. New listeners gracefully handle missing metadata
+4. No breaking changes to on-chain state
+
+---
+
+## Edge Cases and Constraints
+
+### 1. New Event Category Assignment
+
+**Constraint**: WHERE a new event is added to the contract, it SHALL be assigned exactly one category and priority before merge to main branch.
+
+**Implementation**: Build-time check fails if new event lacks metadata in METADATA_REGISTRY.
+
+### 2. Category Reclassification
+
+**Constraint**: WHERE an event's category must change (rare), this SHALL only be done with:
+- Explicit documentation of why
+- Code comment explaining decision
+- Migration notes for off-chain consumers
+- Schema version increment
+
+**Rationale**: Changing category breaks filter assumptions for consumers who rely on current assignment
+
+### 3. Priority Volatility
+
+**Constraint**: Priority values are recommended to remain stable but may be adjusted for operational tuning. However, avoid frequent changes to prevent consumer confusion.
+
+**Rationale**: Category is fixed; priority is operational guidance and may evolve
+
+### 4. Sub-Category Filtering
+
+**Constraint**: The system does not support sub-category filtering (e.g., "only AutoshareCreated not AutoshareUpdated"). Consumers needing finer filtering implement off-chain logic.
+
+**Rationale**: Simplicity; category/priority provide sufficient segmentation for 90% of use cases
+
+### 5. Future Extensibility
+
+**Constraint**: If future metadata beyond category/priority is needed, it SHALL be appended as additional trailing topics following the same pattern (not inserted within).
+
+**Design**: Structure supports arbitrary future metadata additions without breaking compatibility
+
+---
+
+## Success Criteria
+
+### Feature Completion Checklist
+
+- [ ] All 33 events have category and priority assigned
+- [ ] Metadata registry complete and verified
+- [ ] Build-time checks prevent incomplete implementations
+- [ ] Unit tests verify metadata consistency (100+ iterations per property)
+- [ ] Backward compatibility tests pass (old listeners work unchanged)
+- [ ] Documentation complete with consumer examples
+- [ ] Migration guide published
+- [ ] Performance impact measured and acceptable (<1% gas overhead)
+- [ ] Property-based tests pass for all correctness properties
+- [ ] Edge cases documented and handled
+
+### Success Metrics
+
+- 100% of events have metadata assigned
+- 95%+ test coverage for metadata-related code
+- 0 backward compatibility issues reported
+- Off-chain filtering reduces target consumers' load by 80-90%
+- Documentation examples used by >50% of new integrations
+- Zero unhandled edge cases or ambiguous categorizations
+
+---
+
+## Design Review Checklist
+
+- [ ] All 15 requirements addressed in design
+- [ ] Backward compatibility strategy is sound
+- [ ] Correctness properties are comprehensive and testable
+- [ ] Error handling covers all identified edge cases
+- [ ] Performance impact is acceptable
+- [ ] Documentation is complete and clear
+- [ ] Implementation examples are practical and correct
+- [ ] Migration path is realistic and low-risk
+- [ ] Build-time verification is automatic and failsafe
+
+---
+
+## Appendix: Key Definitions
+
+**NotificationCategory**: Enumerated type with five values representing high-level business domains (Group, Admin, Financial, Notification, System)
+
+**NotificationPriority**: Enumerated type with four values representing event urgency (Low, Medium, High, Critical)
+
+**Indexed Topic**: A searchable field in an emitted event, accessible to off-chain consumers for efficient filtering
+
+**Trailing Topic**: A topic that appears at the end of the event's topic list, preserving existing topics in their original positions
+
+**Metadata**: Category and Priority information attached to events as indexed topics
+
+**Backward Compatibility**: Ability of existing event listeners to continue functioning without modification when new metadata is added
+
+**Off-Chain Consumer**: External system (indexer, webhook, dashboard) that subscribes to and processes contract events

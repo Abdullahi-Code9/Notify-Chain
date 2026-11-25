@@ -6,7 +6,16 @@ import { eventRegistry } from '../store/event-registry';
 import { preferenceStore } from '../store/preference-store';
 import { PreferencesUpdateInput } from '../types/preferences';
 import { NotificationAPI } from '../services/notification-api';
+import { ApiCredentialService } from '../services/api-credential-service';
+import { handleCredentialRoutes } from './credentials-api';
+import { authorizeRequest, type AuthPrincipal } from './api-key-auth';
 import { NotificationType } from '../types/scheduled-notification';
+import { ScheduleValidationError, toScheduleValidationResponse } from '../services/schedule-validator';
+import {
+  formatInTimezone,
+  InvalidTimezoneError,
+  parseExecuteAtWithTimezone,
+} from '../utils/timezone';
 import logger from '../utils/logger';
 import { generateRequestId, resolveCorrelationId } from '../utils/request-id';
 import { TemplateService } from '../services/template-service';
@@ -15,9 +24,6 @@ import { sendOk, sendErr, sendJson, ErrorCode } from '../utils/response';
 import { normalizePaginationParams } from '../utils/pagination';
 import { handleApiError, ApiError } from './error-handler';
 import { applyRequestIdMiddleware } from '../middleware/request-id';
-import { TemplateService } from '../services/template-service';
-import { handleTemplateRoutes } from './template-routes';
-import { sendOk, sendErr, sendJson, ErrorCode } from '../utils/response';
 import { validateContentType, getMimeType } from '../middleware/content-type';
 import { NotificationHistoryService } from '../services/notification-history';
 import { SearchSuggestionService } from '../services/search-suggestion';
@@ -28,9 +34,10 @@ import {
   IdempotencyKeyReuseError,
 } from '../services/idempotency-key-service';
 import { WebhookReplayCache } from '../services/webhook-replay-cache';
-import { IdempotencyKeyService, IdempotencyKeyReuseError } from '../services/idempotency-key-service';
 import { WebhookSecret, RateLimitConfig, ContractConfig } from '../types';
+import { DeliveryReceiptStatus } from '../types/delivery-receipt';
 import { RateLimiter } from './rate-limiter';
+import { authenticateApiKey, API_KEY_AUTH_MESSAGES } from './api-key-auth';
 import {
   normaliseApiPath,
   applyVersionHeaders,
@@ -63,6 +70,12 @@ import { NotificationMetricsStore } from '../services/notification-metrics-store
 import { NotificationHealthMonitor } from '../services/notification-health-monitor';
 import { getJobMonitor } from '../services/job-monitor';
 import { NotificationImportService } from '../services/notification-import-service';
+import { DeliveryReceiptRepository } from '../services/delivery-receipt-repository';
+import { DataExportService } from '../services/data-export-service';
+import { SecurityAuditService } from '../services/security-audit';
+import { validatePayload, Schemas } from '../middleware/request-validator';
+import { parseLedgerRangeParams } from '../utils/ledger-range-validator';
+import { ValidationError, validationErrorBody } from '../utils/validation';
 import { ResponseTimeMiddleware } from '../middleware/response-time';
 import { addSecurityHeaders } from '../middleware/security-headers';
 import { DEFAULT_MAX_BODY_BYTES, enforceBodyLimit } from '../middleware/body-limit';
@@ -71,6 +84,8 @@ import { sanitizeCredentials } from '../utils/credential-sanitizer';
 import { DiscordNotificationProvider } from '../services/providers/discord-provider';
 import { WebhookNotificationProvider } from '../services/providers/webhook-provider';
 import { ProviderHealthResult } from '../types/provider-capabilities';
+import { EVENT_STREAM_PATH, handleEventStream } from './event-stream';
+import { resolveLocalDateTime } from '../services/local-schedule';
 
 export interface EventsServerOptions {
   port: number;
@@ -84,6 +99,7 @@ export interface EventsServerOptions {
   webhookSecrets?: WebhookSecret[];
   apiKeys?: Array<{ key: string; name?: string }>;
   notificationAPI?: NotificationAPI | null;
+  credentialService?: ApiCredentialService | null;
   /** Idempotency-Key replay protection for mutating endpoints (webhooks, schedule). */
   idempotencyService?: IdempotencyKeyService | null;
   templateService?: NotificationTemplateService | null;
@@ -134,8 +150,17 @@ export interface EventsServerOptions {
    * are never parsed. Defaults to {@link DEFAULT_MAX_BODY_BYTES}.
    */
   maxBodyBytes?: number;
+  /** Maximum compressed request body size, in bytes. */
+  maxCompressedBytes?: number;
+  /** Maximum decompressed request body size, in bytes. */
+  maxDecompressedBytes?: number;
   /** Optional DataExportService override for administrative exports (#850). */
   dataExportService?: DataExportService | null;
+  /**
+   * Optional SSE feed at GET /api/events/stream. Omitted or disabled leaves
+   * that path as 404 so existing poll clients are unchanged.
+   */
+  eventStream?: { enabled: boolean; heartbeatMs?: number } | null;
 }
 
 type ServiceStatus = 'ok' | 'error' | 'not_configured';
@@ -455,6 +480,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
   const webhookReplayCache = new WebhookReplayCache({
     maxEntries: options.webhookReplayCacheMaxEntries ?? 10_000,
   });
+  const webhookAuditService = new SecurityAuditService(getDatabase());
   // Response-time tracking (#491)
   const responseTime =
     options.responseTimeMiddleware !== undefined && options.responseTimeMiddleware !== null
@@ -481,7 +507,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     // the socket destroyed before any route handler attaches its own `data`
     // listener and starts accumulating the body in memory.
     const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
-    const bodyLimit = enforceBodyLimit(req, res, {
+    const bodyLimit = await enforceBodyLimit(req, res, {
       maxBytes: maxBodyBytes,
       onRejected: (reason, observedBytes) => {
         logger.warn('Request body exceeded size limit', {
@@ -503,7 +529,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader(
       'Access-Control-Allow-Headers',
-      'Content-Type, X-API-Key, Authorization, X-Correlation-Id, X-Request-Id',
+      'Content-Type, X-API-Key, Authorization, X-Correlation-Id, X-Request-Id, Last-Event-ID',
     );
     res.setHeader(
       'Access-Control-Expose-Headers',
@@ -569,6 +595,17 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     // Note: route matching is handled inline below for NotificationTemplateService compatibility.
     // url.pathname is already rewritten from /api/v1/* → /api/* above
     if (options.schedulerTemplateService && url.pathname.startsWith('/api/templates')) {
+      const auth = await authorizeRequest(req, {
+        apiKeys: options.apiKeys,
+        credentialService: options.credentialService,
+      });
+      if (!auth.allowed) {
+        if (auth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+        sendErr(res, auth.status, auth.message, auth.code, auth.details);
+        return;
+      }
+      (req as http.IncomingMessage & { authPrincipal?: AuthPrincipal }).authPrincipal =
+        auth.principal;
       handleTemplateRoutes(req, res, requestId, options.schedulerTemplateService)
         .then((handled) => {
           if (!handled) {
@@ -579,6 +616,15 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           logger.error('Template route handler error', { error, requestId, correlationId });
           handleApiError(res, error, requestId, correlationId);
         });
+      return;
+    }
+
+    if (
+      await handleCredentialRoutes(req, res, url, {
+        credentialService: options.credentialService,
+        apiKeys: options.apiKeys,
+      })
+    ) {
       return;
     }
 
@@ -864,6 +910,9 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
             requestId,
             correlationId,
             maxAgeSeconds,
+            requireTimestamp: options.requireWebhookTimestamp !== false,
+            replayCache: idempotencyKey ? undefined : webhookReplayCache,
+            auditService: webhookAuditService,
           });
 
           if (!auth.authenticated) {
@@ -1175,46 +1224,114 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
         }
 
         try {
-          if (!data.executeAt || !data.payload || !data.targetRecipient) {
+          const hasLocalSchedule = data.timeZone != null || data.localDateTime != null;
+          if ((!data.executeAt && !hasLocalSchedule) || !data.payload || !data.targetRecipient) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
-                error: 'Missing required fields: executeAt, payload, targetRecipient',
+                error: 'Missing required fields: executeAt (or timeZone + localDateTime), payload, targetRecipient',
                 code: 'MISSING_FIELDS',
               }),
             );
             return;
           }
 
-          const executeAt = new Date(data.executeAt);
-          if (isNaN(executeAt.getTime())) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({ error: 'executeAt is not a valid date', code: 'INVALID_DATE' }),
-            );
-            return;
+          let executeAt: Date;
+          let metadata = data.metadata;
+          if (data.timeZone != null || data.localDateTime != null) {
+            if (typeof data.timeZone !== 'string' || typeof data.localDateTime !== 'string') {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  error: 'timeZone and localDateTime are both required for a local schedule',
+                  code: 'INVALID_LOCAL_SCHEDULE',
+                }),
+              );
+              return;
+            }
+            if (
+              data.recurrence != null &&
+              data.recurrence !== 'daily' &&
+              data.recurrence !== 'weekly'
+            ) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  error: 'recurrence must be daily or weekly',
+                  code: 'INVALID_LOCAL_SCHEDULE',
+                }),
+              );
+              return;
+            }
+            try {
+              const resolved = resolveLocalDateTime(data.localDateTime, data.timeZone);
+              executeAt = resolved.executeAt;
+              const base =
+                metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {};
+              metadata = {
+                ...base,
+                localSchedule: {
+                  timeZone: data.timeZone,
+                  localDateTime: resolved.requestedLocal,
+                  recurrence: data.recurrence,
+                  kind: resolved.kind,
+                  resolvedLocal: resolved.resolvedLocal,
+                },
+              };
+            } catch (scheduleError) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  error: (scheduleError as Error).message,
+                  code: 'INVALID_LOCAL_SCHEDULE',
+                }),
+              );
+              return;
+            }
+          } else {
+            executeAt = new Date(data.executeAt);
+            if (isNaN(executeAt.getTime())) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({ error: 'executeAt is not a valid date', code: 'INVALID_DATE' }),
+              );
+              return;
+            }
           }
 
-          const schedule = async (): Promise<{ id: number }> => {
+          const schedule = async (): Promise<{
+            id: number;
+            executeAt: string;
+            timezone: string;
+            executeAtLocal: string;
+          }> => {
             const notificationId = await options.notificationAPI!.scheduleNotification({
               payload: data.payload,
               notificationType: data.notificationType || NotificationType.DISCORD,
               targetRecipient: data.targetRecipient,
               executeAt,
+              timezone,
               expiresAt: data.expiresAt,
               maxRetries: data.maxRetries,
               priority: data.priority,
               eventId: data.eventId,
               contractAddress: data.contractAddress,
               metadata: data.metadata,
+              recurrence: data.recurrence,
             });
             logger.info('Notification scheduled via API', {
               requestId,
               correlationId,
               notificationId,
-              executeAt: data.executeAt,
+              executeAt: executeAt.toISOString(),
+              timezone,
             });
-            return { id: notificationId };
+            return {
+              id: notificationId,
+              executeAt: executeAt.toISOString(),
+              timezone,
+              executeAtLocal: formatInTimezone(executeAt, timezone),
+            };
           };
 
           if (options.idempotencyService && idempotencyKey) {
@@ -1225,23 +1342,43 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
               { requestId, correlationId },
             );
             const statusCode = outcome.isDuplicate ? 200 : 201;
+            const result = outcome.result as {
+              id: number;
+              executeAt: string;
+              timezone: string;
+              executeAtLocal: string;
+            };
             res.writeHead(statusCode, {
               'Content-Type': 'application/json',
               'X-Idempotent-Replay': outcome.isDuplicate ? 'true' : 'false',
             });
             res.end(
               JSON.stringify({
-                id: (outcome.result as { id: number }).id,
+                id: result.id,
+                executeAt: result.executeAt,
+                timezone: result.timezone,
+                executeAtLocal: result.executeAtLocal,
                 replay: outcome.isDuplicate,
               }),
             );
             return;
           }
 
-          const { id } = await schedule();
+          const scheduled = await schedule();
           res.writeHead(201, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ id }));
+          res.end(JSON.stringify(scheduled));
         } catch (error) {
+          if (error instanceof ScheduleValidationError) {
+            const response = toScheduleValidationResponse(error);
+            res.writeHead(response.statusCode, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response.body));
+            return;
+          }
+          if (error instanceof InvalidTimezoneError) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message, code: 'INVALID_TIMEZONE' }));
+            return;
+          }
           if (error instanceof IdempotencyKeyReuseError) {
             logger.warn('Schedule API rejected request: idempotency key body mismatch', {
               requestId,
@@ -1444,6 +1581,48 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
+    // PATCH /api/schedule/:id — modify an eligible pending schedule.
+    const patchScheduleMatch = url.pathname.match(/^\/api\/schedule\/(\d+)$/);
+    if (req.method === 'PATCH' && patchScheduleMatch) {
+      if (!requireApiKey()) return;
+    // POST /api/schedule/:id/resume — release a notification held by the
+    // intervene missed-schedule policy so the next poll delivers it.
+    const resumeMatch = url.pathname.match(/^\/api\/schedule\/(\d+)\/resume$/);
+    if (req.method === 'POST' && resumeMatch) {
+      if (!options.notificationAPI) {
+        sendErr(res, 503, 'Scheduler not enabled', ErrorCode.SERVICE_UNAVAILABLE);
+        return;
+      }
+
+      const id = parseInt(scheduleAuditMatch[1], 10);
+      options.notificationAPI
+        .getScheduleAuditHistory(id)
+        .then((records) => {
+          sendOk(res, 200, {
+            scheduledNotificationId: id,
+            records: records.map((r) => ({
+              id: r.id,
+              action: r.action,
+              actor: r.actor,
+              timestamp: r.timestamp.toISOString(),
+              fromStatus: r.fromStatus,
+              toStatus: r.toStatus,
+              details: r.details,
+            })),
+          });
+        })
+        .catch((error) => {
+          logger.error('Failed to get schedule audit history', {
+            error,
+            requestId,
+            correlationId,
+            id,
+          });
+          sendErr(res, 500, (error as Error).message, ErrorCode.INTERNAL_ERROR);
+        });
+      return;
+    }
+
     // GET /api/schedule/:id
     if (req.method === 'GET' && url.pathname.startsWith('/api/schedule/')) {
       if (!options.notificationAPI) {
@@ -1473,35 +1652,62 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
-    // POST /api/notifications/:id/cancel
-    const cancelMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/cancel$/);
-    if (req.method === 'POST' && cancelMatch) {
+    // POST /api/schedule/:id/cancel — primary schedule cancellation endpoint (#969)
+    // Also supports legacy POST /api/notifications/:id/cancel
+    const scheduleCancelMatch = url.pathname.match(
+      /^\/api\/(?:schedule|notifications)\/(\d+)\/cancel$/,
+    );
+    if (req.method === 'POST' && scheduleCancelMatch) {
       if (!options.notificationAPI) {
         sendErr(res, 503, 'Scheduler not enabled', ErrorCode.SERVICE_UNAVAILABLE);
         return;
       }
 
-      const id = parseInt(cancelMatch[1], 10);
+      const id = parseInt(scheduleCancelMatch[1], 10);
       if (isNaN(id)) {
         sendErr(res, 400, 'Invalid notification ID', ErrorCode.BAD_REQUEST);
         return;
       }
 
       let body = '';
-      req.on('data', (chunk) => { body += chunk; });
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
       req.on('end', () => {
         void (async () => {
           try {
-            const parsed = body ? JSON.parse(body) as { reason?: string } : {};
-            const ok = await options.notificationAPI!.cancelNotification(id, parsed.reason, requestId);
-            
-            if (!ok) {
-              sendErr(res, 400, 'Unable to cancel notification', ErrorCode.BAD_REQUEST);
+            const parsed = body ? (JSON.parse(body) as { reason?: string }) : {};
+            const result = await options.notificationAPI!.cancelSchedule(
+              id,
+              parsed.reason,
+              requestId,
+            );
+
+            if (result.state === 'not_found') {
+              sendErr(res, 404, result.message, ErrorCode.NOT_FOUND);
               return;
             }
-            
-            const notification = await options.notificationAPI!.getNotification(id);
-            sendOk(res, 200, notification);
+
+            if (result.state === 'already_final') {
+              // Completed / failed / processing — do not silently undo.
+              sendJson(res, 409, {
+                cancelled: false,
+                state: result.state,
+                status: result.status,
+                message: result.message,
+                notification: result.notification ?? null,
+              });
+              return;
+            }
+
+            // Fresh cancel and idempotent already_cancelled both return 200.
+            sendOk(res, 200, {
+              cancelled: result.cancelled,
+              state: result.state,
+              status: result.status,
+              message: result.message,
+              notification: result.notification ?? null,
+            });
           } catch (error) {
             if (error instanceof SyntaxError) {
               sendErr(res, 400, 'Invalid JSON', ErrorCode.PARSE_ERROR);

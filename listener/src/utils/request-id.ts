@@ -40,23 +40,35 @@ export function resolveRequestId(incomingHeader: string | string[] | undefined):
   return generateRequestId();
 }
 
+/** Longest client-supplied correlation ID that will be reused (#986). */
+export const MAX_CORRELATION_ID_LENGTH = 64;
+
+/**
+ * Client-supplied correlation IDs must be 1–64 characters drawn from
+ * `[A-Za-z0-9._:-]` and start with an alphanumeric. That admits UUIDs and the
+ * usual `req-12345` / `svc:abc.1` styles while excluding whitespace, control
+ * characters, quotes and braces — anything that could forge a log line or
+ * break out of a structured log field (#986).
+ */
+const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+
+export function isValidCorrelationId(value: string): boolean {
+  return CORRELATION_ID_PATTERN.test(value);
+}
+
 /**
  * Resolves a correlation ID for a request.
- * Honours an incoming X-Correlation-Id header if present and non-blank,
- * otherwise generates a new UUID. Correlation IDs are intentionally more
- * permissive than request IDs (callers may use longer opaque tokens).
+ * Honours an incoming X-Correlation-Id header when it passes
+ * `isValidCorrelationId`; a missing, blank, or invalid value is replaced with
+ * a freshly generated UUID rather than echoed back or logged.
  */
 export function resolveCorrelationId(incomingHeader: string | string[] | undefined): string {
   const incoming = Array.isArray(incomingHeader) ? incomingHeader[0] : incomingHeader;
   const trimmed = incoming?.trim() ?? '';
-  if (!trimmed) {
-    return randomUUID();
+  if (trimmed && isValidCorrelationId(trimmed)) {
+    return trimmed;
   }
-  // Bound length / charset so log aggregators stay safe
-  if (trimmed.length > 200 || /[\r\n\0]/.test(trimmed)) {
-    return randomUUID();
-  }
-  return trimmed;
+  return randomUUID();
 }
 
 export interface RequestContext {

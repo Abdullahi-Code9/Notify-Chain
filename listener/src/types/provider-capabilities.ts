@@ -16,6 +16,32 @@ export enum ProviderCapability {
 }
 
 /**
+ * Format options a notification destination can render.
+ *
+ * - `plain_text` — plain unformatted text; every channel must support this.
+ * - `markdown`   — Markdown-formatted text (bold, italic, code, etc.).
+ * - `embed`      — Rich embed/card objects (e.g. Discord embeds).
+ * - `json`       — Structured JSON payload (typically for webhooks).
+ * - `html`       — HTML-formatted text (for email-style channels).
+ */
+export enum NotificationFormat {
+  PLAIN_TEXT = 'plain_text',
+  MARKDOWN = 'markdown',
+  EMBED = 'embed',
+  JSON = 'json',
+  HTML = 'html',
+}
+
+/**
+ * An explicit format preference attached to a single delivery.
+ *
+ * When present in `DeliveryPayload.formatPreference`, the registry validates
+ * it against the target provider's `supportedFormats`.  When absent, the
+ * provider's `defaultFormat` is used implicitly.
+ */
+export type FormatPreference = NotificationFormat;
+
+/**
  * Metadata that describes a provider and the features it supports.
  */
 export interface ProviderMetadata {
@@ -23,6 +49,16 @@ export interface ProviderMetadata {
   readonly id: string;
   readonly version: string;
   readonly capabilities: ReadonlySet<ProviderCapability>;
+  /**
+   * The complete set of `NotificationFormat` values this provider can render.
+   * Must include at least one entry; `plain_text` is universally safe.
+   */
+  readonly supportedFormats: ReadonlySet<NotificationFormat>;
+  /**
+   * The format used when no explicit `formatPreference` is supplied.
+   * Must be a member of `supportedFormats`.
+   */
+  readonly defaultFormat: NotificationFormat;
 }
 
 export interface DeliveryPayload {
@@ -31,6 +67,15 @@ export interface DeliveryPayload {
   notificationType: string;
   requestedFeatures?: Set<ProviderCapability>;
   requestId?: string;
+  /**
+   * The format in which this notification should be rendered.
+   *
+   * When supplied, `ProviderRegistry.deliver` validates it against the
+   * target provider's `supportedFormats` and returns a `UNSUPPORTED_FORMAT`
+   * error result without calling the provider when the format is unsupported.
+   * When omitted, the provider's `defaultFormat` is used implicitly.
+   */
+  formatPreference?: FormatPreference;
 }
 
 export interface DeliveryResult {
@@ -73,6 +118,11 @@ export interface NotificationProvider {
   readonly metadata: ProviderMetadata;
 
   hasCapability(capability: ProviderCapability): boolean;
+
+  /**
+   * Returns `true` when the given format is listed in `metadata.supportedFormats`.
+   */
+  supportsFormat(format: NotificationFormat): boolean;
 
   deliver(payload: DeliveryPayload): Promise<DeliveryResult>;
 

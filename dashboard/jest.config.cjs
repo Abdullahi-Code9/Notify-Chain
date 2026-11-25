@@ -4,13 +4,22 @@ module.exports = {
   testTimeout: 15000,
   setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs'],
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  collectCoverageFrom: ['<rootDir>/src/**/*.{ts,tsx}'],
+  coveragePathIgnorePatterns: [
+    '<rootDir>/src/**\\/**/*.d.ts',
+    '<rootDir>/src/**\\/**/*.test.{ts,tsx}',
+    '<rootDir>/src/**\\/**/*.stories.{ts,tsx}',
+    '<rootDir>/src/test/**',
+  ],
+  coverageDirectory: '<rootDir>/coverage',
+  coverageReporters: ['text', 'lcov', 'json-summary'],
   moduleNameMapper: {
     '^@creit\\.tech/stellar-wallets-kit/modules/utils$':
       '<rootDir>/src/test/stellarWalletsKitModulesMock.ts',
     '^@creit\\.tech/stellar-wallets-kit$':
-      '<rootDir>/src/test/stellarWalletsKitMock.ts',
-    '^.*/config/stellarNetwork$': '<rootDir>/src/test/stellarNetworkMock.ts',
-    '^.*/config/eventsApiUrl$': '<rootDir>/src/test/eventsApiUrlMock.ts',
+      '<rootDir>/src/test/stellaeWalletsKitMock.ts',
+    '^.*\\/config/stellarNetwork$': '<rootDir>/src/test/stellarNetworkMock.ts',
+    '^.*\\/config/eventsApiUrl$': '<rootDir>/src/test/eventsApiUrlMock.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {

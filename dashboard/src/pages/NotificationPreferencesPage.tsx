@@ -288,12 +288,6 @@ export function NotificationPreferencesPage() {
               <p>Provide delivery details for email and Telegram routing.</p>
             </div>
 
-            <div
-              className={`notification-preferences__field${emailInvalid ? ' notification-preferences__field--invalid' : ''}`}
-            >
-              <label htmlFor="contact-email">Email address</label>
-              <input
-                id="contact-email"
             <FormField
               id="contact-email"
               label="Email address"
@@ -318,23 +312,6 @@ export function NotificationPreferencesPage() {
                     : null
                 }
               />
-              {emailInvalid && (
-                <p
-                  id="contact-email-error"
-                  className="notification-preferences__field-error"
-                  role="alert"
-                >
-                  Enter a valid email when Email notifications are enabled.
-                </p>
-              )}
-            </div>
-
-            <div
-              className={`notification-preferences__field${telegramInvalid ? ' notification-preferences__field--invalid' : ''}`}
-            >
-              <label htmlFor="telegram-handle">Telegram handle</label>
-              <input
-                id="telegram-handle"
             </FormField>
 
             <FormField
@@ -361,16 +338,6 @@ export function NotificationPreferencesPage() {
                     : null
                 }
               />
-              {telegramInvalid && (
-                <p
-                  id="telegram-handle-error"
-                  className="notification-preferences__field-error"
-                  role="alert"
-                >
-                  Telegram handle must start with @ and contain at least 3 characters.
-                </p>
-              )}
-            </div>
             </FormField>
 
             {errorCategories.length > 0 && (

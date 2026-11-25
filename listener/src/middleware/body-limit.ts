@@ -68,11 +68,11 @@ export interface BodyLimitResult {
  * Returns `allowed: true` for methods that carry no body, so GET/DELETE pay
  * only a set lookup.
  */
-export function enforceBodyLimit(
+export async function enforceBodyLimit(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   options: BodyLimitOptions = {},
-): BodyLimitResult {
+): Promise<BodyLimitResult> {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BODY_BYTES;
   const method = (req.method ?? 'GET').toUpperCase();
 
@@ -90,27 +90,68 @@ export function enforceBodyLimit(
     return { allowed: false, reason: 'content-length-exceeded', observedBytes: declared };
   }
 
-  // Backstop: Content-Length is client-supplied and absent on chunked
-  // transfers, so count what actually arrives.
-  let received = 0;
-  let rejected = false;
+  // Buffer the bounded stream and replay it after the dispatcher has attached
+  // its route-specific body parser. Listening without replaying would consume
+  // the request before those handlers see it.
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let received = 0;
+    let settled = false;
 
-  const onData = (chunk: Buffer | string): void => {
-    if (rejected) return;
-    received += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
-    if (received <= maxBytes) return;
+    const cleanup = (): void => {
+      req.removeListener('data', onData);
+      req.removeListener('end', onEnd);
+      req.removeListener('aborted', onAborted);
+      req.removeListener('error', onError);
+    };
 
-    rejected = true;
-    req.removeListener('data', onData);
-    options.onRejected?.('stream-exceeded', received);
-    respondTooLarge(res, maxBytes, received);
-    req.destroy();
-  };
+    const rejectBody = (reason: BodyLimitRejection, observedBytes: number): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      options.onRejected?.(reason, observedBytes);
+      respondTooLarge(res, maxBytes, observedBytes);
+      req.destroy();
+      resolve({ allowed: false, reason, observedBytes });
+    };
 
-  req.on('data', onData);
-  req.once('end', () => req.removeListener('data', onData));
+    const onData = (chunk: Buffer | string): void => {
+      if (settled) return;
+      const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+      received += buffer.length;
+      if (received > maxBytes) {
+        rejectBody('stream-exceeded', received);
+        return;
+      }
+      chunks.push(Buffer.from(buffer));
+    };
 
-  return { allowed: true };
+    const onEnd = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const body = Buffer.concat(chunks);
+      setImmediate(() => {
+        if (body.length > 0) req.emit('data', body);
+        req.emit('end');
+      });
+      resolve({ allowed: true });
+    };
+
+    const onAborted = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ allowed: false });
+    };
+
+    const onError = (): void => onAborted();
+
+    req.on('data', onData);
+    req.once('end', onEnd);
+    req.once('aborted', onAborted);
+    req.once('error', onError);
+  });
 }
 
 /**
@@ -122,6 +163,10 @@ export function enforceBodyLimit(
  */
 function respondTooLarge(res: http.ServerResponse, maxBytes: number, observedBytes: number): void {
   if (res.headersSent) return;
+
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('X-API-Version', 'v1');
+  }
 
   const payload = JSON.stringify({
     error: 'Payload Too Large',

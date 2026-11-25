@@ -87,6 +87,30 @@ notifier, or a downstream analytics pipeline.
 curl -sS 'http://localhost:8787/api/events?limit=5' | jq '.events[] | {eventId, contractAddress, topic, value, ledger}'
 ```
 
+### Live feed (optional Server-Sent Events)
+
+When the listener is started with `EVENT_STREAM_ENABLED=true`, dashboards can
+subscribe instead of polling:
+
+```bash
+curl -N http://localhost:8787/api/events/stream
+```
+
+Each record uses this format:
+
+```
+id: <contractAddress>:<eventId>
+event: notification
+data: {"eventId":"...","contractAddress":"...","eventName":"...","ledger":1,"type":"contract","topic":[],"value":"...","receivedAt":0}
+
+```
+
+Reconnect by sending the last id in the `Last-Event-ID` header. The server
+replays anything newer, then resumes live delivery. A `: keepalive` comment
+is sent about every 15 seconds. When the client disconnects, the listener
+drops that subscriber. If the flag is off, this path returns 404 and the poll
+loop below remains the way to read events.
+
 ### Poll on an interval (cron / watch loop)
 
 ```bash

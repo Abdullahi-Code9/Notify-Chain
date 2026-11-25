@@ -94,11 +94,11 @@ describe('parseContentLength', () => {
 // ── Content-Length screening ────────────────────────────────────────────────
 
 describe('body limit — Content-Length screening', () => {
-  it('rejects a declared size above the limit before reading a byte', () => {
+  it('rejects a declared size above the limit before reading a byte', async () => {
     const req = makeRequest('POST', { 'content-length': '2048' });
     const res = makeResponse();
 
-    const result = enforce(req, res, 1024);
+    const result = await enforce(req, res, 1024);
 
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe('content-length-exceeded');
@@ -106,34 +106,38 @@ describe('body limit — Content-Length screening', () => {
     expect(req.destroy).toHaveBeenCalled();
   });
 
-  it('accepts a declared size exactly at the limit', () => {
+  it('accepts a declared size exactly at the limit', async () => {
     // The bound is inclusive — exactly max is a legitimate payload.
     const req = makeRequest('POST', { 'content-length': '1024' });
     const res = makeResponse();
+    const result = enforce(req, res, 1024);
+    req.emit('end');
 
-    expect(enforce(req, res, 1024).allowed).toBe(true);
+    expect((await result).allowed).toBe(true);
     expect(res.writeHead).not.toHaveBeenCalled();
   });
 
-  it('rejects one byte over the limit', () => {
+  it('rejects one byte over the limit', async () => {
     const req = makeRequest('POST', { 'content-length': '1025' });
     const res = makeResponse();
 
-    expect(enforce(req, res, 1024).allowed).toBe(false);
+    expect((await enforce(req, res, 1024)).allowed).toBe(false);
   });
 
-  it('accepts one byte under the limit', () => {
+  it('accepts one byte under the limit', async () => {
     const req = makeRequest('POST', { 'content-length': '1023' });
     const res = makeResponse();
 
-    expect(enforce(req, res, 1024).allowed).toBe(true);
+    const result = enforce(req, res, 1024);
+    req.emit('end');
+    expect((await result).allowed).toBe(true);
   });
 
-  it('responds with a machine-readable 413 payload', () => {
+  it('responds with a machine-readable 413 payload', async () => {
     const req = makeRequest('POST', { 'content-length': '5000' });
     const res = makeResponse();
 
-    enforce(req, res, 1024);
+    await enforce(req, res, 1024);
 
     expect(res.headers?.['Content-Type']).toBe('application/json');
     const parsed = JSON.parse(res.body ?? '{}');
@@ -142,11 +146,11 @@ describe('body limit — Content-Length screening', () => {
     expect(parsed.observedBytes).toBe(5000);
   });
 
-  it('notifies the caller with the reason and observed size', () => {
+  it('notifies the caller with the reason and observed size', async () => {
     const onRejected = jest.fn();
     const req = makeRequest('POST', { 'content-length': '5000' });
 
-    enforce(req, makeResponse(), 1024, onRejected);
+    await enforce(req, makeResponse(), 1024, onRejected);
 
     expect(onRejected).toHaveBeenCalledWith('content-length-exceeded', 5000);
   });
@@ -155,78 +159,84 @@ describe('body limit — Content-Length screening', () => {
 // ── Streaming enforcement ───────────────────────────────────────────────────
 
 describe('body limit — streaming enforcement', () => {
-  it('rejects a body that overruns without declaring a Content-Length', () => {
+  it('rejects a body that overruns without declaring a Content-Length', async () => {
     // Chunked transfers carry no Content-Length, so the counter is the only
     // thing bounding memory here.
     const req = makeRequest('POST', {});
     const res = makeResponse();
     const onRejected = jest.fn();
 
-    expect(enforce(req, res, 10, onRejected).allowed).toBe(true);
+    const result = enforce(req, res, 10, onRejected);
 
     req.emit('data', Buffer.alloc(6));
     expect(res.writeHead).not.toHaveBeenCalled();
 
     req.emit('data', Buffer.alloc(6)); // 12 total, over the limit
+    expect((await result).allowed).toBe(false);
     expect(res.statusCode).toBe(413);
     expect(req.destroy).toHaveBeenCalled();
     expect(onRejected).toHaveBeenCalledWith('stream-exceeded', 12);
   });
 
-  it('rejects a body that understates its Content-Length', () => {
+  it('rejects a body that understates its Content-Length', async () => {
     // A client claiming 5 bytes and sending 100 must still be stopped.
     const req = makeRequest('POST', { 'content-length': '5' });
     const res = makeResponse();
 
-    expect(enforce(req, res, 10).allowed).toBe(true);
+    const result = enforce(req, res, 10);
 
     req.emit('data', Buffer.alloc(100));
 
+    expect((await result).allowed).toBe(false);
     expect(res.statusCode).toBe(413);
     expect(req.destroy).toHaveBeenCalled();
   });
 
-  it('allows a stream that stays exactly at the limit', () => {
+  it('allows a stream that stays exactly at the limit', async () => {
     const req = makeRequest('POST', {});
     const res = makeResponse();
 
-    enforce(req, res, 10);
+    const result = enforce(req, res, 10);
     req.emit('data', Buffer.alloc(10));
     req.emit('end');
 
+    expect((await result).allowed).toBe(true);
     expect(res.writeHead).not.toHaveBeenCalled();
     expect(req.destroy).not.toHaveBeenCalled();
   });
 
-  it('rejects at exactly one byte past the limit', () => {
+  it('rejects at exactly one byte past the limit', async () => {
     const req = makeRequest('POST', {});
     const res = makeResponse();
 
-    enforce(req, res, 10);
+    const result = enforce(req, res, 10);
     req.emit('data', Buffer.alloc(11));
 
+    expect((await result).allowed).toBe(false);
     expect(res.statusCode).toBe(413);
   });
 
-  it('counts string chunks by byte length, not character count', () => {
+  it('counts string chunks by byte length, not character count', async () => {
     // A 4-character emoji is 4 bytes in UTF-8 per character here; counting
     // characters would let roughly 4x the intended payload through.
     const req = makeRequest('POST', {});
     const res = makeResponse();
 
-    enforce(req, res, 8);
+    const result = enforce(req, res, 8);
     req.emit('data', '🚀🚀🚀'); // 12 bytes, 3 code points
 
+    expect((await result).allowed).toBe(false);
     expect(res.statusCode).toBe(413);
   });
 
-  it('responds only once no matter how many chunks arrive after the overrun', () => {
+  it('responds only once no matter how many chunks arrive after the overrun', async () => {
     const req = makeRequest('POST', {});
     const res = makeResponse();
     const onRejected = jest.fn();
 
-    enforce(req, res, 5, onRejected);
+    const result = enforce(req, res, 5, onRejected);
     req.emit('data', Buffer.alloc(10));
+    await result;
     req.emit('data', Buffer.alloc(10));
     req.emit('data', Buffer.alloc(10));
 
@@ -234,17 +244,35 @@ describe('body limit — streaming enforcement', () => {
     expect(res.end).toHaveBeenCalledTimes(1);
   });
 
-  it('does not write a second response when headers were already sent', () => {
+  it('does not write a second response when headers were already sent', async () => {
     // A handler may have started responding before the stream overran;
     // writing again would replace a useful error with an unhandled throw.
     const req = makeRequest('POST', {});
     const res = makeResponse(true);
 
-    enforce(req, res, 5);
+    const result = enforce(req, res, 5);
     req.emit('data', Buffer.alloc(10));
 
+    await result;
     expect(res.writeHead).not.toHaveBeenCalled();
     expect(req.destroy).toHaveBeenCalled();
+  });
+
+  it('replays an in-limit body after the guard completes', async () => {
+    const req = makeRequest('POST', { 'content-length': '5' });
+    const res = makeResponse();
+    const result = enforce(req, res, 5);
+    const received = new Promise<string>((resolve) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    });
+
+    req.emit('data', Buffer.from('hello'));
+    req.emit('end');
+
+    expect((await result).allowed).toBe(true);
+    await expect(received).resolves.toBe('hello');
   });
 });
 
@@ -253,27 +281,27 @@ describe('body limit — streaming enforcement', () => {
 describe('body limit — methods without bodies', () => {
   it.each(['GET', 'DELETE', 'HEAD', 'OPTIONS'])(
     'passes %s through without screening',
-    (method) => {
+    async (method) => {
       const req = makeRequest(method, { 'content-length': '999999' });
       const res = makeResponse();
 
-      expect(enforce(req, res, 10).allowed).toBe(true);
+      expect((await enforce(req, res, 10)).allowed).toBe(true);
       expect(res.writeHead).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['POST', 'PUT', 'PATCH'])('screens %s', (method) => {
+  it.each(['POST', 'PUT', 'PATCH'])('screens %s', async (method) => {
     const req = makeRequest(method, { 'content-length': '999999' });
     const res = makeResponse();
 
-    expect(enforce(req, res, 10).allowed).toBe(false);
+    expect((await enforce(req, res, 10)).allowed).toBe(false);
   });
 
-  it('treats a lowercase method name as its uppercase equivalent', () => {
+  it('treats a lowercase method name as its uppercase equivalent', async () => {
     const req = makeRequest('post', { 'content-length': '999999' });
     const res = makeResponse();
 
-    expect(enforce(req, res, 10).allowed).toBe(false);
+    expect((await enforce(req, res, 10)).allowed).toBe(false);
   });
 });
 
@@ -284,11 +312,11 @@ describe('body limit — defaults', () => {
     expect(DEFAULT_MAX_BODY_BYTES).toBe(1_048_576);
   });
 
-  it('uses the default when no limit is supplied', () => {
+  it('uses the default when no limit is supplied', async () => {
     const req = makeRequest('POST', { 'content-length': String(DEFAULT_MAX_BODY_BYTES + 1) });
     const res = makeResponse();
 
-    const result = enforceBodyLimit(req as never, res as never);
+    const result = await enforceBodyLimit(req as never, res as never);
 
     expect(result.allowed).toBe(false);
   });

@@ -31,7 +31,10 @@ async function migrate() {
     const sqliteDb = db['db'] as any;
     
     const runner = new MigrationRunner(sqliteDb, migrationsDir);
-    await runner.runMigrations();
+    // Destructive migrations (table rebuilds that drop data) refuse to run
+    // unless explicitly opted in after a verified backup - see docs/migration-rollback.md.
+    const allowDestructive = /^(1|true|yes)$/i.test(process.env.ALLOW_DESTRUCTIVE_MIGRATIONS || '');
+    await runner.runMigrations({ allowDestructive });
 
     logger.info('Database migration completed successfully', { dbPath });
 

@@ -102,13 +102,13 @@ Returns the pause status of all configured smart contracts.
 }
 ```
 
-| Field     | Type    | Description                                                        |
-|-----------|---------|--------------------------------------------------------------------|
-| timestamp | string  | ISO 8601 timestamp of when the status was fetched                  |
-| contracts | array   | One entry per configured contract                                  |
-| address   | string  | Contract address                                                   |
-| paused    | boolean | Whether the contract is currently paused                           |
-| error     | string  | Present only when the contract status could not be fetched         |
+| Field     | Type    | Description                                                |
+| --------- | ------- | ---------------------------------------------------------- |
+| timestamp | string  | ISO 8601 timestamp of when the status was fetched          |
+| contracts | array   | One entry per configured contract                          |
+| address   | string  | Contract address                                           |
+| paused    | boolean | Whether the contract is currently paused                   |
+| error     | string  | Present only when the contract status could not be fetched |
 
 **Response `500`**
 
@@ -137,17 +137,18 @@ Reports the current indexing lag between the local event registry and the Stella
 }
 ```
 
-| Field             | Type          | Description                                                               |
-|-------------------|---------------|---------------------------------------------------------------------------|
-| status            | string        | `"synced"`, `"syncing"`, or `"degraded"`                                  |
-| indexedLedger     | number\|null  | Ledger sequence of the last ingested event                                |
-| networkTipLedger  | number\|null  | Latest ledger on the Stellar network                                      |
-| ledgerLag         | number\|null  | `networkTipLedger - indexedLedger` (0 = in sync)                         |
-| processingDelayMs | number\|null  | Milliseconds since the last event was ingested                            |
-| lastIngestedAt    | string\|null  | ISO 8601 timestamp of the last ingested event                             |
-| detail            | string\|null  | Human-readable explanation when `status` is not `"synced"`                |
+| Field             | Type         | Description                                                |
+| ----------------- | ------------ | ---------------------------------------------------------- |
+| status            | string       | `"synced"`, `"syncing"`, or `"degraded"`                   |
+| indexedLedger     | number\|null | Ledger sequence of the last ingested event                 |
+| networkTipLedger  | number\|null | Latest ledger on the Stellar network                       |
+| ledgerLag         | number\|null | `networkTipLedger - indexedLedger` (0 = in sync)           |
+| processingDelayMs | number\|null | Milliseconds since the last event was ingested             |
+| lastIngestedAt    | string\|null | ISO 8601 timestamp of the last ingested event              |
+| detail            | string\|null | Human-readable explanation when `status` is not `"synced"` |
 
 **Status thresholds:**
+
 - `"synced"` — `ledgerLag == 0` and `processingDelayMs <= 60 000`
 - `"syncing"` — `ledgerLag <= 5` and `processingDelayMs <= 300 000`
 - `"degraded"` — outside the above bounds, or `networkTipLedger` is unavailable
@@ -186,8 +187,8 @@ Returns all stored contract events, newest first.
 
 **Query Parameters**
 
-| Name  | Type   | Required | Description                                          |
-|-------|--------|----------|------------------------------------------------------|
+| Name  | Type   | Required | Description                                                |
+| ----- | ------ | -------- | ---------------------------------------------------------- |
 | limit | number | No       | Maximum number of events to return (default: 20, max: 100) |
 
 **Response `200`**
@@ -211,21 +212,64 @@ Returns all stored contract events, newest first.
 }
 ```
 
-| Field           | Type          | Description                                              |
-|-----------------|---------------|----------------------------------------------------------|
-| eventId         | string        | Soroban event ID (`ledger-index` format)                 |
-| contractAddress | string        | Contract that emitted the event                          |
-| eventName       | string\|null  | Decoded event name (first topic symbol), if decodeable   |
-| ledger          | number        | Ledger sequence containing the event                     |
-| type            | string        | Always `"contract"` for Soroban events                   |
-| topic           | string[]      | Decoded event topics                                     |
-| value           | string        | Base64-encoded XDR event data                            |
-| txHash          | string        | Transaction hash                                         |
-| receivedAt      | number        | Unix timestamp (ms) when the listener received the event |
+| Field           | Type         | Description                                              |
+| --------------- | ------------ | -------------------------------------------------------- |
+| eventId         | string       | Soroban event ID (`ledger-index` format)                 |
+| contractAddress | string       | Contract that emitted the event                          |
+| eventName       | string\|null | Decoded event name (first topic symbol), if decodeable   |
+| ledger          | number       | Ledger sequence containing the event                     |
+| type            | string       | Always `"contract"` for Soroban events                   |
+| topic           | string[]     | Decoded event topics                                     |
+| value           | string       | Base64-encoded XDR event data                            |
+| txHash          | string       | Transaction hash                                         |
+| receivedAt      | number       | Unix timestamp (ms) when the listener received the event |
 
 ---
 
 ## Scheduled Notifications
+
+### POST /api/schedule
+
+Creates a scheduled notification. `executeAt` must be a future ISO-8601
+timestamp. The optional `recurrence` object supports `frequency` values
+`minutely`, `hourly`, `daily`, `weekly`, or `monthly`; `interval` defaults to
+`1`, and exactly one optional end condition (`count` or `until`) may be set.
+`count` includes the first occurrence and `until` is inclusive. If neither is
+specified, the series continues until cancelled.
+
+```json
+{
+  "payload": { "message": "Daily report" },
+  "notificationType": "webhook",
+  "targetRecipient": "https://example.test/notifications",
+  "executeAt": "2026-11-01T09:00:00.000Z",
+  "recurrence": { "frequency": "daily", "count": 7 }
+}
+```
+
+**Response `201`**
+
+```json
+{ "id": 123 }
+```
+
+**Response `400`** — invalid recurrence or schedule horizon
+
+```json
+{
+  "error": "executeAt 2027-01-02T00:00:00.000Z exceeds the maximum scheduling horizon of 31536000000 ms (limit: 2027-01-01T00:00:00.000Z)",
+  "code": "INVALID_SCHEDULE"
+}
+```
+
+The default `MAX_SCHEDULING_HORIZON` is `365d`; set it to a positive duration
+(`ms`, `s`, `m`, `h`, or `d`) or `0` to disable it. The boundary is inclusive.
+For recurrence, the first run and an optional `until` must be within the
+horizon; later occurrences are generated without rechecking it. Occurrences are
+calculated in UTC. After downtime the scheduler delivers its currently due
+occurrence, then skips any additional slots already past at completion; skipped
+slots count toward `count`. A completed or cancelled series schedules no
+further runs. Monthly dates clamp to the last valid day of a shorter month.
 
 Preferences control which notification categories are delivered per user. Categories default to **enabled** when not explicitly set.
 
@@ -235,9 +279,9 @@ Returns the notification preferences for a user.
 
 **Path Parameters**
 
-| Name   | Description        |
-|--------|--------------------|
-| userId | User identifier    |
+| Name   | Description     |
+| ------ | --------------- |
+| userId | User identifier |
 
 **Response `200`**
 
@@ -259,9 +303,9 @@ Updates one or more notification category flags for a user. Unspecified categori
 
 **Path Parameters**
 
-| Name   | Description        |
-|--------|--------------------|
-| userId | User identifier    |
+| Name   | Description     |
+| ------ | --------------- |
+| userId | User identifier |
 
 **Request Body**
 
@@ -273,9 +317,9 @@ Updates one or more notification category flags for a user. Unspecified categori
 }
 ```
 
-| Field      | Type                          | Required | Description                              |
-|------------|-------------------------------|----------|------------------------------------------|
-| categories | `Record<string, boolean>`     | Yes      | Map of category name to enabled flag     |
+| Field      | Type                      | Required | Description                          |
+| ---------- | ------------------------- | -------- | ------------------------------------ |
+| categories | `Record<string, boolean>` | Yes      | Map of category name to enabled flag |
 
 **Response `200`** — returns the full updated preferences object.
 
@@ -319,11 +363,12 @@ Returns a single scheduled notification by its numeric ID.
 
 **Path Parameters**
 
-| Name | Description              |
-|------|--------------------------|
+| Name | Description               |
+| ---- | ------------------------- |
 | id   | Notification ID (integer) |
 
 **Response `200`**
+
 > **Payload size limit**: The `payload` object is serialised to JSON before storage. The resulting byte length must not exceed the configured maximum (default **64 KB / 65 536 bytes**). Oversized payloads are rejected with HTTP `413`. Override the limit at runtime with the `MAX_PAYLOAD_SIZE_BYTES` environment variable.
 
 **Request Body**
@@ -347,17 +392,17 @@ Returns a single scheduled notification by its numeric ID.
 ```
 
 **Response `400`** — non-numeric `:id`
-| Field             | Type     | Required | Description                                              |
+| Field | Type | Required | Description |
 |-------------------|----------|----------|----------------------------------------------------------|
-| executeAt         | string   | Yes      | ISO 8601 datetime — when to deliver the notification     |
-| payload           | object   | Yes      | Arbitrary data forwarded to the notification handler. Serialised JSON must not exceed `MAX_PAYLOAD_SIZE_BYTES` (default 64 KB). |
-| targetRecipient   | string   | Yes      | Delivery target (e.g. Discord webhook URL)               |
-| notificationType  | string   | No       | `"discord"` (default)                                    |
-| maxRetries        | number   | No       | Override max retry count                                 |
-| priority          | number   | No       | Lower numbers run first                                  |
-| eventId           | string   | No       | Correlation ID linking this to a contract event          |
-| contractAddress   | string   | No       | Contract that triggered the notification                 |
-| metadata          | object   | No       | Arbitrary key/value metadata                             |
+| executeAt | string | Yes | ISO 8601 datetime — when to deliver the notification |
+| payload | object | Yes | Arbitrary data forwarded to the notification handler. Serialised JSON must not exceed `MAX_PAYLOAD_SIZE_BYTES` (default 64 KB). |
+| targetRecipient | string | Yes | Delivery target (e.g. Discord webhook URL) |
+| notificationType | string | No | `"discord"` (default) |
+| maxRetries | number | No | Override max retry count |
+| priority | number | No | Lower numbers run first |
+| eventId | string | No | Correlation ID linking this to a contract event |
+| contractAddress | string | No | Contract that triggered the notification |
+| metadata | object | No | Arbitrary key/value metadata |
 
 **Response `201`**
 
@@ -381,7 +426,9 @@ Returns a single scheduled notification by its numeric ID.
 **Response `413`** — payload exceeds the maximum allowed size
 
 ```json
-{ "error": "Notification payload is too large: 70000 bytes exceeds the 65536-byte limit. Reduce the payload size and retry." }
+{
+  "error": "Notification payload is too large: 70000 bytes exceeds the 65536-byte limit. Reduce the payload size and retry."
+}
 ```
 
 **Response `500`** — internal scheduling failure
@@ -395,6 +442,90 @@ Returns a single scheduled notification by its numeric ID.
 ```json
 { "error": "Scheduler not enabled" }
 ```
+
+---
+
+### PATCH /api/schedule/:id
+
+Modify an eligible pending schedule in place without deleting and recreating it. Protected by API-key authentication and an optimistic version check.
+
+**Authentication**: `X-API-Key` header required.
+
+**Path Parameters**
+
+| Name | Description               |
+|------|---------------------------|
+| id   | Notification ID (integer) |
+
+**Required Headers**
+
+| Header               | Description                                                                                         |
+|----------------------|-----------------------------------------------------------------------------------------------------|
+| `If-Match`           | Current schedule version, e.g. `"1"` or `W/"1"`. Alternatively use `X-Schedule-Version`.          |
+| `X-Schedule-Version` | Alternative to `If-Match`. Integer version number of the schedule as returned by `GET /api/schedule/:id`. |
+
+**Request Body** — a JSON object containing only the fields to change. At least one field is required. Supported fields:
+
+| Field            | Type   | Description                                         |
+|------------------|--------|-----------------------------------------------------|
+| executeAt        | string | New ISO 8601 delivery time (must be in the future)  |
+| payload          | object | New notification payload                            |
+| notificationType | string | One of `discord`, `email`, `webhook`, `sms`         |
+| targetRecipient  | string | New delivery target                                 |
+| expiresAt        | string | New expiry deadline (ISO 8601 or epoch)             |
+| maxRetries       | number | New retry limit                                     |
+| priority         | number | New priority (1–10)                                 |
+| eventId          | string | New correlation ID                                  |
+| contractAddress  | string | New contract address                                |
+| metadata         | object | New metadata                                        |
+
+**Response `200`** — schedule updated; new `ETag` header contains the bumped version
+
+```json
+{
+  "id": 42,
+  "status": "PENDING",
+  "version": 2,
+  "executeAt": "2024-12-31T14:00:00.000Z"
+}
+```
+
+**Response `400`** — empty body, unknown field, or invalid field value  
+**Response `401`** — missing or invalid API key  
+**Response `404`** — no notification with that ID  
+**Response `409`** — schedule is not `PENDING`, is awaiting operator intervention, or the version is stale  
+**Response `428`** — `If-Match` / `X-Schedule-Version` header absent or not a valid integer  
+**Response `503`** — scheduler feature is disabled
+
+---
+
+### POST /api/schedule/:id/recovery
+
+Resolve an operator intervention hold set by `SCHEDULE_RECOVERY_POLICY=REQUIRE_INTERVENTION`.
+
+**Authentication**: `X-API-Key` header required.
+
+**Path Parameters**
+
+| Name | Description               |
+|------|---------------------------|
+| id   | Notification ID (integer) |
+
+**Request Body**
+
+```json
+{ "action": "EXECUTE" }
+```
+
+| Field  | Type   | Required | Values                | Description                                                  |
+|--------|--------|----------|-----------------------|--------------------------------------------------------------|
+| action | string | Yes      | `EXECUTE` or `EXPIRE` | `EXECUTE` — clear the hold and allow delivery. `EXPIRE` — permanently expire the schedule. |
+
+**Response `200`** — hold resolved; returns the updated schedule object  
+**Response `400`** — `action` is missing or not `EXECUTE`/`EXPIRE`  
+**Response `401`** — missing or invalid API key  
+**Response `409`** — schedule is not currently `AWAITING_INTERVENTION` or does not exist  
+**Response `503`** — scheduler feature is disabled
 
 ---
 
@@ -414,13 +545,13 @@ Returns aggregate statistics about the scheduled-notification queue.
 }
 ```
 
-| Field      | Type   | Description                                                  |
-|------------|--------|--------------------------------------------------------------|
-| pending    | number | Notifications waiting to be processed                        |
-| processing | number | Notifications currently being processed                      |
-| completed  | number | Successfully delivered notifications                         |
+| Field      | Type   | Description                                                    |
+| ---------- | ------ | -------------------------------------------------------------- |
+| pending    | number | Notifications waiting to be processed                          |
+| processing | number | Notifications currently being processed                        |
+| completed  | number | Successfully delivered notifications                           |
 | failed     | number | Notifications that permanently failed after exhausting retries |
-| overdue    | number | Pending notifications that are past their `executeAt` time   |
+| overdue    | number | Pending notifications that are past their `executeAt` time     |
 
 **Response `500`** — database read failure
 
@@ -455,22 +586,22 @@ Returns deduplicated delivery performance metrics. Each notification is counted 
 }
 ```
 
-| Field                        | Type   | Description                                                                    |
-|------------------------------|--------|--------------------------------------------------------------------------------|
-| totalNotifications           | number | Completed or permanently failed notifications (one count per notification ID)  |
-| successfulFirstAttempt       | number | Delivered successfully on the first attempt (zero retries)                     |
-| successfulAfterRetry         | number | Delivered successfully after one or more retries                               |
-| permanentFailures            | number | Failed permanently after exhausting all retries                                |
-| totalRetryAttempts           | number | Sum of retry counts across all notifications                                   |
-| averageRetriesPerNotification| number | `totalRetryAttempts / totalNotifications`                                      |
-| averageSuccessDurationMs     | number | Average duration (ms) of the final successful delivery attempt                 |
-| averageFailureDurationMs     | number | Average duration (ms) of the final failed delivery attempt                     |
+| Field                         | Type   | Description                                                                   |
+| ----------------------------- | ------ | ----------------------------------------------------------------------------- |
+| totalNotifications            | number | Completed or permanently failed notifications (one count per notification ID) |
+| successfulFirstAttempt        | number | Delivered successfully on the first attempt (zero retries)                    |
+| successfulAfterRetry          | number | Delivered successfully after one or more retries                              |
+| permanentFailures             | number | Failed permanently after exhausting all retries                               |
+| totalRetryAttempts            | number | Sum of retry counts across all notifications                                  |
+| averageRetriesPerNotification | number | `totalRetryAttempts / totalNotifications`                                     |
+| averageSuccessDurationMs      | number | Average duration (ms) of the final successful delivery attempt                |
+| averageFailureDurationMs      | number | Average duration (ms) of the final failed delivery attempt                    |
 
 **Computing success rate:**
+
 ```javascript
 const successRate =
-  (metrics.successfulFirstAttempt + metrics.successfulAfterRetry) /
-  metrics.totalNotifications;
+  (metrics.successfulFirstAttempt + metrics.successfulAfterRetry) / metrics.totalNotifications;
 // Example: (70 + 20) / 100 = 0.90
 ```
 
@@ -498,16 +629,16 @@ Returns a breakdown of final outcomes grouped by retry count. Useful for tuning 
 [
   { "retryCount": 0, "successCount": 70, "failureCount": 0 },
   { "retryCount": 1, "successCount": 15, "failureCount": 2 },
-  { "retryCount": 2, "successCount": 5,  "failureCount": 3 },
-  { "retryCount": 3, "successCount": 0,  "failureCount": 5 }
+  { "retryCount": 2, "successCount": 5, "failureCount": 3 },
+  { "retryCount": 3, "successCount": 0, "failureCount": 5 }
 ]
 ```
 
-| Field        | Type   | Description                                                  |
-|--------------|--------|--------------------------------------------------------------|
-| retryCount   | number | Number of retries before the final outcome                   |
+| Field        | Type   | Description                                                     |
+| ------------ | ------ | --------------------------------------------------------------- |
+| retryCount   | number | Number of retries before the final outcome                      |
 | successCount | number | Notifications that succeeded after exactly `retryCount` retries |
-| failureCount | number | Notifications that failed after exactly `retryCount` retries |
+| failureCount | number | Notifications that failed after exactly `retryCount` retries    |
 
 **Response `500`** — database read failure
 
@@ -531,14 +662,14 @@ Returns paginated delivery execution records from `notification_execution_log`.
 
 **Query Parameters**
 
-| Name      | Type   | Required | Description                                                       |
-|-----------|--------|----------|-------------------------------------------------------------------|
-| limit     | number | No       | Maximum records per page (default `20`, max `100`)                |
-| offset    | number | No       | Number of records to skip (default `0`). Prefer `cursor`.         |
-| cursor    | string | No       | Opaque token for cursor-based pagination                          |
-| status    | string | No       | Filter by execution status: `SUCCESS`, `FAILED`, or `RETRY`       |
-| startDate | string | No       | ISO 8601 lower bound on `execution_time` (inclusive)              |
-| endDate   | string | No       | ISO 8601 upper bound on `execution_time` (inclusive)              |
+| Name      | Type   | Required | Description                                                 |
+| --------- | ------ | -------- | ----------------------------------------------------------- |
+| limit     | number | No       | Maximum records per page (default `20`, max `100`)          |
+| offset    | number | No       | Number of records to skip (default `0`). Prefer `cursor`.   |
+| cursor    | string | No       | Opaque token for cursor-based pagination                    |
+| status    | string | No       | Filter by execution status: `SUCCESS`, `FAILED`, or `RETRY` |
+| startDate | string | No       | ISO 8601 lower bound on `execution_time` (inclusive)        |
+| endDate   | string | No       | ISO 8601 upper bound on `execution_time` (inclusive)        |
 
 **Response `200`**
 
@@ -564,15 +695,15 @@ Returns paginated delivery execution records from `notification_execution_log`.
 }
 ```
 
-| Field       | Type   | Description                                                                 |
-|-------------|--------|-----------------------------------------------------------------------------|
-| records     | array  | Execution log entries for the current page                                  |
-| total       | number | Total matching records (preserved for backward compatibility; same value as `itemCount`) |
-| itemCount   | number | Total number of records matching the query filters                          |
-| totalPages  | number | Total pages available at the requested `limit` (`0` when `itemCount` is `0`) |
-| limit       | number | Effective page size applied to the query                                    |
-| offset      | number | Number of records skipped before this page                                  |
-| nextCursor  | string | Opaque token to fetch the next page of results                              |
+| Field      | Type   | Description                                                                              |
+| ---------- | ------ | ---------------------------------------------------------------------------------------- |
+| records    | array  | Execution log entries for the current page                                               |
+| total      | number | Total matching records (preserved for backward compatibility; same value as `itemCount`) |
+| itemCount  | number | Total number of records matching the query filters                                       |
+| totalPages | number | Total pages available at the requested `limit` (`0` when `itemCount` is `0`)             |
+| limit      | number | Effective page size applied to the query                                                 |
+| offset     | number | Number of records skipped before this page                                               |
+| nextCursor | string | Opaque token to fetch the next page of results                                           |
 
 Existing clients that read `total`, `limit`, `offset`, and `records` continue to work unchanged. New clients should prefer `itemCount` and `totalPages` for pagination UI.
 
@@ -592,16 +723,16 @@ Full-text and field-based search across scheduled notifications.
 
 **Query Parameters**
 
-| Name     | Type   | Required | Description                                                       |
-|----------|--------|----------|-------------------------------------------------------------------|
-| q        | string | No       | Free-text search across payload, metadata, and recipient fields   |
-| sender   | string | No       | Filter by sender address or identifier                            |
-| txHash   | string | No       | Filter by originating transaction hash                            |
-| eventId  | string | No       | Filter by correlated contract event ID                            |
-| status   | string | No       | Filter by status: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `CANCELLED` |
-| type     | string | No       | Filter by notification type: `discord`, `email`, `webhook`, `sms` |
-| limit    | number | No       | Maximum results to return (default: 20)                           |
-| offset   | number | No       | Number of results to skip (default: 0)                            |
+| Name    | Type   | Required | Description                                                                   |
+| ------- | ------ | -------- | ----------------------------------------------------------------------------- |
+| q       | string | No       | Free-text search across payload, metadata, and recipient fields               |
+| sender  | string | No       | Filter by sender address or identifier                                        |
+| txHash  | string | No       | Filter by originating transaction hash                                        |
+| eventId | string | No       | Filter by correlated contract event ID                                        |
+| status  | string | No       | Filter by status: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `CANCELLED` |
+| type    | string | No       | Filter by notification type: `discord`, `email`, `webhook`, `sms`             |
+| limit   | number | No       | Maximum results to return (default: 20)                                       |
+| offset  | number | No       | Number of results to skip (default: 0)                                        |
 
 **Response `200`**
 
@@ -640,9 +771,9 @@ Cancel a pending scheduled notification. An optional `reason` may be supplied fo
 
 **Path Parameters**
 
-| Name | Type   | Required | Description                              |
-|------|--------|----------|------------------------------------------|
-| id   | number | Yes      | Numeric identifier of the notification   |
+| Name | Type   | Required | Description                            |
+| ---- | ------ | -------- | -------------------------------------- |
+| id   | number | Yes      | Numeric identifier of the notification |
 
 **Request Body** (optional)
 
@@ -664,20 +795,16 @@ Returns autocomplete suggestions based on a partial query string. Useful for bui
 
 **Query Parameters**
 
-| Name  | Type   | Required | Description                                      |
-|-------|--------|----------|--------------------------------------------------|
-| q     | string | Yes      | Partial search string (minimum 1 character)      |
-| limit | number | No       | Maximum suggestions to return (default: 10)      |
+| Name  | Type   | Required | Description                                 |
+| ----- | ------ | -------- | ------------------------------------------- |
+| q     | string | Yes      | Partial search string (minimum 1 character) |
+| limit | number | No       | Maximum suggestions to return (default: 10) |
 
 **Response `200`**
 
 ```json
 {
-  "suggestions": [
-    "task_completed",
-    "task_created",
-    "transfer_complete"
-  ]
+  "suggestions": ["task_completed", "task_created", "transfer_complete"]
 }
 ```
 
@@ -749,14 +876,14 @@ Or with a wrapper key:
 }
 ```
 
-| Field          | Type    | Description                                                            |
-|----------------|---------|------------------------------------------------------------------------|
-| valid          | boolean | `true` only when zero validation errors were found                     |
-| processedCount | number  | Total items evaluated                                                  |
-| errors         | array   | One entry per failed item; empty array when `valid` is `true`          |
-| errors[].index | number  | Zero-based position of the failing item in the input array (`-1` for parse errors) |
-| errors[].code  | string  | Machine-readable error code (e.g. `INVALID_DATE`, `MISSING_FIELD`, `PARSE_ERROR`) |
-| errors[].message | string | Human-readable description                                           |
+| Field            | Type    | Description                                                                        |
+| ---------------- | ------- | ---------------------------------------------------------------------------------- |
+| valid            | boolean | `true` only when zero validation errors were found                                 |
+| processedCount   | number  | Total items evaluated                                                              |
+| errors           | array   | One entry per failed item; empty array when `valid` is `true`                      |
+| errors[].index   | number  | Zero-based position of the failing item in the input array (`-1` for parse errors) |
+| errors[].code    | string  | Machine-readable error code (e.g. `INVALID_DATE`, `MISSING_FIELD`, `PARSE_ERROR`)  |
+| errors[].message | string  | Human-readable description                                                         |
 
 **Response `400`** — request body is not valid JSON
 
@@ -780,10 +907,10 @@ Lists all templates, with optional filtering.
 
 **Query Parameters**
 
-| Name        | Type    | Required | Description                                     |
-|-------------|---------|----------|-------------------------------------------------|
+| Name        | Type    | Required | Description                                          |
+| ----------- | ------- | -------- | ---------------------------------------------------- |
 | channelType | string  | No       | Filter by channel type (e.g. `"discord"`, `"email"`) |
-| activeOnly  | boolean | No       | When `true`, return only active templates       |
+| activeOnly  | boolean | No       | When `true`, return only active templates            |
 
 **Response `200`**
 
@@ -832,17 +959,17 @@ Creates a new notification template.
 }
 ```
 
-| Field           | Type     | Required | Description                                              |
-|-----------------|----------|----------|----------------------------------------------------------|
-| uniqueKey       | string   | Yes      | URL-safe unique identifier for this template             |
-| name            | string   | Yes      | Human-readable display name                              |
-| channelType     | string   | Yes      | Target channel: `"discord"`, `"email"`, `"webhook"`, `"sms"` |
+| Field           | Type     | Required | Description                                                     |
+| --------------- | -------- | -------- | --------------------------------------------------------------- |
+| uniqueKey       | string   | Yes      | URL-safe unique identifier for this template                    |
+| name            | string   | Yes      | Human-readable display name                                     |
+| channelType     | string   | Yes      | Target channel: `"discord"`, `"email"`, `"webhook"`, `"sms"`    |
 | bodyTemplate    | string   | Yes      | Handlebars-style template body with `{{variable}}` placeholders |
-| description     | string   | No       | Optional description                                     |
-| subjectTemplate | string   | No       | Subject line template (relevant for email)               |
-| variables       | string[] | No       | List of variable names used in the template              |
-| defaultValues   | object   | No       | Default values for variables                             |
-| createdBy       | string   | No       | Identifier of the user creating the template             |
+| description     | string   | No       | Optional description                                            |
+| subjectTemplate | string   | No       | Subject line template (relevant for email)                      |
+| variables       | string[] | No       | List of variable names used in the template                     |
+| defaultValues   | object   | No       | Default values for variables                                    |
+| createdBy       | string   | No       | Identifier of the user creating the template                    |
 
 **Response `201`**
 
@@ -853,7 +980,10 @@ Creates a new notification template.
 **Response `400`** — missing required fields
 
 ```json
-{ "error": "Missing required fields", "required": ["uniqueKey", "name", "channelType", "bodyTemplate"] }
+{
+  "error": "Missing required fields",
+  "required": ["uniqueKey", "name", "channelType", "bodyTemplate"]
+}
 ```
 
 **Response `409`** — `uniqueKey` already exists
@@ -870,8 +1000,8 @@ Returns a template by its numeric ID.
 
 **Path Parameters**
 
-| Name | Description          |
-|------|----------------------|
+| Name | Description           |
+| ---- | --------------------- |
 | id   | Template ID (integer) |
 
 **Response `200`** — template object (same shape as items in the list response)
@@ -896,8 +1026,8 @@ Returns a template by its `uniqueKey`.
 
 **Path Parameters**
 
-| Name      | Description              |
-|-----------|--------------------------|
+| Name      | Description               |
+| --------- | ------------------------- |
 | uniqueKey | The template's unique key |
 
 **Response `200`** — template object
@@ -916,8 +1046,8 @@ Updates an existing template. Only the supplied fields are changed.
 
 **Path Parameters**
 
-| Name | Description          |
-|------|----------------------|
+| Name | Description           |
+| ---- | --------------------- |
 | id   | Template ID (integer) |
 
 **Request Body** — any subset of the template fields:
@@ -949,15 +1079,15 @@ Deactivates a template (soft-delete by default). Pass `?hard=true` to permanentl
 
 **Path Parameters**
 
-| Name | Description          |
-|------|----------------------|
+| Name | Description           |
+| ---- | --------------------- |
 | id   | Template ID (integer) |
 
 **Query Parameters**
 
-| Name | Type    | Required | Description                                            |
-|------|---------|----------|--------------------------------------------------------|
-| hard | boolean | No       | When `true`, permanently deletes the template record   |
+| Name | Type    | Required | Description                                          |
+| ---- | ------- | -------- | ---------------------------------------------------- |
+| hard | boolean | No       | When `true`, permanently deletes the template record |
 
 **Response `200`**
 
@@ -995,11 +1125,11 @@ Renders a template by substituting variables with provided context values.
 }
 ```
 
-| Field      | Type   | Required | Description                                                    |
-|------------|--------|----------|----------------------------------------------------------------|
-| templateId | number | No*      | Template ID. Provide either `templateId` or `uniqueKey`.       |
-| uniqueKey  | string | No*      | Template unique key. Provide either `templateId` or `uniqueKey`. |
-| context    | object | Yes      | Key-value map of variable names to substitution values         |
+| Field      | Type   | Required | Description                                                      |
+| ---------- | ------ | -------- | ---------------------------------------------------------------- |
+| templateId | number | No\*     | Template ID. Provide either `templateId` or `uniqueKey`.         |
+| uniqueKey  | string | No\*     | Template unique key. Provide either `templateId` or `uniqueKey`. |
+| context    | object | Yes      | Key-value map of variable names to substitution values           |
 
 \* One of `templateId` or `uniqueKey` is required.
 
@@ -1032,9 +1162,9 @@ Returns usage statistics for all templates, or for a specific template.
 
 **Query Parameters**
 
-| Name       | Type   | Required | Description                         |
-|------------|--------|----------|-------------------------------------|
-| templateId | number | No       | Limit stats to a specific template  |
+| Name       | Type   | Required | Description                        |
+| ---------- | ------ | -------- | ---------------------------------- |
+| templateId | number | No       | Limit stats to a specific template |
 
 **Response `200`**
 
@@ -1044,7 +1174,12 @@ Returns usage statistics for all templates, or for a specific template.
   "activeTemplates": 4,
   "renderCount": 1234,
   "byTemplate": [
-    { "id": 1, "uniqueKey": "task-completed", "renderCount": 800, "lastRenderedAt": "2024-06-20T14:00:00.000Z" }
+    {
+      "id": 1,
+      "uniqueKey": "task-completed",
+      "renderCount": 800,
+      "lastRenderedAt": "2024-06-20T14:00:00.000Z"
+    }
   ]
 }
 ```
@@ -1057,8 +1192,8 @@ Returns the full audit history for a specific template (create, update, delete e
 
 **Path Parameters**
 
-| Name | Description          |
-|------|----------------------|
+| Name | Description               |
+| ---- | ------------------------- |
 | id   | Template ID or unique key |
 
 **Response `200`**
@@ -1099,9 +1234,9 @@ Returns a real-time aggregated snapshot of notification delivery metrics. Pass `
 
 **Query Parameters**
 
-| Name  | Type    | Required | Description                                          |
-|-------|---------|----------|------------------------------------------------------|
-| reset | boolean | No       | If `true`, resets the aggregator after reading       |
+| Name  | Type    | Required | Description                                    |
+| ----- | ------- | -------- | ---------------------------------------------- |
+| reset | boolean | No       | If `true`, resets the aggregator after reading |
 
 **Response `200`**
 
@@ -1113,11 +1248,9 @@ Returns a real-time aggregated snapshot of notification delivery metrics. Pass `
   "retryCount": 50,
   "byType": {
     "discord": { "success": 900, "failure": 60 },
-    "email":   { "success": 450, "failure": 40 }
+    "email": { "success": 450, "failure": 40 }
   },
-  "buckets": [
-    { "startMs": 1718640000000, "endMs": 1718640060000, "count": 25 }
-  ]
+  "buckets": [{ "startMs": 1718640000000, "endMs": 1718640060000, "count": 25 }]
 }
 ```
 
@@ -1135,10 +1268,10 @@ Returns historical analytics snapshots persisted by the metrics store. Supports 
 
 **Query Parameters**
 
-| Name  | Type   | Required | Description                                                   |
-|-------|--------|----------|---------------------------------------------------------------|
-| limit | number | No       | Maximum snapshots to return (default: 50, max: 100)           |
-| since | string | No       | ISO 8601 lower bound — return only snapshots after this time  |
+| Name  | Type   | Required | Description                                                  |
+| ----- | ------ | -------- | ------------------------------------------------------------ |
+| limit | number | No       | Maximum snapshots to return (default: 50, max: 100)          |
+| since | string | No       | ISO 8601 lower bound — return only snapshots after this time |
 
 **Response `200`**
 
@@ -1171,10 +1304,10 @@ Receives a signed webhook event payload. The request must carry a valid HMAC-SHA
 
 **Required Headers**
 
-| Header            | Description                                      |
-|-------------------|--------------------------------------------------|
-| `X-Signature`     | HMAC-SHA256 hex digest of the raw request body   |
-| `X-Key-Id`        | Identifier selecting which secret to verify with |
+| Header        | Description                                      |
+| ------------- | ------------------------------------------------ |
+| `X-Signature` | HMAC-SHA256 hex digest of the raw request body   |
+| `X-Key-Id`    | Identifier selecting which secret to verify with |
 
 **Response `202`**
 
@@ -1222,17 +1355,17 @@ The API enforces configurable rate limits to protect against abuse. Limits can b
 
 All responses include these headers when rate limiting is enabled:
 
-| Header                  | Description                                              |
-|-------------------------|----------------------------------------------------------|
-| `X-RateLimit-Limit`     | Maximum requests allowed in the current window           |
-| `X-RateLimit-Remaining` | Requests remaining before hitting the limit              |
-| `X-RateLimit-Reset`     | Unix timestamp (seconds) when the window resets          |
+| Header                  | Description                                     |
+| ----------------------- | ----------------------------------------------- |
+| `X-RateLimit-Limit`     | Maximum requests allowed in the current window  |
+| `X-RateLimit-Remaining` | Requests remaining before hitting the limit     |
+| `X-RateLimit-Reset`     | Unix timestamp (seconds) when the window resets |
 
 When a rate limit is exceeded:
 
-| Header        | Description                                     |
-|---------------|-------------------------------------------------|
-| `Retry-After` | Seconds to wait before retrying the request     |
+| Header        | Description                                 |
+| ------------- | ------------------------------------------- |
+| `Retry-After` | Seconds to wait before retrying the request |
 
 ### GET /api/rate-limit/metrics
 
@@ -1240,9 +1373,9 @@ Returns real-time rate limiting statistics for monitoring and analysis.
 
 **Query Parameters**
 
-| Name  | Type    | Required | Description                                      |
-|-------|---------|----------|--------------------------------------------------|
-| reset | boolean | No       | If `true`, resets metrics after reading them     |
+| Name  | Type    | Required | Description                                  |
+| ----- | ------- | -------- | -------------------------------------------- |
+| reset | boolean | No       | If `true`, resets metrics after reading them |
 
 **Response `200`**
 
@@ -1266,14 +1399,14 @@ Returns real-time rate limiting statistics for monitoring and analysis.
 }
 ```
 
-| Field              | Type   | Description                                                  |
-|--------------------|--------|--------------------------------------------------------------|
-| totalRequests      | number | Total requests processed since server start or last reset    |
-| blockedRequests    | number | Requests that were rate limited                              |
-| allowedRequests    | number | Requests that were allowed through                           |
-| uniqueClients      | number | Number of distinct clients currently tracked                 |
-| topBlockedClients  | array  | Top 10 clients by block count (API keys are masked)          |
-| startTime          | string | ISO 8601 timestamp when metrics tracking started             |
+| Field             | Type   | Description                                               |
+| ----------------- | ------ | --------------------------------------------------------- |
+| totalRequests     | number | Total requests processed since server start or last reset |
+| blockedRequests   | number | Requests that were rate limited                           |
+| allowedRequests   | number | Requests that were allowed through                        |
+| uniqueClients     | number | Number of distinct clients currently tracked              |
+| topBlockedClients | array  | Top 10 clients by block count (API keys are masked)       |
+| startTime         | string | ISO 8601 timestamp when metrics tracking started          |
 
 **Response `503`** — rate limiting is disabled
 
@@ -1326,6 +1459,7 @@ Content-Type: application/json
 ---
 
 ## Webhooks
+
 ## Health
 
 ### GET /health
@@ -1412,13 +1546,13 @@ Returns the pause status of all configured smart contracts.
 }
 ```
 
-| Field       | Type     | Description                                                                 |
-|-------------|----------|-----------------------------------------------------------------------------|
-| timestamp   | string   | ISO 8601 timestamp of when the status was fetched                          |
-| contracts   | array    | List of contracts and their statuses                                             |
-| address     | string   | Contract address                                                            |
-| paused      | boolean  | Whether the contract is currently paused                                   |
-| error       | string   | Optional. Error message if we could not fetch the status for this contract   |
+| Field     | Type    | Description                                                                |
+| --------- | ------- | -------------------------------------------------------------------------- |
+| timestamp | string  | ISO 8601 timestamp of when the status was fetched                          |
+| contracts | array   | List of contracts and their statuses                                       |
+| address   | string  | Contract address                                                           |
+| paused    | boolean | Whether the contract is currently paused                                   |
+| error     | string  | Optional. Error message if we could not fetch the status for this contract |
 
 **Response `500`** — internal error fetching status
 
@@ -1438,27 +1572,27 @@ Every error response is a JSON object. All errors carry an `error` string. Rate-
 
 Every response — success or error — includes the following tracing headers:
 
-| Header            | Description                                    |
-|-------------------|------------------------------------------------|
-| `X-Request-Id`    | Unique ID generated for this request           |
-| `X-Correlation-Id`| Caller-supplied or server-generated trace ID   |
+| Header             | Description                                  |
+| ------------------ | -------------------------------------------- |
+| `X-Request-Id`     | Unique ID generated for this request         |
+| `X-Correlation-Id` | Caller-supplied or server-generated trace ID |
 
 ---
 
 ### Status Code Table
 
-| HTTP Code | Name                  | When it occurs                                                    | Client action                                                            |
-|-----------|-----------------------|-------------------------------------------------------------------|--------------------------------------------------------------------------|
-| 200       | OK                    | Request succeeded; body contains the result                       | Consume response body                                                    |
-| 201       | Created               | Resource created (scheduled notification)                         | Persist the returned `id` for future lookups                             |
-| 202       | Accepted              | Webhook accepted for processing                                   | No further action needed                                                 |
-| 204       | No Content            | CORS preflight (`OPTIONS`) succeeded                              | Browser handles automatically                                            |
-| 400       | Bad Request           | Client sent invalid input — see error message for the specific field | Fix the request body or parameters before retrying                    |
-| 401       | Unauthorized          | Webhook signature is missing, unrecognised, or invalid            | Verify the signing secret and key ID; regenerate the HMAC               |
-| 404       | Not Found             | Route or resource does not exist                                  | Check the URL and resource ID                                            |
-| 429       | Too Many Requests     | Client exceeded its rate limit for the current window             | Wait `Retry-After` seconds before sending the next request              |
-| 500       | Internal Server Error | Unhandled server-side failure                                     | Retry with exponential backoff; report if persistent                     |
-| 503       | Service Unavailable   | Scheduler is disabled, or Stellar RPC is unreachable             | Check server configuration or wait for dependency to recover             |
+| HTTP Code | Name                  | When it occurs                                                       | Client action                                                |
+| --------- | --------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 200       | OK                    | Request succeeded; body contains the result                          | Consume response body                                        |
+| 201       | Created               | Resource created (scheduled notification)                            | Persist the returned `id` for future lookups                 |
+| 202       | Accepted              | Webhook accepted for processing                                      | No further action needed                                     |
+| 204       | No Content            | CORS preflight (`OPTIONS`) succeeded                                 | Browser handles automatically                                |
+| 400       | Bad Request           | Client sent invalid input — see error message for the specific field | Fix the request body or parameters before retrying           |
+| 401       | Unauthorized          | Webhook signature is missing, unrecognised, or invalid               | Verify the signing secret and key ID; regenerate the HMAC    |
+| 404       | Not Found             | Route or resource does not exist                                     | Check the URL and resource ID                                |
+| 429       | Too Many Requests     | Client exceeded its rate limit for the current window                | Wait `Retry-After` seconds before sending the next request   |
+| 500       | Internal Server Error | Unhandled server-side failure                                        | Retry with exponential backoff; report if persistent         |
+| 503       | Service Unavailable   | Scheduler is disabled, or Stellar RPC is unreachable                 | Check server configuration or wait for dependency to recover |
 
 ---
 
@@ -1466,14 +1600,14 @@ Every response — success or error — includes the following tracing headers:
 
 The request was rejected because client-supplied data failed validation.
 
-| Error message | Endpoint | Cause | Fix |
-|---|---|---|---|
-| `"Invalid body: expected { categories: { [key]: boolean } }"` | `PUT /api/preferences/:userId` | Body is valid JSON but `categories` field is absent or not an object | Send `{ "categories": { "discord": true } }` |
-| `"Invalid JSON"` | `PUT /api/preferences/:userId` | Body is not parseable JSON | Ensure `Content-Type: application/json` and well-formed JSON |
-| `"Missing required fields: executeAt, payload, targetRecipient"` | `POST /api/schedule` | One or more of the three required fields is absent | Include all three fields in the request body |
-| `"executeAt is not a valid date"` | `POST /api/schedule` | `executeAt` string cannot be parsed as a JavaScript `Date` | Use a valid ISO 8601 string, e.g. `"2024-06-20T15:00:00.000Z"` |
-| `"Invalid notification ID"` | `GET /api/schedule/:id` | `:id` path segment is not a valid integer | Use a numeric ID returned by `POST /api/schedule` |
-| `"Failed to read request body"` | `POST /api/webhooks` | The connection was dropped while reading the body | Resend the request with the full body intact |
+| Error message                                                    | Endpoint                       | Cause                                                                | Fix                                                            |
+| ---------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `"Invalid body: expected { categories: { [key]: boolean } }"`    | `PUT /api/preferences/:userId` | Body is valid JSON but `categories` field is absent or not an object | Send `{ "categories": { "discord": true } }`                   |
+| `"Invalid JSON"`                                                 | `PUT /api/preferences/:userId` | Body is not parseable JSON                                           | Ensure `Content-Type: application/json` and well-formed JSON   |
+| `"Missing required fields: executeAt, payload, targetRecipient"` | `POST /api/schedule`           | One or more of the three required fields is absent                   | Include all three fields in the request body                   |
+| `"executeAt is not a valid date"`                                | `POST /api/schedule`           | `executeAt` string cannot be parsed as a JavaScript `Date`           | Use a valid ISO 8601 string, e.g. `"2024-06-20T15:00:00.000Z"` |
+| `"Invalid notification ID"`                                      | `GET /api/schedule/:id`        | `:id` path segment is not a valid integer                            | Use a numeric ID returned by `POST /api/schedule`              |
+| `"Failed to read request body"`                                  | `POST /api/webhooks`           | The connection was dropped while reading the body                    | Resend the request with the full body intact                   |
 
 **Example — missing schedule fields**
 
@@ -1498,12 +1632,12 @@ X-Request-Id: f3a2c1b0-...
 
 All `401` errors come from the `POST /api/webhooks` endpoint when signature verification fails. The request must carry both `X-Signature` and `X-Key-Id` headers.
 
-| Error message | Cause | Fix |
-|---|---|---|
-| `"Missing signature header"` | `X-Signature` header is absent | Add the header with an HMAC-SHA256 hex digest of the raw request body |
-| `"Missing key-id header"` | `X-Key-Id` header is absent | Add the header with the ID of the signing key used |
-| `"Unknown key-id"` | The `X-Key-Id` value does not match any key registered with the server | Use a key ID that the server was started with |
-| `"Invalid signature"` | The signature does not match the server's HMAC computation | Re-sign the raw body bytes with the correct secret; ensure no encoding transformation is applied to the body in transit |
+| Error message                | Cause                                                                  | Fix                                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `"Missing signature header"` | `X-Signature` header is absent                                         | Add the header with an HMAC-SHA256 hex digest of the raw request body                                                   |
+| `"Missing key-id header"`    | `X-Key-Id` header is absent                                            | Add the header with the ID of the signing key used                                                                      |
+| `"Unknown key-id"`           | The `X-Key-Id` value does not match any key registered with the server | Use a key ID that the server was started with                                                                           |
+| `"Invalid signature"`        | The signature does not match the server's HMAC computation             | Re-sign the raw body bytes with the correct secret; ensure no encoding transformation is applied to the body in transit |
 
 **Example — wrong secret**
 
@@ -1528,9 +1662,9 @@ X-Request-Id: d9e1f2a3-...
 
 ### 404 Not Found
 
-| Error message | When | Fix |
-|---|---|---|
-| `"Not found"` | The request path does not match any known route | Check the URL against this document |
+| Error message              | When                                                               | Fix                                                                        |
+| -------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `"Not found"`              | The request path does not match any known route                    | Check the URL against this document                                        |
 | `"Notification not found"` | `GET /api/schedule/:id` — no notification exists with the given ID | Verify the ID was returned by `POST /api/schedule` and has not been purged |
 
 ---
@@ -1543,12 +1677,12 @@ The response always includes `error` and `message`. Response headers tell the cl
 
 **Response headers**
 
-| Header              | Description                                                    |
-|---------------------|----------------------------------------------------------------|
-| `X-RateLimit-Limit` | Maximum requests allowed in the current window                 |
-| `X-RateLimit-Remaining` | Requests still available (0 when limited)                  |
-| `X-RateLimit-Reset` | Unix timestamp (seconds) when the oldest slot leaves the window |
-| `Retry-After`       | Seconds to wait before the next request will be accepted       |
+| Header                  | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| `X-RateLimit-Limit`     | Maximum requests allowed in the current window                  |
+| `X-RateLimit-Remaining` | Requests still available (0 when limited)                       |
+| `X-RateLimit-Reset`     | Unix timestamp (seconds) when the oldest slot leaves the window |
+| `Retry-After`           | Seconds to wait before the next request will be accepted        |
 
 **Client identification** — the limiter tracks clients by API key first, then by IP address:
 
@@ -1588,12 +1722,12 @@ Rate limit violations are recorded in the SQLite database for audit purposes.
 
 Returned when the server encounters an unexpected failure. The `error` field contains the original exception message.
 
-| Endpoint | Likely cause |
-|---|---|
-| `POST /api/schedule` | Database write failure; SQLite locked or corrupt |
-| `GET /api/schedule/:id` | Database read failure |
-| `GET /api/schedule/stats` | Database read failure |
-| `GET /health` | Unexpected exception in the health check loop |
+| Endpoint                  | Likely cause                                     |
+| ------------------------- | ------------------------------------------------ |
+| `POST /api/schedule`      | Database write failure; SQLite locked or corrupt |
+| `GET /api/schedule/:id`   | Database read failure                            |
+| `GET /api/schedule/stats` | Database read failure                            |
+| `GET /health`             | Unexpected exception in the health check loop    |
 
 **Example**
 

@@ -6,8 +6,11 @@ import logger from '../utils/logger';
 const DEFAULT_MAX_EVENTS = 10000;
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+export type RegistryListener = (event: DisplayEvent) => void;
+
 export class EventRegistry {
   private readonly events = new Map<string, DisplayEvent>();
+  private readonly listeners = new Set<RegistryListener>();
   private readonly maxEvents: number;
   private ttlMs: number;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -81,6 +84,7 @@ export class EventRegistry {
     };
 
     this.events.set(eventKey, displayEvent);
+    this.notify(displayEvent);
     this.lastIngestedLedger = displayEvent.ledger;
     this.lastIngestedAt = displayEvent.receivedAt;
     this.maxLedgerSeen =
@@ -119,6 +123,17 @@ export class EventRegistry {
     );
   }
 
+  /**
+   * Subscribe to events stored after this call. Duplicate inputs that return
+   * the existing record do not notify listeners. Returns an unsubscribe function.
+   */
+  subscribe(listener: RegistryListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
   count(): number {
     return this.events.size;
   }
@@ -152,6 +167,12 @@ export class EventRegistry {
 
   private getEventKey(eventId: string, contractAddress: string): string {
     return `${contractAddress}:${eventId}`;
+  }
+
+  private notify(event: DisplayEvent): void {
+    for (const listener of this.listeners) {
+      listener(event);
+    }
   }
 }
 

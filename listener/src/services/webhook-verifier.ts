@@ -101,13 +101,6 @@ export function verifySignature(
 
   const hasTimestamp = timestampHeader !== undefined && timestampHeader !== null && timestampHeader !== '';
 
-  if (!hasTimestamp && options?.requireTimestamp) {
-    logger.warn('Webhook signature verification failed: timestamp required but absent', {
-      ...auditContext,
-    });
-    return { valid: false, reason: 'missing_timestamp' };
-  }
-
   // Validate timestamp expiration if provided
   if (hasTimestamp && options?.maxAgeSeconds !== undefined) {
     if (!isTimestampValid(timestampHeader as string, options.maxAgeSeconds)) {
@@ -145,6 +138,15 @@ export function verifySignature(
   if (!match) {
     logger.warn('Webhook signature verification failed: HMAC mismatch', auditContext);
     return { valid: false, reason: 'hmac_mismatch' };
+  }
+
+  // A signature that verifies without a timestamp is only acceptable when the
+  // caller has explicitly opted into legacy (timestamp-less) signing.
+  if (!hasTimestamp && options?.requireTimestamp) {
+    logger.warn('Webhook signature verification failed: timestamp required but absent', {
+      ...auditContext,
+    });
+    return { valid: false, reason: 'missing_timestamp' };
   }
 
   return { valid: true };
@@ -295,7 +297,7 @@ const AUTH_ERRORS: Record<string, { message: string; code: string; status: numbe
   },
 };
 
-export function verifyWebhookRequest(ctx: WebhookVerificationContext): WebhookVerificationOutcome {
+export async function verifyWebhookRequest(ctx: WebhookVerificationContext): Promise<WebhookVerificationOutcome> {
   const {
     headers,
     rawBody,
@@ -306,9 +308,8 @@ export function verifyWebhookRequest(ctx: WebhookVerificationContext): WebhookVe
     maxAgeSeconds,
     requireTimestamp = true,
     replayCache,
+    auditService,
   } = ctx;
-export async function verifyWebhookRequest(ctx: WebhookVerificationContext): Promise<WebhookVerificationOutcome> {
-  const { headers, rawBody, secrets, sourceIp, requestId, correlationId, maxAgeSeconds, auditService } = ctx;
 
   const signatureHeader = extractSignature(headers);
   const keyId = extractKeyId(headers);
@@ -322,20 +323,40 @@ export async function verifyWebhookRequest(ctx: WebhookVerificationContext): Pro
     contentLength: rawBody.length,
   };
 
-  if (!signatureHeader) {
-    logger.warn('Webhook authentication rejected: missing signature header', auditContext);
-    const e = AUTH_ERRORS.missing_signature_header;
-    if (auditService) {
+  /**
+   * Persist an authentication failure to the security audit trail.
+   *
+   * Best effort by design: a failing audit sink must never change the auth
+   * decision, so the error is logged instead of propagating to the caller.
+   */
+  const recordAuditFailure = async (
+    error: { code: string; message: string },
+    actor: string,
+  ): Promise<void> => {
+    if (!auditService) return;
+    try {
       await auditService.record({
         action: 'auth_failure',
-        actor: 'unknown',
+        actor,
         sourceIp,
         requestId,
         correlationId,
-        outcome: e.code,
-        details: { reason: e.message },
+        outcome: error.code,
+        details: { reason: error.message },
+      });
+    } catch (err) {
+      logger.error('Failed to write security audit record', {
+        ...auditContext,
+        outcome: error.code,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
+  };
+
+  if (!signatureHeader) {
+    logger.warn('Webhook authentication rejected: missing signature header', auditContext);
+    const e = AUTH_ERRORS.missing_signature_header;
+    await recordAuditFailure(e, 'unknown');
     return {
       authenticated: false,
       statusCode: e.status,
@@ -348,17 +369,7 @@ export async function verifyWebhookRequest(ctx: WebhookVerificationContext): Pro
   if (!keyId) {
     logger.warn('Webhook authentication rejected: missing key-id header', auditContext);
     const e = AUTH_ERRORS.missing_key_id;
-    if (auditService) {
-      await auditService.record({
-        action: 'auth_failure',
-        actor: 'unknown',
-        sourceIp,
-        requestId,
-        correlationId,
-        outcome: e.code,
-        details: { reason: e.message },
-      });
-    }
+    await recordAuditFailure(e, 'unknown');
     return {
       authenticated: false,
       statusCode: e.status,
@@ -372,17 +383,7 @@ export async function verifyWebhookRequest(ctx: WebhookVerificationContext): Pro
   if (!secret) {
     logger.warn('Webhook authentication rejected: unknown key-id', { ...auditContext, keyId });
     const e = AUTH_ERRORS.unknown_key_id;
-    if (auditService) {
-      await auditService.record({
-        action: 'auth_failure',
-        actor: keyId,
-        sourceIp,
-        requestId,
-        correlationId,
-        outcome: e.code,
-        details: { reason: e.message },
-      });
-    }
+    await recordAuditFailure(e, keyId);
     return {
       authenticated: false,
       statusCode: e.status,
@@ -406,17 +407,7 @@ export async function verifyWebhookRequest(ctx: WebhookVerificationContext): Pro
 
   if (!verification.valid) {
     const err = AUTH_ERRORS[verification.reason ?? 'hmac_mismatch'] ?? AUTH_ERRORS.hmac_mismatch;
-    if (auditService) {
-      await auditService.record({
-        action: 'auth_failure',
-        actor: keyId,
-        sourceIp,
-        requestId,
-        correlationId,
-        outcome: err.code,
-        details: { reason: err.message },
-      });
-    }
+    await recordAuditFailure(err, keyId);
     return {
       authenticated: false,
       statusCode: err.status,

@@ -176,11 +176,11 @@ fn fuzz_reduce_usage_never_exceeds_paid_total() {
     );
 
     for _ in 0..usages {
-        client.reduce_usage(&id);
+        client.reduce_usage(&id, &creator);
     }
 
     assert_eq!(client.get_remaining_usages(&id), 0);
 
-    let overuse = client.try_reduce_usage(&id);
+    let overuse = client.try_reduce_usage(&id, &creator);
     assert!(overuse.is_err());
 }

@@ -1,6 +1,7 @@
 import {
   NotificationProvider,
   ProviderCapability,
+  NotificationFormat,
   DeliveryPayload,
   DeliveryResult,
 } from '../types/provider-capabilities';
@@ -107,8 +108,11 @@ export class ProviderRegistry {
    * Resolves with a `DeliveryResult` describing whether delivery succeeded
    * and which requested features (if any) had to be degraded.
    *
-   * Rejects with an `Error` when no provider is registered for `providerId` —
-   * the caller is responsible for checking `has()` first or catching the error.
+   * Returns `success: false` with `errorCode: 'UNSUPPORTED_FORMAT'` when the
+   * caller requests a format the provider does not support.
+   *
+   * Resolves with `success: false` (no rejection) when no provider is
+   * registered for `providerId`.
    */
   async deliver(providerId: string, payload: DeliveryPayload): Promise<DeliveryResult> {
     const provider = this.providers.get(providerId);
@@ -127,10 +131,49 @@ export class ProviderRegistry {
       };
     }
 
+    // Validate format preference when explicitly supplied.
+    if (payload.formatPreference !== undefined) {
+      const isValid = Object.values(NotificationFormat).includes(payload.formatPreference as NotificationFormat);
+      if (!isValid) {
+        const errorMessage = `Invalid formatPreference "${payload.formatPreference}" — not a recognised NotificationFormat value`;
+        logger.warn('ProviderRegistry: delivery rejected — unrecognised format', {
+          requestId: payload.requestId,
+          providerId,
+          formatPreference: payload.formatPreference,
+        });
+        return {
+          success: false,
+          degradedCapabilities: [],
+          errorMessage,
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
+      }
+
+      if (!provider.supportsFormat(payload.formatPreference)) {
+        const supported = [...provider.metadata.supportedFormats].join(', ');
+        const errorMessage =
+          `Provider "${providerId}" does not support format "${payload.formatPreference}". ` +
+          `Supported formats: [${supported}]`;
+        logger.warn('ProviderRegistry: delivery rejected — unsupported format for provider', {
+          requestId: payload.requestId,
+          providerId,
+          formatPreference: payload.formatPreference,
+          supportedFormats: supported,
+        });
+        return {
+          success: false,
+          degradedCapabilities: [],
+          errorMessage,
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
+      }
+    }
+
     logger.debug('ProviderRegistry: dispatching delivery', {
       requestId: payload.requestId,
       providerId,
       targetRecipient: payload.targetRecipient,
+      formatPreference: payload.formatPreference ?? provider.metadata.defaultFormat,
     });
 
     return provider.deliver(payload);

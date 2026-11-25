@@ -12,30 +12,34 @@ This is a **production-ready, robust scheduled notification system** that allows
 ✅ **Graceful Failure** - Failed notifications logged and retried, don't block queue  
 ✅ **Multi-Instance Ready** - Run multiple workers simultaneously  
 ✅ **Persistent Storage** - SQLite database ensures no data loss  
-✅ **Audit Logging** - Complete execution history for debugging  
+✅ **Audit Logging** - Complete execution history for debugging
 
 ---
 
 ## 📋 Acceptance Criteria - ALL MET ✓
 
 ### 1. Precise Timing ✓
+
 - Notifications sent within configurable buffer (default: ±1 minute)
 - Poll interval: 10 seconds (configurable)
 - Priority-based processing
 
 ### 2. Resilience & Fault Tolerance ✓
+
 - Automatic recovery on service restart
 - Catch-up logic processes missed notifications
 - Stale lock recovery handles crashed workers
 - Persistent SQLite storage
 
 ### 3. Idempotency & Race Condition Prevention ✓
+
 - Atomic row-level locking with `processor_id`
 - Unique worker IDs prevent conflicts
 - Lock expiration timeout
 - Multi-instance safe
 
 ### 4. Graceful Failure ✓
+
 - Failed jobs marked as `FAILED` with error details
 - Retry logic with configurable max retries
 - Execution history in audit log
@@ -46,6 +50,7 @@ This is a **production-ready, robust scheduled notification system** that allows
 ## 🚀 Quick Start
 
 ### 1. Install Dependencies
+
 ```bash
 cd listener
 npm install
@@ -54,6 +59,7 @@ npm install
 Installs: `sqlite3`, `uuid`, `@types/uuid`
 
 ### 2. Run Database Migration
+
 ```bash
 npm run migrate
 ```
@@ -61,6 +67,7 @@ npm run migrate
 Creates database with schema at `./data/notifications.db`
 
 ### 3. Configure Environment
+
 ```bash
 # Copy example config
 cp .env.example .env
@@ -70,12 +77,14 @@ nano .env
 ```
 
 Minimum required configuration:
+
 ```bash
 SCHEDULER_ENABLED=true
 DATABASE_PATH=./data/notifications.db
 ```
 
 ### 4. Start Service
+
 ```bash
 # Development
 npm run dev
@@ -105,7 +114,7 @@ const id = await api.scheduleDiscordNotification(
   'https://discord.com/webhook/...',
   { content: 'Scheduled message!' },
   new Date(Date.now() + 3600000),
-  { maxRetries: 5, priority: 1 }
+  { maxRetries: 5, priority: 1 },
 );
 
 // Check status
@@ -150,17 +159,19 @@ curl http://localhost:8787/api/schedule/stats
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SCHEDULER_ENABLED` | `true` | Enable/disable scheduler |
-| `DATABASE_PATH` | `./data/notifications.db` | Database file path |
-| `SCHEDULER_POLL_INTERVAL_MS` | `10000` | How often to check for due notifications |
-| `SCHEDULER_LOCK_TIMEOUT_MS` | `60000` | Lock expiration timeout |
-| `SCHEDULER_BATCH_SIZE` | `10` | Notifications per processing cycle |
-| `SCHEDULER_TIMING_BUFFER_MS` | `60000` | Acceptable timing buffer (±1 min) |
-| `SCHEDULER_PROCESSOR_ID` | (auto-generated) | Unique worker identifier |
+| Variable                     | Default                   | Description                                                                                                                                                              |
+| ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SCHEDULER_ENABLED`          | `true`                    | Enable/disable scheduler                                                                                                                                                 |
+| `DATABASE_PATH`              | `./data/notifications.db` | Database file path                                                                                                                                                       |
+| `SCHEDULER_POLL_INTERVAL_MS` | `10000`                   | How often to check for due notifications                                                                                                                                 |
+| `SCHEDULER_LOCK_TIMEOUT_MS`  | `60000`                   | Lock expiration timeout                                                                                                                                                  |
+| `SCHEDULER_BATCH_SIZE`       | `10`                      | Notifications per processing cycle                                                                                                                                       |
+| `SCHEDULER_TIMING_BUFFER_MS` | `60000`                   | Acceptable timing buffer (±1 min)                                                                                                                                        |
+| `MAX_SCHEDULING_HORIZON`     | `365d`                    | Maximum time into the future for a first run. Accepts positive `ms`, `s`, `m`, `h`, or `d` durations up to 100 years; `0` disables the limit. The boundary is inclusive. |
+| `SCHEDULER_PROCESSOR_ID`     | (auto-generated)          | Unique worker identifier                                                                                                                                                 |
 
 ### Complete .env Example
+
 ```bash
 # Stellar Configuration
 STELLAR_NETWORK=testnet
@@ -174,10 +185,49 @@ SCHEDULER_LOCK_TIMEOUT_MS=60000
 SCHEDULER_PROCESSOR_ID=
 SCHEDULER_BATCH_SIZE=10
 SCHEDULER_TIMING_BUFFER_MS=60000
+MAX_SCHEDULING_HORIZON=365d
 
 # Discord Webhook
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 ```
+
+### Recurring schedules
+
+`POST /api/schedule` accepts an optional constrained recurrence object. The first
+`executeAt` is the first occurrence. Supported frequencies are `minutely`,
+`hourly`, `daily`, `weekly`, and `monthly`; `interval` defaults to `1` and must
+be a positive integer. Use exactly one of `count` or `until` to end a series.
+`count` includes the first run; `until` is an inclusive ISO-8601 UTC timestamp.
+If neither end condition is set, the series continues until cancelled.
+
+```json
+{
+  "payload": { "message": "Daily service report" },
+  "notificationType": "webhook",
+  "targetRecipient": "https://example.test/notifications",
+  "executeAt": "2026-11-01T09:00:00.000Z",
+  "recurrence": { "frequency": "daily", "interval": 1, "count": 7 }
+}
+```
+
+Recurrence calculations use UTC only. Daily and weekly runs retain their UTC
+time across daylight-saving changes. Monthly runs use the previous occurrence's
+day and clamp to the final day when a month is shorter (for example, January 31
+advances to February 28 or 29). After downtime, the existing scheduler delivers
+the due occurrence it claims, then skips any additional slots already past when
+that delivery completes. Skipped slots count toward `count`, preventing a
+delivery burst while preserving the next future run. After a successful
+delivery, the occurrence counter and next time are persisted atomically. Failed
+deliveries retry the same occurrence. Cancelling a pending
+series prevents all later runs; an in-flight delivery cannot be cancelled, as
+with existing one-shot schedules. A series becomes `COMPLETED` when `count` or
+`until` is exhausted.
+
+The horizon applies to the first `executeAt` and, when set, to `until`. Later
+generated occurrences are not checked against the horizon. `executeAt` exactly
+at `now + MAX_SCHEDULING_HORIZON` is allowed; anything later is rejected with
+HTTP `400` and code `INVALID_SCHEDULE`. Setting `MAX_SCHEDULING_HORIZON=0`
+disables this limit.
 
 ---
 
@@ -224,11 +274,13 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 ### Database Schema
 
 #### `scheduled_notifications`
+
 - Primary table storing notification details
 - Statuses: PENDING → PROCESSING → COMPLETED/FAILED
 - Indexes optimized for fast polling and lock recovery
 
 #### `notification_execution_log`
+
 - Audit trail for all execution attempts
 - Tracks success, failure, retry attempts
 - Duration metrics for performance monitoring
@@ -238,11 +290,13 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 ## 🔐 How Race Conditions Are Prevented
 
 ### Problem
+
 Multiple scheduler instances could pick up the same notification.
 
 ### Solution: Distributed Locking
 
 1. **Atomic Lock Acquisition**
+
    ```sql
    UPDATE scheduled_notifications
    SET status = 'PROCESSING',
@@ -250,17 +304,19 @@ Multiple scheduler instances could pick up the same notification.
        lock_expires_at = NOW() + 60 seconds
    WHERE id IN (
      SELECT id FROM scheduled_notifications
-     WHERE status = 'PENDING' 
+     WHERE status = 'PENDING'
        AND execute_at <= NOW()
      LIMIT 10
    )
    ```
 
 2. **Unique Processor IDs**
+
    - Each worker has a unique UUID
    - Only fetch notifications locked by this worker
 
 3. **Lock Timeout**
+
    - Locks expire after `SCHEDULER_LOCK_TIMEOUT_MS`
    - Stale locks automatically recovered
 
@@ -274,15 +330,18 @@ Multiple scheduler instances could pick up the same notification.
 ## 🔄 Catch-Up Logic for Missed Schedules
 
 ### Scenario
+
 Server goes down, notifications scheduled during downtime.
 
 ### Solution
 
 1. **On Startup**
+
    - Scheduler calls `recoverStaleLocks()`
    - Releases locks from crashed workers
 
 2. **Fetching Due Notifications**
+
    ```sql
    SELECT * FROM scheduled_notifications
    WHERE status = 'PENDING'
@@ -296,6 +355,7 @@ Server goes down, notifications scheduled during downtime.
    - Timing buffer allows small delays
 
 ### Example Timeline
+
 ```
 10:00 AM - Schedule notification for 10:30 AM
 10:15 AM - Server crashes
@@ -309,11 +369,13 @@ Server goes down, notifications scheduled during downtime.
 ## 🧪 Testing
 
 ### Run Test Suite
+
 ```bash
 npm test
 ```
 
 ### Test Coverage
+
 - ✅ Repository CRUD operations
 - ✅ Distributed locking
 - ✅ Race condition prevention
@@ -365,28 +427,28 @@ tail -f logs/app.log | grep "id: 123"
 
 ```sql
 # Pending notifications
-SELECT id, execute_at, retry_count 
-FROM scheduled_notifications 
+SELECT id, execute_at, retry_count
+FROM scheduled_notifications
 WHERE status = 'PENDING';
 
 # Failed notifications with errors
-SELECT id, last_error, error_details 
-FROM scheduled_notifications 
+SELECT id, last_error, error_details
+FROM scheduled_notifications
 WHERE status = 'FAILED'
-ORDER BY updated_at DESC 
+ORDER BY updated_at DESC
 LIMIT 10;
 
 # Execution history for notification
-SELECT * FROM notification_execution_log 
+SELECT * FROM notification_execution_log
 WHERE scheduled_notification_id = 123
 ORDER BY execution_time;
 
 # Statistics
-SELECT 
-  status, 
+SELECT
+  status,
   COUNT(*) as count,
   AVG(retry_count) as avg_retries
-FROM scheduled_notifications 
+FROM scheduled_notifications
 GROUP BY status;
 ```
 
@@ -407,6 +469,7 @@ curl http://localhost:8787/api/schedule/stats
 ### Issue: Scheduler not starting
 
 **Check:**
+
 ```bash
 # 1. Is it enabled?
 grep SCHEDULER_ENABLED .env
@@ -419,6 +482,7 @@ tail -f logs/app.log
 ```
 
 **Fix:**
+
 ```bash
 # Re-run migration
 npm run migrate
@@ -430,27 +494,30 @@ npm run dev
 ### Issue: Notifications not processing
 
 **Check:**
+
 ```sql
 -- Stale locks?
-SELECT * FROM scheduled_notifications 
-WHERE status = 'PROCESSING' 
+SELECT * FROM scheduled_notifications
+WHERE status = 'PROCESSING'
 AND lock_expires_at < datetime('now');
 ```
 
 **Fix:**
+
 ```sql
 -- Manually recover
-UPDATE scheduled_notifications 
-SET status = 'PENDING', 
+UPDATE scheduled_notifications
+SET status = 'PENDING',
     processor_id = NULL,
     lock_expires_at = NULL
-WHERE status = 'PROCESSING' 
+WHERE status = 'PROCESSING'
 AND lock_expires_at < datetime('now');
 ```
 
 ### Issue: High failure rate
 
 **Check:**
+
 ```sql
 -- Failed notifications
 SELECT last_error, COUNT(*) as count
@@ -460,6 +527,7 @@ GROUP BY last_error;
 ```
 
 **Common Causes:**
+
 - Invalid webhook URL
 - Discord rate limiting
 - Network issues
@@ -530,6 +598,7 @@ DATABASE_PATH=./data/dev-notifications.db
 ## 📦 Files Created
 
 ### Core Implementation
+
 - `src/database/database.ts` - SQLite connection handler
 - `src/database/schema.sql` - Database schema
 - `src/types/scheduled-notification.ts` - TypeScript types
@@ -538,16 +607,19 @@ DATABASE_PATH=./data/dev-notifications.db
 - `src/services/notification-api.ts` - High-level API
 
 ### Integration
+
 - `src/index.ts` (updated) - Service integration
 - `src/config.ts` (updated) - Configuration
 - `src/api/events-server.ts` (updated) - REST endpoints
 
 ### Testing & Examples
+
 - `src/tests/notification-scheduler.test.ts` - Test suite
 - `src/examples/schedule-notification-example.ts` - Usage examples
 - `src/scripts/migrate-db.ts` - Database migration
 
 ### Documentation
+
 - `README-SCHEDULER.md` - Detailed documentation
 - `INSTALLATION.md` - Installation guide
 - `IMPLEMENTATION-SUMMARY.md` - Implementation summary
@@ -560,8 +632,9 @@ DATABASE_PATH=./data/dev-notifications.db
 ## 🔮 Future Enhancements
 
 ### Planned Features
+
 - [ ] Email notification support
-- [ ] SMS notification support  
+- [ ] SMS notification support
 - [ ] Generic webhook delivery
 - [ ] Recurring/cron-based schedules
 - [ ] Web UI dashboard
@@ -570,6 +643,7 @@ DATABASE_PATH=./data/dev-notifications.db
 - [ ] Dead letter queue
 
 ### Contribution
+
 To add a new notification type:
 
 1. Add to `NotificationType` enum
@@ -599,7 +673,7 @@ This scheduled notification system is **production-ready** and provides:
 ✓ Complete audit logging  
 ✓ Multi-instance deployment support  
 ✓ Comprehensive test coverage  
-✓ Full documentation  
+✓ Full documentation
 
 **Ready to install and deploy!** 🚀
 
@@ -612,6 +686,14 @@ Same as parent project.
 ## 👥 Support
 
 For issues or questions:
+
 1. Check troubleshooting section
 2. Review logs and database
 3. Open issue on GitHub
+
+
+## Modifying schedules and recovering overdue notifications
+
+Use `PATCH /api/schedule/:id` to update a pending schedule in place. Send `X-API-Key` and the current schedule version via `If-Match` (or `X-Schedule-Version`). Only the fields supplied in the JSON body are changed; supported fields are `executeAt`, `payload`, `notificationType`, `targetRecipient`, `expiresAt`, `maxRetries`, `priority`, `eventId`, `contractAddress`, and `metadata`. The API returns the updated version and an `ETag`. Non-pending schedules and stale versions return a conflict.
+
+Overdue recovery is configured with `SCHEDULE_RECOVERY_POLICY=EXECUTE|EXPIRE|REQUIRE_INTERVENTION` (default `EXECUTE`). For intervention holds, use `POST /api/schedule/:id/recovery` with `{"action":"EXECUTE"}` or `{"action":"EXPIRE"}` and an API key.

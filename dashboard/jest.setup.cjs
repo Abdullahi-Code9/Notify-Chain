@@ -1,7 +1,5 @@
 require('@testing-library/jest-dom');
 
-const { jest } = require('@types/jest');
-
 const originalFetch = global.fetch;
 const originalSetTimeout = global.setTimeout;
 const originalSetInterval = global.setInterval;
@@ -136,7 +134,7 @@ function failureInjectionFetch(url, init) {
   return originalFetch(url, init);
 }
 
-fobject.defineProperty(HTMLElement.prototype, 'clientHeight', {
+Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
   configurable: true,
   get() {
     return 600;

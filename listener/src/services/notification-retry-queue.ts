@@ -6,6 +6,12 @@ import { getEventName } from '../utils/event-utils';
 import { getNotificationAnalyticsAggregator, NotificationAnalyticsAggregator } from './notification-analytics-aggregator';
 import { NotificationType } from '../types/scheduled-notification';
 import { RetryFailureType, RetryPolicy, RetryPolicyConfig, classifyError } from './retry-policy';
+import {
+  PartialRetryBackoffConfig,
+  RetryBackoffConfig,
+  resolveRetryBackoffConfig,
+  calculateBackoffDelay,
+} from '../utils/retry-backoff-config';
 
 export enum Priority {
   Low = 0,
@@ -80,9 +86,9 @@ export class NotificationRetryQueue {
 
   constructor(notificationFn: NotificationFn, options?: RetryQueueOptions) {
     this.notificationFn = notificationFn;
-    this.backoff = resolveRetryBackoffConfig(options.backoff);
-    this.processIntervalMs = options.processIntervalMs ?? DEFAULTS.processIntervalMs;
-    this.priorityWeights = options.priorityWeights ?? DEFAULTS.priorityWeights;
+    this.backoff = resolveRetryBackoffConfig(options?.backoff);
+    this.processIntervalMs = options?.processIntervalMs ?? DEFAULTS.processIntervalMs;
+    this.priorityWeights = options?.priorityWeights ?? DEFAULTS.priorityWeights;
     this.analytics = getNotificationAnalyticsAggregator();
     this.policy = new RetryPolicy(options?.retryPolicy);
   }
@@ -236,7 +242,7 @@ export class NotificationRetryQueue {
     }
 
     const failureType = classifyError(outcome.error);
-    const decision = this.policy.evaluate(failureType, attempt, this.maxRetries);
+    const decision = this.policy.evaluate(failureType, attempt, this.backoff.maxRetries);
 
     if (!decision.shouldRetry) {
       this.queuedFingerprints.delete(fingerprint);

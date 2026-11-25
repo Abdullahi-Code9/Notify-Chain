@@ -80,7 +80,7 @@ export function normalizeSorobanEvent(
     return { ok: false, errors };
   }
 
-  const validation = validateEventPayload(event as StellarSDK.rpc.Api.EventResponse);
+  const validation = validateEventPayload(event as unknown as StellarSDK.rpc.Api.EventResponse);
   if (!validation.valid && validation.error) {
     errors.push(validation.error);
   }
@@ -89,7 +89,7 @@ export function normalizeSorobanEvent(
     return { ok: false, errors };
   }
 
-  const raw = event as StellarSDK.rpc.Api.EventResponse;
+  const raw = event as unknown as StellarSDK.rpc.Api.EventResponse;
   let topic: string[];
   let value: string;
   let eventName: string | null;

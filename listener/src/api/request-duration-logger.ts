@@ -52,7 +52,7 @@ export function createRequestDurationLogger(
       const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
       const message = `HTTP ${req.method} ${sanitizedPath} ${res.statusCode} - ${durationMs.toFixed(2)}ms`;
 
-      customLogger.info(message, logData);
+      customLogger.info(message, { ...logData });
     });
 
     next();

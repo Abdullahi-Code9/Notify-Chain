@@ -18,13 +18,6 @@ export interface WebhookSendOptions {
 }
 
 /**
- * Sends a single outbound POST webhook to `url`.
- *
- * Before the HTTP request is made the destination is validated against the
- * DNS rebinding guard (issue #994). If the resolved address falls within any
- * blocked range (RFC 1918, loopback, link-local, etc.) the request is
- * rejected with a `DnsRebindingError` before a single byte leaves the process.
- */
  * Classification of an outbound webhook failure.
  *
  * Kept deliberately coarse so that retry decisions and observability can tell
@@ -53,6 +46,14 @@ export function isWebhookTimeoutError(error: unknown): boolean {
   );
 }
 
+/**
+ * Sends a single outbound POST webhook to `url`.
+ *
+ * Before the HTTP request is made the destination is validated against the
+ * DNS rebinding guard (issue #994). If the resolved address falls within any
+ * blocked range (RFC 1918, loopback, link-local, etc.) the request is
+ * rejected with a `DnsRebindingError` before a single byte leaves the process.
+ */
 export async function sendWebhook(
   url: string,
   payload: any,

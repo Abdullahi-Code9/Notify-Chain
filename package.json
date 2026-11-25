@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "lint:config": "node scripts/check-unused-config.mjs",
-    "lint:config:verbose": "VERBOSE=true node scripts/check-unused-config.mjs"
+    "lint:config:verbose": "VERBOSE=true node scripts/check-unused-config.mjs",
+    "check:links": "python3 scripts/check-doc-links.py .",
+    "check:links:quiet": "python3 scripts/check-doc-links.py . --warn-only"
   },
   "keywords": [
     "blockchain",

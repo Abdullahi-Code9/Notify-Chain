@@ -129,7 +129,7 @@ describe('RetryScheduler — webhook retry queue', () => {
         expect.objectContaining({ event: 'order.created' }),
         expect.stringContaining('retry-10'),
       );
-      expect(repo.markAsCompleted).toHaveBeenCalledWith(10, 'test-req-id');
+      expect(repo.markAsCompleted).toHaveBeenCalledWith(10, 'test-req-id', expect.any(Date));
     });
 
     it('logs a success message when the webhook is delivered', async () => {

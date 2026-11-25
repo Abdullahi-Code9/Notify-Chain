@@ -2,10 +2,13 @@
  * Centralized timestamp formatting utilities.
  *
  * All functions accept raw/unknown timestamp values and return a locale-aware
- * string in the browser's local timezone. The timezone abbreviation is always
- * included so users can see which timezone is being displayed, preventing
- * ambiguity across different locales and regions.
+ * string in the dashboard's preferred timezone (local time by default, or UTC —
+ * see `store/timezoneStore.ts`). The timezone abbreviation is always included
+ * so users can see which timezone is being displayed, preventing ambiguity
+ * across different locales and regions.
  */
+
+import { getActiveTimeZone } from '../store/timezoneStore';
 
 const FULL_OPTIONS: Intl.DateTimeFormatOptions = {
   year: 'numeric',
@@ -72,16 +75,40 @@ export function parseToDate(input: unknown): Date | null {
 }
 
 /**
+ * Formats `date` with `options` in `timeZone`. An unsupported zone falls back
+ * to the browser's local timezone instead of throwing a RangeError (#1108).
+ */
+function formatInZone(
+  date: Date,
+  options: Intl.DateTimeFormatOptions,
+  timeZone: string | undefined,
+): string {
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat(undefined, { ...options, timeZone }).format(date);
+    } catch {
+      // fall through to local time
+    }
+  }
+  return new Intl.DateTimeFormat(undefined, options).format(date);
+}
+
+/**
  * Formats any raw/unknown timestamp as a full date + time string with timezone abbreviation.
  * Example: "Jan 15, 2024, 02:30:45 PM EST"
  * Gracefully returns "Unknown time" if the input is malformed, null, or undefined.
+ *
+ * `timeZone` defaults to the dashboard's timezone preference (local or UTC).
  */
-export function formatTimestamp(timestamp: unknown): string {
+export function formatTimestamp(
+  timestamp: unknown,
+  timeZone: string | undefined = getActiveTimeZone(),
+): string {
   const d = parseToDate(timestamp);
   if (!d) {
     return FALLBACK_STRING;
   }
-  return new Intl.DateTimeFormat(undefined, FULL_OPTIONS).format(d);
+  return formatInZone(d, FULL_OPTIONS, timeZone);
 }
 
 /**
@@ -89,19 +116,41 @@ export function formatTimestamp(timestamp: unknown): string {
  * Example: "02:30:45 PM EST"
  * Gracefully returns "Unknown time" if the input is malformed, null, or undefined.
  */
-export function formatTimestampShort(timestamp: unknown): string {
+export function formatTimestampShort(
+  timestamp: unknown,
+  timeZone: string | undefined = getActiveTimeZone(),
+): string {
   const d = parseToDate(timestamp);
   if (!d) {
     return FALLBACK_STRING;
   }
-  return new Intl.DateTimeFormat(undefined, SHORT_OPTIONS).format(d);
+  return formatInZone(d, SHORT_OPTIONS, timeZone);
+}
+
+/**
+ * Returns the canonical UTC ISO-8601 representation of a timestamp, or
+ * `undefined` when it cannot be parsed. Used for `<time dateTime>` attributes
+ * and raw event metadata, which must stay in UTC regardless of preference.
+ */
+export function toUtcIsoString(timestamp: unknown): string | undefined {
+  const d = parseToDate(timestamp);
+  return d ? d.toISOString() : undefined;
+}
+
+/** Human-visible raw UTC timestamp; "Unknown time" when unparseable. */
+export function formatUtcTimestamp(timestamp: unknown): string {
+  return toUtcIsoString(timestamp) ?? FALLBACK_STRING;
 }
 
 /**
  * Formats timestamps within the last or next 24 hours relative to `now`.
  * Older or more distant timestamps use the full, exact timestamp instead.
  */
-export function formatRelativeTimestamp(timestamp: unknown, now = Date.now()): string {
+export function formatRelativeTimestamp(
+  timestamp: unknown,
+  now = Date.now(),
+  timeZone: string | undefined = getActiveTimeZone(),
+): string {
   const date = parseToDate(timestamp);
   if (!date) {
     return FALLBACK_STRING;
@@ -109,7 +158,7 @@ export function formatRelativeTimestamp(timestamp: unknown, now = Date.now()): s
 
   const differenceMs = date.getTime() - now;
   if (Math.abs(differenceMs) >= RELATIVE_TIMESTAMP_THRESHOLD_MS) {
-    return formatTimestamp(date);
+    return formatTimestamp(date, timeZone);
   }
 
   const differenceSeconds = Math.floor(Math.abs(differenceMs) / 1000);

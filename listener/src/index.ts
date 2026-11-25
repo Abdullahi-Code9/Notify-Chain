@@ -7,6 +7,7 @@ import { ScheduledNotificationRepository } from './services/scheduled-notificati
 import { NotificationTemplateRepository } from './services/notification-template-repository';
 import { NotificationTemplateService } from './services/notification-template-service';
 import { TemplateAuditTrail } from './services/template-audit-trail';
+import { ScheduleAuditTrail } from './services/schedule-audit-trail';
 import { getTemplateCache } from './services/notification-template-cache';
 import { NotificationAPI } from './services/notification-api';
 import { DatabaseCleanupJob } from './services/database-cleanup-job';
@@ -32,12 +33,11 @@ import { loadConfig, validateConfig, ConfigError } from './config';
 import { SecretValidationError } from './config/validate-secrets';
 import { NotificationHealthMonitor } from './services/notification-health-monitor';
 import { getWorkerManager } from './services/worker-manager';
-import { EventDeduplicationService } from './services/event-deduplication-service';
 import { DeliveryReceiptRepository } from './services/delivery-receipt-repository';
+import { ApiCredentialService } from './services/api-credential-service';
 
 dotenv.config();
 
-// Track process startup time for uptime calculation
 const PROCESS_START_TIME = Date.now();
 
 async function main() {
@@ -49,7 +49,6 @@ async function main() {
   let notificationAPI: NotificationAPI | null = null;
   let healthMonitor: NotificationHealthMonitor | null = null;
   let subscriber: EventSubscriber | null = null;
-
   let templateService: NotificationTemplateService | null = null;
   let legacyTemplateService: TemplateService | null = null;
   let databaseCleanupJob: DatabaseCleanupJob | null = null;
@@ -76,7 +75,6 @@ async function main() {
       config.notificationDefaultTtlSeconds ?? 0,
     );
     deliveryReceiptRepository = new DeliveryReceiptRepository(db);
-    
 
     healthMonitor = new NotificationHealthMonitor(null, getWorkerManager(), {
       repository,
@@ -126,7 +124,15 @@ async function main() {
     templateService = new NotificationTemplateService(templateRepository);
 
     if (config.scheduler?.enabled) {
-      notificationAPI = new NotificationAPI(repository);
+      const scheduleAudit = new ScheduleAuditTrail(db);
+      repository.setScheduleAuditTrail(scheduleAudit);
+      notificationAPI = new NotificationAPI(
+        repository,
+        undefined,
+        undefined,
+        config.scheduler.maxSchedulingHorizonMs,
+      );
+      notificationAPI.setScheduleAuditTrail(scheduleAudit);
 
       const legacyTemplateRepo = new TemplateRepository(db);
       legacyTemplateService = new TemplateService(legacyTemplateRepo);
@@ -147,7 +153,6 @@ async function main() {
         deliveryReceiptRepository,
       );
       await scheduler.start();
-
       logger.info('Notification scheduler started successfully');
 
       if (config.retryScheduler?.enabled) {
@@ -157,6 +162,7 @@ async function main() {
           discordService,
           undefined,
           deliveryReceiptRepository,
+          () => new Date(),
         );
         await retryScheduler.start();
         logger.info('Retry scheduler started successfully');
@@ -180,12 +186,17 @@ async function main() {
     schedulerTemplateService: legacyTemplateService,
     webhookSecrets: config.webhookSecrets,
     apiKeys: config.apiKeys,
+    credentialService: new ApiCredentialService(),
     rateLimit: config.rateLimit,
     archiveStore,
     archiveService,
     metricsStore,
     healthMonitor,
     deliveryReceiptRepository,
+    eventStream: {
+      enabled: process.env.EVENT_STREAM_ENABLED === 'true',
+      heartbeatMs: Number(process.env.EVENT_STREAM_HEARTBEAT_MS || 15_000),
+    },
   });
 
   if (healthMonitor) {
@@ -198,7 +209,6 @@ async function main() {
   let isShuttingDown = false;
 
   const shutdown = async (signal: string) => {
-    // Idempotency: prevent duplicate shutdown if multiple signals arrive
     if (isShuttingDown) {
       logger.warn('Shutdown already in progress, ignoring signal', { signal });
       return;
@@ -208,6 +218,15 @@ async function main() {
     logger.info('Graceful shutdown initiated', { signal });
 
     try {
+      // Stop accepting new events first so no new jobs are claimed
+      if (subscriber) {
+        await subscriber.stop();
+      }
+
+      // Wait for in-flight notification jobs to finish before closing anything
+      await getWorkerManager().initiateGracefulShutdown();
+
+      // Tear down schedulers and background services
       if (healthMonitor) {
         healthMonitor.stop();
       }
@@ -216,26 +235,27 @@ async function main() {
         await databaseCleanupJob.stop();
       }
 
-      if (reconciliationEngine) {
-        reconciliationEngine.stop();
+      if (retryScheduler) {
+        await retryScheduler.stop();
       }
 
       if (metricsRunner) {
         await metricsRunner.stop();
       }
 
+      if (reconciliationEngine) {
+        reconciliationEngine.stop();
+      }
+
       if (archiveService) {
         await archiveService.stop();
       }
 
-      if (scheduler) {
-        await scheduler.stop();
+      if (cleanupService) {
+        await cleanupService.stop();
       }
 
-      if (retryScheduler) {
-        await retryScheduler.stop();
-      }
-
+      // Close the HTTP server last so health checks stay reachable during drain
       if (subscriber) {
         await subscriber.stop();
       }
@@ -250,19 +270,12 @@ async function main() {
     }
   };
 
-  process.on('SIGINT', async () => {
-    await shutdown('SIGINT');
-  });
-
-  process.on('SIGTERM', async () => {
-    await shutdown('SIGTERM');
-  });
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 main().catch((err) => {
   if (err instanceof SecretValidationError) {
-    // Secret validation failures are reported field-by-field without echoing
-    // actual secret values (#692).
     logger.error('Startup secret validation failed — service will not start', {
       error: err.message,
     });

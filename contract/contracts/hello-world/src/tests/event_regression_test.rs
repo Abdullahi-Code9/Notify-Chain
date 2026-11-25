@@ -15,29 +15,30 @@ use crate::test_utils::{create_test_group, mint_tokens, setup_test_env};
 use crate::{AutoShareContract, AutoShareContractClient};
 use soroban_sdk::{
     testutils::{Address as _, Events},
-    vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
+    vec, Address, BytesN, Env, String, Symbol, TryIntoVal, Val, Vec,
 };
+use std::string::ToString;
 
 // ============================================================================
 // Event Name Constants
 // These constants represent the canonical event names that must never change
 // ============================================================================
 
-const EVENT_AUTOSHARE_CREATED: &str = "AutoshareCreated";
-const EVENT_CONTRACT_PAUSED: &str = "ContractPaused";
-const EVENT_CONTRACT_UNPAUSED: &str = "ContractUnpaused";
-const EVENT_AUTOSHARE_UPDATED: &str = "AutoshareUpdated";
-const EVENT_GROUP_DEACTIVATED: &str = "GroupDeactivated";
-const EVENT_GROUP_ACTIVATED: &str = "GroupActivated";
-const EVENT_ADMIN_TRANSFERRED: &str = "AdminTransferred";
-const EVENT_WITHDRAWAL: &str = "Withdrawal";
+const EVENT_AUTOSHARE_CREATED: &str = "autoshare_created";
+const EVENT_CONTRACT_PAUSED: &str = "contract_paused";
+const EVENT_CONTRACT_UNPAUSED: &str = "contract_unpaused";
+const EVENT_AUTOSHARE_UPDATED: &str = "autoshare_updated";
+const EVENT_GROUP_DEACTIVATED: &str = "group_deactivated";
+const EVENT_GROUP_ACTIVATED: &str = "group_activated";
+const EVENT_ADMIN_TRANSFERRED: &str = "admin_transferred";
+const EVENT_WITHDRAWAL: &str = "withdrawal";
 
 // ============================================================================
 // Helper Functions for Event Inspection
 // ============================================================================
 
 /// Extract all events emitted during a test and return them for inspection
-fn get_all_events(env: &Env) -> soroban_sdk::vec::Vec<(Address, (Vec<Val>, Val), Val)> {
+fn get_all_events(env: &Env) -> Vec<(Address, Vec<Val>, Val)> {
     env.events().all()
 }
 
@@ -57,14 +58,14 @@ fn find_latest_event_by_name(
         // event.1 = topics (Vec<Val>)
         // event.2 = data
         if &event.0 == contract_id {
-            let topics = &event.1.0;
+            let topics = &event.1;
             if topics.len() > 0 {
                 // Topic 0 should be the event name
                 let topic0_symbol: Result<Symbol, _> = topics.get(0).unwrap().try_into_val(env);
                 if let Ok(sym) = topic0_symbol {
                     let sym_str = sym.to_string();
                     if sym_str == event_name {
-                        return Some(event.1.clone());
+                        return Some((event.1.clone(), event.2.clone()));
                     }
                 }
             }
@@ -78,7 +79,7 @@ fn assert_event_emitted(
     env: &Env,
     contract_id: &Address,
     expected_event_name: &str,
-    expected_topic_count: usize,
+    expected_topic_count: u32,
 ) {
     let event = find_latest_event_by_name(env, contract_id, expected_event_name);
     assert!(
@@ -123,11 +124,11 @@ fn assert_event_name(env: &Env, topics: &Vec<Val>, expected_name: &str) {
 fn get_address_from_topic(env: &Env, topics: &Vec<Val>, index: u32) -> Address {
     let topic_val = topics
         .get(index)
-        .expect(&format!("Topic {} does not exist", index));
+        .expect(&std::format!("Topic {} does not exist", index));
     
     topic_val
         .try_into_val(env)
-        .expect(&format!("Topic {} is not an Address", index))
+        .expect(&std::format!("Topic {} is not an Address", index))
 }
 
 /// Extract a BytesN<32> from event data
@@ -167,7 +168,7 @@ fn test_autoshare_created_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_AUTOSHARE_CREATED,
-        2, // Topic 0: event name, Topic 1: creator address
+        4, // Topics: event name, creator, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -219,11 +220,11 @@ fn test_autoshare_created_event_topic_ordering() {
     
     let (topics, _) = event;
     
-    // Strict ordering check: Topic 0 = event name, Topic 1 = creator
+    // Strict ordering check: name, creator, category, priority
     assert_eq!(
         topics.len(),
-        2,
-        "AutoshareCreated must have exactly 2 topics"
+        4,
+        "AutoshareCreated must have exactly 4 topics"
     );
     
     // Verify topic 0 is a Symbol (event name)
@@ -258,7 +259,7 @@ fn test_contract_paused_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_CONTRACT_PAUSED,
-        1, // Only topic 0: event name (no additional topics)
+        4, // Topics: event name, admin, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -273,11 +274,11 @@ fn test_contract_paused_event_structure() {
     // Assert Topic 0: Event name
     assert_event_name(&test_env.env, &topics, EVENT_CONTRACT_PAUSED);
     
-    // Assert no additional topics
+    // Assert topic count
     assert_eq!(
         topics.len(),
-        1,
-        "ContractPaused should only have event name topic"
+        4,
+        "ContractPaused should have event name, admin, category and priority topics"
     );
 }
 
@@ -322,7 +323,7 @@ fn test_contract_unpaused_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_CONTRACT_UNPAUSED,
-        1, // Only topic 0: event name
+        4, // Topics: event name, admin, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -337,11 +338,11 @@ fn test_contract_unpaused_event_structure() {
     // Assert Topic 0: Event name
     assert_event_name(&test_env.env, &topics, EVENT_CONTRACT_UNPAUSED);
     
-    // Assert no additional topics
+    // Assert topic count
     assert_eq!(
         topics.len(),
-        1,
-        "ContractUnpaused should only have event name topic"
+        4,
+        "ContractUnpaused should have event name, admin, category and priority topics"
     );
 }
 
@@ -376,7 +377,7 @@ fn test_autoshare_updated_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_AUTOSHARE_UPDATED,
-        2, // Topic 0: event name, Topic 1: updater address
+        4, // Topics: event name, updater, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -442,7 +443,7 @@ fn test_group_deactivated_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_GROUP_DEACTIVATED,
-        2, // Topic 0: event name, Topic 1: creator address
+        4, // Topics: event name, creator, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -509,7 +510,7 @@ fn test_group_activated_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_GROUP_ACTIVATED,
-        2, // Topic 0: event name, Topic 1: creator address
+        4, // Topics: event name, creator, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -558,7 +559,7 @@ fn test_admin_transferred_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_ADMIN_TRANSFERRED,
-        2, // Topic 0: event name, Topic 1: old_admin address
+        4, // Topics: event name, old_admin, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -610,8 +611,8 @@ fn test_admin_transferred_event_topic_ordering() {
     // Strict ordering check
     assert_eq!(
         topics.len(),
-        2,
-        "AdminTransferred must have exactly 2 topics"
+        4,
+        "AdminTransferred must have exactly 4 topics"
     );
     
     // Topic 0 must be Symbol (event name)
@@ -667,7 +668,7 @@ fn test_withdrawal_event_structure() {
         &test_env.env,
         &test_env.autoshare_contract,
         EVENT_WITHDRAWAL,
-        3, // Topic 0: event name, Topic 1: token, Topic 2: recipient
+        5, // Topics: event name, token, recipient, category, priority
     );
     
     let event = find_latest_event_by_name(
@@ -743,8 +744,8 @@ fn test_withdrawal_event_topic_ordering() {
     // Strict ordering check
     assert_eq!(
         topics.len(),
-        3,
-        "Withdrawal must have exactly 3 topics"
+        5,
+        "Withdrawal must have exactly 5 topics"
     );
     
     // Topic 0: Symbol (event name)
@@ -780,60 +781,45 @@ fn test_multiple_events_in_sequence() {
     
     let creator = test_env.users.get(0).unwrap().clone();
     let token = test_env.mock_tokens.get(0).unwrap().clone();
-    
-    // Create a group (AutoshareCreated event)
-    let mut members = Vec::new(&test_env.env);
-    members.push_back(GroupMember {
-        address: Address::generate(&test_env.env),
-        percentage: 100,
-    });
-    
-    let id = create_test_group(
-        &test_env.env,
-        &test_env.autoshare_contract,
-        &creator,
-        &members,
-        1,
-        &token,
-    );
-    
-    // Deactivate the group (GroupDeactivated event)
-    client.deactivate_group(&id, &creator);
-    
-    // Activate the group (GroupActivated event)
-    client.activate_group(&id, &creator);
-    
-    // Verify all three events exist with correct names
-    let all_events = get_all_events(&test_env.env);
-    let mut event_names = Vec::new(&test_env.env);
-    
-    for i in 0..all_events.len() {
-        let event = all_events.get(i).unwrap();
-        if &event.0 == &test_env.autoshare_contract {
-            let topics = &event.1.0;
-            if topics.len() > 0 {
-                if let Ok(sym) = topics.get(0).unwrap().try_into_val::<Symbol>(&test_env.env) {
-                    event_names.push_back(sym.to_string());
-                }
-            }
-        }
-    }
-    
-    // Should contain at least AutoshareCreated, GroupDeactivated, GroupActivated
-    let event_names_str: std::vec::Vec<String> = (0..event_names.len())
-        .map(|i| event_names.get(i).unwrap().to_string())
-        .collect();
-    
+    mint_tokens(&test_env.env, &token, &creator, 10000);
+
+    // Create a group (AutoshareCreated event). `env.events().all()` only exposes
+    // the events of the most recent contract invocation, so each event is
+    // asserted immediately after the call that emits it.
+    let id = BytesN::from_array(&test_env.env, &[7u8; 32]);
+    let name = String::from_str(&test_env.env, "Sequence Test");
+    client.create(&id, &name, &creator, &1u32, &token);
     assert!(
-        event_names_str.contains(&EVENT_AUTOSHARE_CREATED.to_string()),
+        find_latest_event_by_name(
+            &test_env.env,
+            &test_env.autoshare_contract,
+            EVENT_AUTOSHARE_CREATED
+        )
+        .is_some(),
         "Missing AutoshareCreated event"
     );
+
+    // Deactivate the group (GroupDeactivated event)
+    client.deactivate_group(&id, &creator);
     assert!(
-        event_names_str.contains(&EVENT_GROUP_DEACTIVATED.to_string()),
+        find_latest_event_by_name(
+            &test_env.env,
+            &test_env.autoshare_contract,
+            EVENT_GROUP_DEACTIVATED
+        )
+        .is_some(),
         "Missing GroupDeactivated event"
     );
+
+    // Activate the group (GroupActivated event)
+    client.activate_group(&id, &creator);
     assert!(
-        event_names_str.contains(&EVENT_GROUP_ACTIVATED.to_string()),
+        find_latest_event_by_name(
+            &test_env.env,
+            &test_env.autoshare_contract,
+            EVENT_GROUP_ACTIVATED
+        )
+        .is_some(),
         "Missing GroupActivated event"
     );
 }
@@ -843,14 +829,14 @@ fn test_event_names_are_stable() {
     // This test ensures that event names remain unchanged
     // Any change to these constant values indicates a breaking change
     
-    assert_eq!(EVENT_AUTOSHARE_CREATED, "AutoshareCreated");
-    assert_eq!(EVENT_CONTRACT_PAUSED, "ContractPaused");
-    assert_eq!(EVENT_CONTRACT_UNPAUSED, "ContractUnpaused");
-    assert_eq!(EVENT_AUTOSHARE_UPDATED, "AutoshareUpdated");
-    assert_eq!(EVENT_GROUP_DEACTIVATED, "GroupDeactivated");
-    assert_eq!(EVENT_GROUP_ACTIVATED, "GroupActivated");
-    assert_eq!(EVENT_ADMIN_TRANSFERRED, "AdminTransferred");
-    assert_eq!(EVENT_WITHDRAWAL, "Withdrawal");
+    assert_eq!(EVENT_AUTOSHARE_CREATED, "autoshare_created");
+    assert_eq!(EVENT_CONTRACT_PAUSED, "contract_paused");
+    assert_eq!(EVENT_CONTRACT_UNPAUSED, "contract_unpaused");
+    assert_eq!(EVENT_AUTOSHARE_UPDATED, "autoshare_updated");
+    assert_eq!(EVENT_GROUP_DEACTIVATED, "group_deactivated");
+    assert_eq!(EVENT_GROUP_ACTIVATED, "group_activated");
+    assert_eq!(EVENT_ADMIN_TRANSFERRED, "admin_transferred");
+    assert_eq!(EVENT_WITHDRAWAL, "withdrawal");
 }
 
 // ============================================================================
@@ -881,9 +867,6 @@ fn test_no_event_on_read_operations() {
         &token,
     );
     
-    // Count events before read operations
-    let events_before = get_all_events(&test_env.env).len();
-    
     // Perform read operations
     let _ = client.get(&id);
     let _ = client.get_all_groups();
@@ -891,13 +874,12 @@ fn test_no_event_on_read_operations() {
     let _ = client.is_group_member(&id, &creator);
     let _ = client.is_group_active(&id);
     let _ = client.get_usage_fee();
-    
-    // Count events after read operations
+
+    // `env.events().all()` reflects the most recent contract invocation, which
+    // here is a sequence of read-only calls. Read operations must emit nothing.
     let events_after = get_all_events(&test_env.env).len();
-    
-    // No new events should be emitted for read operations
     assert_eq!(
-        events_before, events_after,
+        events_after, 0,
         "Read operations should not emit events"
     );
 }

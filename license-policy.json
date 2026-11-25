@@ -1,0 +1,76 @@
+{
+  "approved": [
+    "MIT",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Apache-2.0",
+    "CC0-1.0",
+    "CC-BY-3.0",
+    "CC-BY-4.0",
+    "0BSD",
+    "Unlicense",
+    "Python-2.0",
+    "BlueOak-1.0.0"
+  ],
+  "restricted": [
+    "GPL-2.0",
+    "GPL-3.0",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "AGPL-3.0",
+    "SSPL-1.0",
+    "BUSL-1.1"
+  ],
+  "review_required": [
+    "MPL-2.0",
+    "CDDL-1.0",
+    "EPL-1.0",
+    "EPL-2.0"
+  ],
+  "exceptions": {
+    "_comment": "Pre-existing transitive dependencies inherited before license checking was introduced. Each entry requires a tracking issue before the next major release.",
+    "@lobstrco/signer-extension-api": {
+      "license": "GPL-3.0",
+      "reason": "Transitive dep via @creit.tech/stellar-wallets-kit. Used only in browser context as an optional wallet adapter; not linked into distributed server binaries. Tracking: review whether the dependency can be replaced or isolated.",
+      "introduced_by": "@creit.tech/stellar-wallets-kit"
+    },
+    "rpc-websockets": {
+      "license": "LGPL-3.0-only",
+      "reason": "Transitive dep via @solana/web3.js. LGPL allows dynamic linking without copyleft obligation; confirm usage is dynamic before distribution.",
+      "introduced_by": "@solana/web3.js"
+    },
+    "@creit.tech/xbull-wallet-connect": {
+      "license": "(none declared)",
+      "reason": "Transitive dep via @creit.tech/stellar-wallets-kit. No license field; assumed permissive based on public repo. Needs upstream to add an SPDX field.",
+      "introduced_by": "@creit.tech/stellar-wallets-kit"
+    },
+    "@hot-wallet/sdk": {
+      "license": "(none declared)",
+      "reason": "Transitive dep via @creit.tech/stellar-wallets-kit. No license field on npm; upstream issue filed.",
+      "introduced_by": "@creit.tech/stellar-wallets-kit"
+    },
+    "@near-wallet-selector/core": {
+      "license": "(none declared)",
+      "reason": "Transitive dep via @hot-wallet/sdk. MIT licensed per GitHub repo but package.json omits the field.",
+      "introduced_by": "@hot-wallet/sdk"
+    },
+    "eyes": {
+      "license": "(none declared)",
+      "reason": "Transitive dep via jayson (JSON-RPC library). Effectively public domain; no license field on old release.",
+      "introduced_by": "jayson"
+    },
+    "text-encoding-utf-8": {
+      "license": "(none declared)",
+      "reason": "Transitive dep via borsh. Public domain / Unlicense per upstream README.",
+      "introduced_by": "borsh"
+    }
+  },
+  "notes": {
+    "approved_rationale": "Permissive licenses compatible with commercial distribution.",
+    "restricted_rationale": "Copyleft licenses that impose distribution requirements incompatible with proprietary use.",
+    "review_required_rationale": "Weak copyleft or file-level copyleft licenses that may be acceptable depending on usage — require legal sign-off before shipping.",
+    "exceptions_rationale": "Pre-existing transitive dependencies grandfathered in with documented rationale. New exceptions require explicit review and addition here."
+  }
+}

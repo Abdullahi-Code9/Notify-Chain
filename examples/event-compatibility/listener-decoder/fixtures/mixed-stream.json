@@ -1,0 +1,71 @@
+[
+  {
+    "eventName": "NotifCrtd",
+    "topics": [
+      "NotifCrtd",
+      "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      "0101010101010101010101010101010101010101010101010101010101010101"
+    ],
+    "data": {
+      "payload_version": 1,
+      "message": "First notification - v1 format"
+    }
+  },
+  {
+    "eventName": "NotifCrtd",
+    "topics": [
+      "NotifCrtd",
+      "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBSC5",
+      "0202020202020202020202020202020202020202020202020202020202020202",
+      "high"
+    ],
+    "data": {
+      "payload_version": 2,
+      "message": "Second notification - v2 format with priority",
+      "retry_count": 0,
+      "category": "alert"
+    }
+  },
+  {
+    "eventName": "NotifCrtd",
+    "topics": [
+      "NotifCrtd",
+      "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCSC6",
+      "0303030303030303030303030303030303030303030303030303030303030303"
+    ],
+    "data": {
+      "payload_version": 1,
+      "message": "Third notification - another v1"
+    }
+  },
+  {
+    "eventName": "NotifCrtd",
+    "topics": [
+      "NotifCrtd",
+      "GDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDSC7",
+      "0404040404040404040404040404040404040404040404040404040404040404",
+      "critical"
+    ],
+    "data": {
+      "payload_version": 2,
+      "message": "Fourth notification - critical priority v2",
+      "retry_count": 3,
+      "category": "system"
+    }
+  },
+  {
+    "eventName": "NotifCrtd",
+    "topics": [
+      "NotifCrtd",
+      "GEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEESC8",
+      "0505050505050505050505050505050505050505050505050505050505050505",
+      "low"
+    ],
+    "data": {
+      "payload_version": 2,
+      "message": "Fifth notification - low priority informational",
+      "retry_count": 0,
+      "category": "info"
+    }
+  }
+]

@@ -19,6 +19,25 @@ Build a static Storybook site:
 npm run build-storybook
 ```
 
+## Visual regression
+
+Run the dashboard screenshot comparisons from `dashboard/`:
+
+```bash
+npm run test:visual
+```
+
+The suite captures deterministic Event Explorer, Webhook Performance, and Notification Search
+states. API responses, theme, clock, locale, timezone, viewport, and reduced motion are fixed by
+the test setup. Reviewed baselines are stored in
+`tests/visual/dashboard.spec.ts-snapshots/`.
+
+When an intentional visual change is made, update the baselines with
+`npm run test:visual -- --update-snapshots` and review the generated images before committing.
+Keep baseline updates on the same Windows/Chrome environment used by CI. Failed CI comparisons
+upload Playwright's actual/diff screenshots, traces, and HTML report as the
+`dashboard-visual-comparison` artifact.
+
 ## Documented components
 
 - `Modal` — size and footer variations

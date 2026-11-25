@@ -165,6 +165,7 @@ pub fn set_admin(env: &Env, address: &Address) {
     env.storage().instance().set(&ADMIN, address);
 }
 
+
 /// Returns the configurable dispute resolution period in seconds.
 pub fn get_resolution_period(env: &Env) -> u64 {
     env.storage()
@@ -178,6 +179,22 @@ pub fn set_resolution_period(env: &Env, period: u64) {
     env.storage()
         .instance()
         .set(&DISPUTE_RESOLUTION_PERIOD, &period);
+}
+
+// Pending admin transfer
+pub fn get_pending_admin(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&"PENDING_ADMIN")
+}
+
+pub fn set_pending_admin(env: &Env, address: &Address) {
+    env.storage().instance().set(&"PENDING_ADMIN", address);
+}
+
+pub fn clear_pending_admin(env: &Env) {
+    env.storage().instance().remove(&"PENDING_ADMIN");
+}
+
+
 }
 
 // API credential storage

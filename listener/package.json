@@ -2,6 +2,9 @@
   "name": "listener",
   "version": "1.0.0",
   "main": "dist/index.js",
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "scripts": {
     "dev": "ts-node src/index.ts",
     "build": "node ./node_modules/typescript/bin/tsc",
@@ -12,6 +15,8 @@
     "lint": "node ./node_modules/typescript/bin/tsc --noEmit",
     "format:check": "node ./node_modules/prettier/bin/prettier.cjs --check \"src/**/*.ts\" --config ../.prettierrc",
     "test": "node ./node_modules/jest/bin/jest.js",
+    "test:runtime": "node --test scripts/runtime-compatibility.test.cjs",
+    "test:mutation": "node scripts/mutation/run.cjs",
     "check:event-schema": "ts-node src/schema/compatibility-check.ts",
     "test:stress": "node ./node_modules/jest/bin/jest.js src/__tests__/stress.test.ts --runInBand --detectOpenHandles",
     "test:load": "node ./node_modules/jest/bin/jest.js src/__tests__/load-test-runner.test.ts --runInBand",
@@ -20,7 +25,9 @@
     "stress-test": "ts-node src/scripts/run-stress-tests.ts",
     "migrate": "ts-node src/scripts/migrate-db.ts",
     "migrate:templates": "ts-node src/scripts/migrate-templates.ts",
+    "rollback": "ts-node src/scripts/rollback-migration.ts",
     "check-migrations": "ts-node src/scripts/check-migrations.ts",
+    "check:migrations-integrity": "ts-node src/scripts/check-migration-integrity.ts",
     "validate:batch": "ts-node src/utils/batch-validator.ts",
     "replay-event": "ts-node src/scripts/replay-event.ts"
   },
@@ -29,12 +36,15 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@stellar/stellar-sdk": "^15.1.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "node-cache": "^5.1.2",
     "node-cron": "^4.6.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
+    "uuid": "^9.0.1",
     "winston": "^3.19.0"
   },
   "devDependencies": {

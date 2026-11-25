@@ -27,7 +27,11 @@ function applyTheme(theme: Theme): void {
  * and applies a `data-theme` attribute to `<html>` for CSS consumption.
  */
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const [theme, setThemeState] = useState<Theme>(() => {
+    const initial = getInitialTheme();
+    if (typeof document !== 'undefined') applyTheme(initial);
+    return initial;
+  });
 
   useEffect(() => {
     applyTheme(theme);

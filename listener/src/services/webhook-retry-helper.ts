@@ -16,14 +16,20 @@
  * returned to the caller immediately.
  */
 
-import { sendWebhook, WebhookSendOptions, WebhookFailureReason, isWebhookTimeoutError } from './webhook-sender';
-import { RetryFailureType, RetryPolicy, classifyError, classifyHttpStatus } from './retry-policy';
+import { sendWebhook, WebhookSendOptions, WebhookFailureReason } from './webhook-sender';
+import { RetryFailureType, RetryPolicy, classifyError } from './retry-policy';
 
 /** Maximum number of retry attempts (not counting the initial attempt). */
 const MAX_RETRY_ATTEMPTS = 2;
 
 /** Delay in milliseconds before the first retry. */
 const RETRY_DELAY_MS = 1000;
+
+/** Client errors that will never succeed on retry. */
+const PERMANENT_CLIENT_ERRORS = new Set<number>([400, 401, 403, 404, 410, 422]);
+
+/** Statuses explicitly worth retrying; any other 5xx is also retryable. */
+const RETRYABLE_STATUS_CODES = new Set<number>([408, 429]);
 
 export interface WebhookRetryOptions extends WebhookSendOptions {
   /**
@@ -62,7 +68,7 @@ export function classifyWebhookFailure(
   // A thrown error means no HTTP response was available. Timeouts are their
   // own reason; everything else is a network-level failure.
   if (error) {
-    return isWebhookTimeoutError(error) ? 'timeout' : 'network';
+    return classifyError(error) === RetryFailureType.Timeout ? 'timeout' : 'network';
   }
 
   if (!response || response.ok) {
@@ -139,7 +145,7 @@ export async function sendWebhookWithRetry(
       }
 
       // Non-retryable failure (permanent client error)
-      if (!isRetryable(response, undefined, policy)) {
+      if (!isRetryable(response, undefined)) {
         return response;
       }
 

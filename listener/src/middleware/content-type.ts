@@ -30,6 +30,10 @@ export function sendUnsupportedMediaType(
   expected: string = 'application/json',
 ): void {
   const message = `Unsupported Content-Type: '${contentType}'. Expected '${expected}'.`;
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('X-API-Version', 'v1');
+  }
+
   const payload = JSON.stringify({
     success: false,
     error: {
@@ -40,7 +44,6 @@ export function sendUnsupportedMediaType(
     message,
   });
 
-  res.setHeader('Content-Type', 'application/json');
   res.writeHead(415, { 'Content-Type': 'application/json' });
   res.end(payload);
 }
@@ -61,11 +64,11 @@ export function validateContentType(
   }
 
   // If request explicitly specifies empty body (Content-Length: 0), allow it
-  if (req.headers['content-length'] === '0') {
+  if (req.headers?.['content-length'] === '0') {
     return true;
   }
 
-  const rawHeader = req.headers['content-type'];
+  const rawHeader = req.headers?.['content-type'];
   if (!rawHeader || (typeof rawHeader === 'string' && rawHeader.trim() === '')) {
     // Content-Type is omitted: allow for backward compatibility with existing clients
     return true;

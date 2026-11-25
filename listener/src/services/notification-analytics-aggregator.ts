@@ -9,6 +9,7 @@ export interface AnalyticsDeliveryRecord {
   readonly contractAddress?: string;
   readonly outcome: AnalyticsDeliveryOutcome;
   readonly durationMs: number;
+  readonly deliveryLatencyMs?: number;
   readonly errorReason?: string;
   readonly timestamp: number;
 }
@@ -21,6 +22,7 @@ export interface AnalyticsBucketSnapshot {
   readonly retry: number;
   readonly skipped: number;
   readonly averageDurationMs: number;
+  readonly averageDeliveryLatencyMs: number;
 }
 
 export interface AnalyticsByTypeSnapshot {
@@ -51,6 +53,7 @@ export interface NotificationAnalyticsSnapshot {
     skipped: number;
     successRate: number;
     averageDurationMs: number;
+    averageDeliveryLatencyMs: number;
   };
   readonly byType: readonly AnalyticsByTypeSnapshot[];
   readonly byContract: readonly AnalyticsByContractSnapshot[];
@@ -114,10 +117,7 @@ export class NotificationAnalyticsAggregator {
     this.maxRecords = Math.max(1, options.maxRecords ?? DEFAULTS.maxRecords);
     this.maxBuckets = Math.max(1, options.maxBuckets ?? DEFAULTS.maxBuckets);
     this.bucketSizeMs = Math.max(1_000, options.bucketSizeMs ?? DEFAULTS.bucketSizeMs);
-    this.topContractsLimit = Math.max(
-      0,
-      options.topContractsLimit ?? DEFAULTS.topContractsLimit,
-    );
+    this.topContractsLimit = Math.max(0, options.topContractsLimit ?? DEFAULTS.topContractsLimit);
     this.topErrorsLimit = Math.max(0, options.topErrorsLimit ?? DEFAULTS.topErrorsLimit);
     this.now = options.now ?? Date.now;
   }
@@ -132,6 +132,8 @@ export class NotificationAnalyticsAggregator {
       notificationType: record.notificationType,
       outcome: record.outcome,
       durationMs: Math.max(0, record.durationMs),
+      deliveryLatencyMs:
+        record.deliveryLatencyMs !== undefined ? Math.max(0, record.deliveryLatencyMs) : undefined,
       timestamp: ts,
       contractAddress: record.contractAddress,
       errorReason: record.errorReason,
@@ -241,18 +243,21 @@ export class NotificationAnalyticsAggregator {
     // Window is anchored to the current bucket start, not the oldest record,
     // so that records older than the window are consistently excluded even
     // if they are still in the rolling buffer.
-    const currentBucketStart =
-      Math.floor(now / this.bucketSizeMs) * this.bucketSizeMs;
+    const currentBucketStart = Math.floor(now / this.bucketSizeMs) * this.bucketSizeMs;
     return currentBucketStart - this.maxBuckets * this.bucketSizeMs;
   }
 
-  private computeOverall(visible: AnalyticsDeliveryRecord[]): NotificationAnalyticsSnapshot['overall'] {
+  private computeOverall(
+    visible: AnalyticsDeliveryRecord[],
+  ): NotificationAnalyticsSnapshot['overall'] {
     let success = 0;
     let failure = 0;
     let retry = 0;
     let skipped = 0;
     let durationSum = 0;
     let durationCount = 0;
+    let latencySum = 0;
+    let latencyCount = 0;
 
     for (const r of visible) {
       if (r.outcome === 'success') success++;
@@ -264,12 +269,22 @@ export class NotificationAnalyticsAggregator {
         durationSum += r.durationMs;
         durationCount++;
       }
+
+      if (
+        r.outcome === 'success' &&
+        r.deliveryLatencyMs !== undefined &&
+        r.deliveryLatencyMs >= 0
+      ) {
+        latencySum += r.deliveryLatencyMs;
+        latencyCount++;
+      }
     }
 
     const total = success + failure + retry + skipped;
     const terminal = success + failure;
     const successRate = terminal > 0 ? success / terminal : 0;
     const averageDurationMs = durationCount > 0 ? durationSum / durationCount : 0;
+    const averageDeliveryLatencyMs = latencyCount > 0 ? latencySum / latencyCount : 0;
 
     return {
       total,
@@ -279,12 +294,11 @@ export class NotificationAnalyticsAggregator {
       skipped,
       successRate,
       averageDurationMs,
+      averageDeliveryLatencyMs,
     };
   }
 
-  private computeByType(
-    visible: AnalyticsDeliveryRecord[],
-  ): AnalyticsByTypeSnapshot[] {
+  private computeByType(visible: AnalyticsDeliveryRecord[]): AnalyticsByTypeSnapshot[] {
     const map = new Map<NotificationType, { total: number; success: number; failure: number }>();
     for (const r of visible) {
       const entry = map.get(r.notificationType) ?? { total: 0, success: 0, failure: 0 };
@@ -309,9 +323,7 @@ export class NotificationAnalyticsAggregator {
     return result;
   }
 
-  private computeByContract(
-    visible: AnalyticsDeliveryRecord[],
-  ): AnalyticsByContractSnapshot[] {
+  private computeByContract(visible: AnalyticsDeliveryRecord[]): AnalyticsByContractSnapshot[] {
     const map = new Map<string, { total: number; success: number; failure: number }>();
     for (const r of visible) {
       if (!r.contractAddress) continue;
@@ -345,8 +357,7 @@ export class NotificationAnalyticsAggregator {
     now: number,
   ): AnalyticsBucketSnapshot[] {
     const newestBucketStart = Math.floor(now / this.bucketSizeMs) * this.bucketSizeMs;
-    const oldestBucketStart =
-      newestBucketStart - (this.maxBuckets - 1) * this.bucketSizeMs;
+    const oldestBucketStart = newestBucketStart - (this.maxBuckets - 1) * this.bucketSizeMs;
 
     const buckets: AnalyticsBucketSnapshot[] = [];
     const indexByStart = new Map<number, number>();
@@ -360,6 +371,7 @@ export class NotificationAnalyticsAggregator {
         retry: 0,
         skipped: 0,
         averageDurationMs: 0,
+        averageDeliveryLatencyMs: 0,
       };
       indexByStart.set(t, buckets.length);
       buckets.push(snapshot);
@@ -369,9 +381,12 @@ export class NotificationAnalyticsAggregator {
     let durationCountBucket = 0;
     let durationBucketIdx = -1;
 
+    let latencySumBucket = 0;
+    let latencyCountBucket = 0;
+    let latencyBucketIdx = -1;
+
     for (const r of visible) {
-      const bucketStart =
-        Math.floor(r.timestamp / this.bucketSizeMs) * this.bucketSizeMs;
+      const bucketStart = Math.floor(r.timestamp / this.bucketSizeMs) * this.bucketSizeMs;
       const idx = indexByStart.get(bucketStart);
       if (idx === undefined) continue;
 
@@ -398,14 +413,30 @@ export class NotificationAnalyticsAggregator {
           averageDurationMs: durationSumBucket / durationCountBucket,
         };
       }
+
+      if (
+        r.outcome === 'success' &&
+        r.deliveryLatencyMs !== undefined &&
+        r.deliveryLatencyMs >= 0
+      ) {
+        if (idx !== latencyBucketIdx) {
+          latencySumBucket = 0;
+          latencyCountBucket = 0;
+          latencyBucketIdx = idx;
+        }
+        latencySumBucket += r.deliveryLatencyMs;
+        latencyCountBucket++;
+        buckets[idx] = {
+          ...buckets[idx],
+          averageDeliveryLatencyMs: latencySumBucket / latencyCountBucket,
+        };
+      }
     }
 
     return buckets;
   }
 
-  private computeErrorBreakdown(
-    visible: AnalyticsDeliveryRecord[],
-  ): Record<string, number> {
+  private computeErrorBreakdown(visible: AnalyticsDeliveryRecord[]): Record<string, number> {
     const counts = new Map<string, number>();
     for (const r of visible) {
       if (r.outcome !== 'failure') continue;

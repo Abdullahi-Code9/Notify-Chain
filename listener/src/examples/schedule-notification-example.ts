@@ -117,7 +117,7 @@ async function examples() {
   // Example 6: Get scheduler statistics
   // ====================================================================
   const stats = await api.getStatistics();
-  logger.info('Scheduler statistics', stats);
+  logger.info('Scheduler statistics', { ...stats });
 
   // ====================================================================
   // Example 7: Schedule notification based on blockchain event

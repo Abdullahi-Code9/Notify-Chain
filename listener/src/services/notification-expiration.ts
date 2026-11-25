@@ -3,6 +3,15 @@ import { ExpirationConfig } from '../types';
 import logger from '../utils/logger';
 
 /**
+ * Event shape consumed for expiration checks.
+ *
+ * The Stellar RPC `EventResponse` carries no arrival timestamp, so
+ * `receivedAt` (ms since epoch) is optional here and events without it are
+ * treated as having just arrived.
+ */
+type ExpirableEvent = StellarSDK.rpc.Api.EventResponse & { receivedAt?: number };
+
+/**
  * NotificationExpirationService handles expiration checks for notifications.
  * 
  * This service:
@@ -25,7 +34,7 @@ export class NotificationExpirationService {
    * @param event - The blockchain event to check
    * @returns true if the event has expired, false otherwise
    */
-  isExpired(event: StellarSDK.rpc.Api.EventResponse, eventType?: string): boolean {
+  isExpired(event: ExpirableEvent, eventType?: string): boolean {
     // If expiration is disabled, nothing is ever expired
     if (!this.config.enabled) {
       return false;
@@ -36,7 +45,8 @@ export class NotificationExpirationService {
     
     // Calculate when this event should expire
     // receivedAt is in milliseconds (Unix timestamp)
-    const expiresAtMs = event.receivedAt + expirationTimeMs;
+    const receivedAt = event.receivedAt ?? Date.now();
+    const expiresAtMs = receivedAt + expirationTimeMs;
 
     // Check if current time exceeds the expiration time
     const currentTimeMs = Date.now();
@@ -53,7 +63,7 @@ export class NotificationExpirationService {
    * @returns true if the event should be processed, false if expired
    */
   shouldProcess(
-    event: StellarSDK.rpc.Api.EventResponse,
+    event: ExpirableEvent,
     eventType?: string
   ): boolean {
     // If expiration is disabled, always process

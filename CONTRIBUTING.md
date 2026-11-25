@@ -101,7 +101,7 @@ Before you start, make sure you have:
 
 - **Rust** (stable) + WebAssembly target: `rustup target add wasm32-unknown-unknown`
 - **Stellar CLI**: `cargo install --locked stellar-cli --features opt`
-- **Node.js 22** (used by both listener and dashboard in CI)
+- **Node.js 22** (default for listener and dashboard); the listener also supports Node.js 24. See [listener Node.js compatibility](listener/docs/node-compatibility.md) for the CI matrix and runtime assumptions.
 - **Git**
 
 For a detailed walkthrough including platform-specific notes, see [`CONTRIBUTOR_SETUP.md`](CONTRIBUTOR_SETUP.md).

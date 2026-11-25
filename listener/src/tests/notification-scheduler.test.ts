@@ -105,6 +105,48 @@ describe('NotificationScheduler', () => {
       expect(await receiptRepository.findByNotificationId(id, 'failed')).toHaveLength(0);
     });
 
+    test('advances a recurring occurrence once after successful delivery', async () => {
+      const firstRun = new Date(Date.now() - 1000);
+      const completionTime = new Date(firstRun.getTime() + 2000);
+      const id = await repository.create({
+        payload: { message: 'Recurring receipt test' },
+        notificationType: NotificationType.WEBHOOK,
+        targetRecipient: 'https://example.com/hook',
+        executeAt: firstRun,
+        recurrence: { frequency: 'daily', count: 3 },
+      });
+      const providerRegistry = {
+        has: () => true,
+        deliver: jest.fn().mockResolvedValue({ success: true, degradedCapabilities: [] }),
+      };
+      scheduler = new NotificationScheduler(
+        repository,
+        {
+          enabled: true,
+          pollIntervalMs: 1000,
+          lockTimeoutMs: 30000,
+          processorId: 'recurring-success-test',
+          batchSize: 10,
+          timingBufferMs: 1000,
+        },
+        null,
+        undefined,
+        providerRegistry as any,
+        receiptRepository,
+        () => completionTime,
+      );
+
+      await (scheduler as any).processPendingNotifications();
+
+      expect(await repository.getById(id)).toMatchObject({
+        status: NotificationStatus.PENDING,
+        executeAt: new Date(firstRun.getTime() + 24 * 60 * 60 * 1000),
+        occurrenceCount: 1,
+        lastRunAt: firstRun,
+      });
+      expect(providerRegistry.deliver).toHaveBeenCalledTimes(1);
+    });
+
     test('persists a failed receipt with timeout details when provider transport throws', async () => {
       const id = await repository.create({
         payload: { message: 'Timeout receipt test' },

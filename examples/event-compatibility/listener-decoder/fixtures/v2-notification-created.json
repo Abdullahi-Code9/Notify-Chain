@@ -1,0 +1,15 @@
+{
+  "eventName": "NotifCrtd",
+  "topics": [
+    "NotifCrtd",
+    "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBSC5",
+    "0202020202020202020202020202020202020202020202020202020202020202",
+    "high"
+  ],
+  "data": {
+    "payload_version": 2,
+    "message": "Test notification v2 - enhanced format",
+    "retry_count": 0,
+    "category": "alert"
+  }
+}

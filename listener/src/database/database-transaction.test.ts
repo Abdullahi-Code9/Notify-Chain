@@ -206,6 +206,24 @@ describe('Database.transaction()', () => {
     const count = await countRows(db, 'scheduled_notifications');
     expect(count).toBe(1);
   });
+
+  it('surfaces failures while adding a column to an older schema', async () => {
+    await db.run('DROP INDEX idx_scheduled_notifications_next_retry_at');
+    await db.run('ALTER TABLE scheduled_notifications DROP COLUMN next_retry_at');
+
+    await db.initialize();
+
+    const columns = await db.all<{ name: string }>('PRAGMA table_info(scheduled_notifications)');
+    expect(columns.some(({ name }) => name === 'next_retry_at')).toBe(true);
+  });
+
+  it('does not suppress errors while upgrading an older schema', async () => {
+    await db.run('DROP INDEX idx_scheduled_notifications_next_retry_at');
+    await db.run('ALTER TABLE scheduled_notifications DROP COLUMN next_retry_at');
+    await db.run('PRAGMA query_only = ON');
+
+    await expect(db.initialize()).rejects.toThrow(/readonly/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

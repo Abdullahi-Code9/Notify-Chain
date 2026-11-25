@@ -42,6 +42,7 @@
 | `SCHEDULER_LOCK_TIMEOUT_MS` | integer | Optional | `60000` | All | No | Maximum lock duration in ms for processing workers before releasing claims. |
 | `SCHEDULER_BATCH_SIZE` | integer | Optional | `10` | All | No | Maximum number of notifications processed in a single scheduler loop iteration. |
 | `SCHEDULER_TIMING_BUFFER_MS` | integer | Optional | `60000` | All | No | Advance lookahead window in ms for querying upcoming due notifications. |
+| `SCHEDULE_RECOVERY_POLICY` | enum | Optional | `EXECUTE` | All | No | Startup recovery policy for overdue pending notifications: `EXECUTE`, `EXPIRE`, or `REQUIRE_INTERVENTION`. |
 | `RETRY_SCHEDULER_ENABLED` | boolean | Optional | `true` | All | No | Enable automatic retry scheduler for failed deliveries. |
 | `RETRY_SCHEDULER_POLL_INTERVAL_MS` | integer | Optional | `15000` | All | No | Frequency in ms to check for failed notifications eligible for retry. |
 | `RETRY_BASE_DELAY_MS` | integer | Optional | `5000` | All | No | Base delay in ms used for exponential backoff calculations. |

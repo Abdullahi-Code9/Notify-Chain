@@ -2,6 +2,7 @@
 ///
 /// Provides get/set/reset operations for per-user notification preferences.
 /// Preferences are stored in persistent storage keyed by recipient address.
+use crate::base::clock::current_time;
 use crate::base::errors::Error;
 use crate::base::events::{
     ChannelPreferenceUpdated, NotificationCategory as EventCategory, NotificationPriority,
@@ -42,7 +43,7 @@ pub fn set_preferences(
         recipient: recipient.clone(),
         channels,
         categories,
-        updated_at: env.ledger().timestamp(),
+        updated_at: current_time(&env),
     };
 
     save_preferences(&env, &prefs);
@@ -91,7 +92,7 @@ pub fn set_channel_preference(
         });
     }
 
-    prefs.updated_at = env.ledger().timestamp();
+    prefs.updated_at = current_time(&env);
     save_preferences(&env, &prefs);
 
     emit_channel_preference_updated(&env, &recipient, &channel, enabled, prefs.updated_at);
@@ -134,7 +135,7 @@ pub fn set_category_preference(
             .push_back(CategoryPreference { category, enabled });
     }
 
-    prefs.updated_at = env.ledger().timestamp();
+    prefs.updated_at = current_time(&env);
     save_preferences(&env, &prefs);
     Ok(())
 }
@@ -147,7 +148,7 @@ pub fn reset_preferences(env: Env, recipient: Address) -> Result<(), Error> {
         recipient: recipient.clone(),
         channels: default_channels(&env),
         categories: default_categories(&env),
-        updated_at: env.ledger().timestamp(),
+        updated_at: current_time(&env),
     };
 
     save_preferences(&env, &prefs);

@@ -26,7 +26,7 @@ jest.mock('../store/event-registry', () => ({
 
 jest.mock('../utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
+  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
 }));
 
 jest.mock('../database/database', () => ({

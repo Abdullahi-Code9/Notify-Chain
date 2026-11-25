@@ -4,6 +4,7 @@
 //! consumers can gate parsing logic. The current version is documented as
 //! [`CURRENT_NOTIFICATION_VERSION`] (currently `1`).
 
+use crate::base::events::NotificationPriority;
 use crate::base::types::CURRENT_NOTIFICATION_VERSION;
 use crate::test_utils::setup_test_env;
 use crate::AutoShareContractClient;
@@ -42,6 +43,7 @@ fn test_scheduled_notification_includes_version() {
         &creator,
         &ONE_HOUR,
         &String::from_str(&test_env.env, "Versioned notice"),
+        &NotificationPriority::Medium,
     );
 
     let stored = client.get_notification(&id);
@@ -58,14 +60,16 @@ fn test_batch_scheduled_notifications_include_version() {
     let mut ids = soroban_sdk::Vec::new(&test_env.env);
     let mut ttls = soroban_sdk::Vec::new(&test_env.env);
     let mut titles = soroban_sdk::Vec::new(&test_env.env);
+    let mut priorities = soroban_sdk::Vec::new(&test_env.env);
 
     for i in 0u8..3 {
         ids.push_back(make_id(&test_env.env, 20 + i));
         ttls.push_back(ONE_HOUR);
         titles.push_back(String::from_str(&test_env.env, "batch item"));
+        priorities.push_back(NotificationPriority::Medium);
     }
 
-    client.batch_schedule_notifications(&ids, &creator, &ttls, &titles);
+    client.batch_schedule_notifications(&ids, &creator, &ttls, &titles, &priorities);
 
     for i in 0..3 {
         let stored = client.get_notification(&ids.get(i).unwrap());

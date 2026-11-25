@@ -24,6 +24,31 @@ export interface CorsValidationOptions {
   allowWildcardInProduction?: boolean;
 }
 
+/** Environments treated as sensitive: permissive defaults are never allowed. */
+const SENSITIVE_ENVIRONMENTS = ['production', 'prod', 'staging', 'stage'];
+
+/** Hostnames that only make sense for local development. */
+const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'];
+
+/**
+ * Returns true when the given environment is production or staging.
+ */
+export function isSensitiveEnvironment(nodeEnv: string = 'development'): boolean {
+  return SENSITIVE_ENVIRONMENTS.includes(nodeEnv.toLowerCase());
+}
+
+/**
+ * Returns true when the given origin points at a local development host.
+ */
+export function isLocalOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return LOCAL_HOSTNAMES.includes(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Validates a single CORS origin string or comma-separated list of origins.
  *
@@ -44,7 +69,7 @@ export function validateCorsOrigin(options: CorsValidationOptions): string[] {
   }
 
   const trimmed = corsOrigin.trim();
-  const isProductionOrStaging = ['production', 'staging', 'prod'].includes(nodeEnv.toLowerCase());
+  const isProductionOrStaging = isSensitiveEnvironment(nodeEnv);
 
   // Handle wildcard origin
   if (trimmed === '*') {
@@ -84,6 +109,13 @@ export function validateCorsOrigin(options: CorsValidationOptions): string[] {
           `CORS origin "${origin}" must not include path segments (${url.pathname}). Specify only the scheme, host, and optional port (e.g. "${url.origin}").`
         );
       }
+      // Local development hosts must not be allowed in sensitive environments
+      if (isProductionOrStaging && isLocalOrigin(origin)) {
+        throw new CorsValidationError(
+          `Local development origin "${origin}" is not permitted in ${nodeEnv} environments. ` +
+          'Configure the public origin(s) that browsers will use (e.g. "https://app.notifychain.io").'
+        );
+      }
     } catch (err) {
       if (err instanceof CorsValidationError) throw err;
       throw new CorsValidationError(
@@ -93,4 +125,62 @@ export function validateCorsOrigin(options: CorsValidationOptions): string[] {
   }
 
   return origins;
+}
+
+export interface CorsRequestCheckOptions {
+  /** The validated allow-list returned by {@link validateCorsOrigin}. */
+  allowedOrigins: string[];
+  /** The request's `Origin` header, if present. */
+  requestOrigin?: string | null;
+  /** Current runtime environment (e.g. process.env.NODE_ENV). */
+  nodeEnv?: string;
+}
+
+export interface CorsRequestCheckResult {
+  /** Whether the request origin is permitted. */
+  allowed: boolean;
+  /** The value to echo back in `Access-Control-Allow-Origin`, if any. */
+  allowedOrigin?: string;
+}
+
+/**
+ * Checks a request `Origin` against the configured allow-list.
+ *
+ * Used for both preflight (OPTIONS) and actual requests so that rejected
+ * origins are handled consistently. Requests without an `Origin` header
+ * (e.g. server-to-server calls) are not browser cross-origin requests and
+ * are therefore allowed without an `Access-Control-Allow-Origin` header.
+ *
+ * @throws {CorsValidationError} if the allow-list is empty or wildcard is used in a sensitive environment.
+ */
+export function checkRequestOrigin(options: CorsRequestCheckOptions): CorsRequestCheckResult {
+  const { allowedOrigins, requestOrigin, nodeEnv = 'development' } = options;
+
+  if (!Array.isArray(allowedOrigins) || allowedOrigins.length === 0) {
+    throw new CorsValidationError('CORS allow-list is empty; no browser origins can be served.');
+  }
+
+  const isProductionOrStaging = isSensitiveEnvironment(nodeEnv);
+
+  if (allowedOrigins.includes('*')) {
+    if (isProductionOrStaging) {
+      throw new CorsValidationError(
+        'Wildcard CORS origin "*" is not permitted in production/staging environments.'
+      );
+    }
+    return { allowed: true, allowedOrigin: '*' };
+  }
+
+  if (!requestOrigin) {
+    return { allowed: true };
+  }
+
+  const normalized = requestOrigin.trim();
+  const match = allowedOrigins.find((origin) => origin.toLowerCase() === normalized.toLowerCase());
+
+  if (!match) {
+    return { allowed: false };
+  }
+
+  return { allowed: true, allowedOrigin: match };
 }

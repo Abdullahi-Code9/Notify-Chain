@@ -14,7 +14,7 @@ use crate::AutoShareContractClient;
 extern crate std;
 
 use soroban_sdk::testutils::{Address as _, Events, Ledger};
-use soroban_sdk::{Address, BytesN, Env, String, Symbol, TryFromVal, Val, Vec};
+use soroban_sdk::{Address, BytesN, Env, Map, String, Symbol, TryFromVal, Val, Vec};
 
 /// One hour, in seconds — a representative configurable duration.
 const ONE_HOUR: u64 = 3_600;
@@ -108,9 +108,14 @@ fn test_schedule_emits_notification_scheduled_event() {
         NotificationCategory::try_from_val(&test_env.env, &topics.get(2).unwrap()).unwrap();
     assert_eq!(category, NotificationCategory::Notification);
 
-    // Data payload carries the notification id.
+    // Data payload carries the notification id and payload version as a map.
     let data = data_of(&test_env.env, "notification_scheduled").unwrap();
-    let data_id = BytesN::<32>::try_from_val(&test_env.env, &data).unwrap();
+    let fields = Map::<Symbol, Val>::try_from_val(&test_env.env, &data).unwrap();
+    let data_id = BytesN::<32>::try_from_val(
+        &test_env.env,
+        &fields.get(Symbol::new(&test_env.env, "notification_id")).unwrap(),
+    )
+    .unwrap();
     assert_eq!(data_id, id);
 }
 

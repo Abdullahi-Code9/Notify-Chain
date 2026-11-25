@@ -3,6 +3,7 @@ name = "hello-world"
 version = "0.0.0"
 edition = "2021"
 publish = false
+rust-version.workspace = true
 
 [lib]
 crate-type = ["lib", "cdylib"]
@@ -10,6 +11,9 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
+# Required to avoid the transitive `ethnum` 1.5.2 compiler regression on the
+# current stable Rust toolchain. `1.5.3` is the first compatible release.
+ethnum = "=1.5.3"
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

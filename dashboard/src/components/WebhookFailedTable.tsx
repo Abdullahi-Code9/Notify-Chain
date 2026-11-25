@@ -1,437 +1,260 @@
-import { memo, useMemo } from 'react';
-import type { WebhookMetricBucket } from '../types/webhook';
+import { Fragment, memo, useMemo, useState } from 'react';
+import type { WebhookDelivery } from '../types/webhook';
+import { getErrorCategory } from '../utils/webhookData';
+import { formatTimestamp } from '../utils/formatTime';
 import { EmptyState } from './EmptyState';
 
-interface WebhookDeliveryChartProps {
-  buckets: WebhookMetricBucket[];
+interface WebhookFailedTableProps {
+  deliveries: WebhookDelivery[];
   isLoading: boolean;
 }
 
-const CHART_HEIGHT = 180;
-const CHART_PADDING_TOP = 16;
-const CHART_PADDING_BOTTOM = 36; // space for x-axis labels
-const CHART_PADDING_LEFT = 48; // space for y-axis labels
-const CHART_PADDING_RIGHT = 16;
+type SortKey = 'eventType' | 'targetUrl' | 'httpStatus' | 'attemptNumber' | 'attemptedAt';
+type SortDirection = 'asc' | 'desc';
 
-const SKELETON_BUCKET_COUNT = 24;
+const PAGE_SIZE = 10;
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'eventType', label: 'Event type' },
+  { key: 'targetUrl', label: 'Endpoint' },
+  { key: 'httpStatus', label: 'Response' },
+  { key: 'attemptNumber', label: 'Attempt' },
+  { key: 'attemptedAt', label: 'Last attempted' },
+];
 
-/** Build an SVG polyline `points` string from value array + chart geometry. */
-function buildPolylinePoints(
-  values: number[],
-  maxValue: number,
-  chartWidth: number,
-  chartHeight: number,
-): string {
-  if (values.length < 2) return '';
+function compareDeliveries(a: WebhookDelivery, b: WebhookDelivery, key: SortKey) {
+  const left = a[key];
+  const right = b[key];
 
-  const drawWidth =
-    chartWidth - CHART_PADDING_LEFT - CHART_PADDING_RIGHT;
-  const drawHeight =
-    chartHeight - CHART_PADDING_TOP - CHART_PADDING_BOTTOM;
-  const safeMax = maxValue > 0 ? maxValue : 1;
-
-  return values
-    .map((v, i) => {
-      const x =
-        CHART_PADDING_LEFT +
-        (i / (values.length - 1)) * drawWidth;
-      const y =
-        CHART_PADDING_TOP +
-        drawHeight -
-        (v / safeMax) * drawHeight;
-
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
-}
-
-/** Build an SVG path for a filled area under the line. */
-function buildAreaPath(
-  values: number[],
-  maxValue: number,
-  chartWidth: number,
-  chartHeight: number,
-): string {
-  if (values.length < 2) return '';
-
-  const drawWidth =
-    chartWidth - CHART_PADDING_LEFT - CHART_PADDING_RIGHT;
-  const drawHeight =
-    chartHeight - CHART_PADDING_TOP - CHART_PADDING_BOTTOM;
-  const safeMax = maxValue > 0 ? maxValue : 1;
-  const baseY = CHART_PADDING_TOP + drawHeight;
-
-  const points = values.map((v, i) => {
-    const x =
-      CHART_PADDING_LEFT +
-      (i / (values.length - 1)) * drawWidth;
-    const y =
-      CHART_PADDING_TOP +
-      drawHeight -
-      (v / safeMax) * drawHeight;
-
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-
-  const firstX = CHART_PADDING_LEFT.toFixed(1);
-  const lastX = (
-    CHART_PADDING_LEFT + drawWidth
-  ).toFixed(1);
-
-  return `M ${firstX},${baseY} L ${points.join(
-    ' L ',
-  )} L ${lastX},${baseY} Z`;
-}
-
-/** Select a subset of tick labels to avoid crowding. */
-function getTickIndices(
-  count: number,
-  maxTicks = 8,
-): number[] {
-  if (count <= maxTicks) {
-    return Array.from({ length: count }, (_, i) => i);
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right;
   }
 
-  const step = Math.ceil(count / maxTicks);
-  const indices: number[] = [];
-
-  for (let i = 0; i < count; i += step) {
-    indices.push(i);
-  }
-
-  if (indices[indices.length - 1] !== count - 1) {
-    indices.push(count - 1);
-  }
-
-  return indices;
+  return String(left ?? '').localeCompare(String(right ?? ''));
 }
 
-export const WebhookDeliveryChart = memo(
-  function WebhookDeliveryChart({
-    buckets,
-    isLoading,
-  }: WebhookDeliveryChartProps) {
-    const {
-      successValues,
-      failedValues,
-      maxValue,
-      tickIndices,
-    } = useMemo(() => {
-      const successValues = buckets.map(
-        (b) => b.successCount,
-      );
-      const failedValues = buckets.map(
-        (b) => b.failedCount,
-      );
-      const maxValue = Math.max(
-        1,
-        ...successValues,
-        ...failedValues,
-      );
-      const tickIndices = getTickIndices(buckets.length);
+function sortLabel(key: SortKey, direction: SortDirection) {
+  return `${key} ${direction === 'asc' ? 'ascending' : 'descending'}`;
+}
 
-      return {
-        successValues,
-        failedValues,
-        maxValue,
-        tickIndices,
-      };
-    }, [buckets]);
+export const WebhookFailedTable = memo(function WebhookFailedTable({
+  deliveries,
+  isLoading,
+}: WebhookFailedTableProps) {
+  const [sortKey, setSortKey] = useState<SortKey>('attemptedAt');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-    // Responsive: use a viewBox-based SVG so it scales naturally
-    const viewBoxWidth = 800;
-    const viewBoxHeight = CHART_HEIGHT;
-
-    const drawWidth =
-      viewBoxWidth -
-      CHART_PADDING_LEFT -
-      CHART_PADDING_RIGHT;
-
-    const drawHeight =
-      viewBoxHeight -
-      CHART_PADDING_TOP -
-      CHART_PADDING_BOTTOM;
-
-    const successPoints = buildPolylinePoints(
-      successValues,
-      maxValue,
-      viewBoxWidth,
-      viewBoxHeight,
-    );
-
-    const failedPoints = buildPolylinePoints(
-      failedValues,
-      maxValue,
-      viewBoxWidth,
-      viewBoxHeight,
-    );
-
-    const successArea = buildAreaPath(
-      successValues,
-      maxValue,
-      viewBoxWidth,
-      viewBoxHeight,
-    );
-
-    const failedArea = buildAreaPath(
-      failedValues,
-      maxValue,
-      viewBoxWidth,
-      viewBoxHeight,
-    );
-
-    // Y-axis ticks: 5 levels
-    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(
-      (ratio) => ({
-        value: Math.round(maxValue * ratio),
-        y:
-          CHART_PADDING_TOP +
-          drawHeight -
-          ratio * drawHeight,
+  const sortedDeliveries = useMemo(
+    () =>
+      [...deliveries].sort((a, b) => {
+        const comparison = compareDeliveries(a, b, sortKey);
+        return sortDirection === 'asc' ? comparison : -comparison;
       }),
-    );
+    [deliveries, sortDirection, sortKey],
+  );
 
-    const baseY =
-      CHART_PADDING_TOP + drawHeight;
+  const pageCount = Math.max(1, Math.ceil(sortedDeliveries.length / PAGE_SIZE));
+  const visibleDeliveries = sortedDeliveries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-    return (
-      <div
-        className="webhook-delivery-chart"
-        aria-label="Delivery success vs failure chart"
-      >
-        {/* Legend */}
-        <div
-          className="webhook-delivery-chart__legend"
-          aria-hidden="true"
-        >
-          <span className="webhook-delivery-chart__legend-item webhook-delivery-chart__legend-item--success">
-            <svg
-              width="16"
-              height="2"
-              aria-hidden="true"
-            >
-              <line
-                x1="0"
-                y1="1"
-                x2="16"
-                y2="1"
-                stroke="#34d399"
-                strokeWidth="2"
-              />
-            </svg>
-            Successful
-          </span>
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'attemptedAt' ? 'desc' : 'asc');
+    }
+    setPage(1);
+  }
 
-          <span className="webhook-delivery-chart__legend-item webhook-delivery-chart__legend-item--failed">
-            <svg
-              width="16"
-              height="2"
-              aria-hidden="true"
-            >
-              <line
-                x1="0"
-                y1="1"
-                x2="16"
-                y2="1"
-                stroke="#f87171"
-                strokeWidth="2"
-              />
-            </svg>
-            Failed
-          </span>
-        </div>
+  return (
+    <section className="webhook-failed-table-section" aria-labelledby="failed-deliveries-title">
+      <header className="webhook-failed-table-section__header">
+        <h2 className="webhook-failed-table-section__title" id="failed-deliveries-title">
+          Failed Deliveries
+        </h2>
+        <span className="webhook-failed-table-section__count">
+          {isLoading ? 'Loading…' : `${deliveries.length.toLocaleString()} failed`}
+        </span>
+      </header>
 
-        {isLoading ? (
-          /* Skeleton state */
-          <svg
-            viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-            className="webhook-delivery-chart__svg"
-            role="img"
-            aria-label="Loading chart data"
-          >
-            {/* Skeleton bars */}
-            {Array.from({
-              length: SKELETON_BUCKET_COUNT,
-            }).map((_, i) => {
-              const barW =
-                (drawWidth / SKELETON_BUCKET_COUNT) *
-                0.6;
-
-              const x =
-                CHART_PADDING_LEFT +
-                (i / SKELETON_BUCKET_COUNT) *
-                  drawWidth +
-                barW * 0.3;
-
-              const h =
-                20 + ((i * 37 + 13) % 80);
-
-              return (
-                <rect
-                  key={i}
-                  x={x}
-                  y={baseY - h}
-                  width={barW}
-                  height={h}
-                  rx="3"
-                  className="webhook-delivery-chart__skeleton-bar"
-                />
-              );
-            })}
-          </svg>
-        ) : buckets.length === 0 ? (
-          <div className="webhook-delivery-chart__empty">
-            <EmptyState
-              className="empty-state--inline"
-              icon="📊"
-              title="No data"
-              description="No delivery data for the selected range."
-            />
-          </div>
-        ) : (
-          <svg
-            viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-            className="webhook-delivery-chart__svg"
-            role="img"
-            aria-label="Time-series chart of webhook delivery outcomes"
-          >
-            <defs>
-              <linearGradient
-                id="wh-success-fill"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor="#34d399"
-                  stopOpacity="0.25"
-                />
-                <stop
-                  offset="100%"
-                  stopColor="#34d399"
-                  stopOpacity="0.02"
-                />
-              </linearGradient>
-
-              <linearGradient
-                id="wh-failed-fill"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor="#f87171"
-                  stopOpacity="0.2"
-                />
-                <stop
-                  offset="100%"
-                  stopColor="#f87171"
-                  stopOpacity="0.02"
-                />
-              </linearGradient>
-            </defs>
-
-            {/* Grid lines + Y-axis labels */}
-            {yTicks.map(({ value, y }) => (
-              <g key={y}>
-                <line
-                  x1={CHART_PADDING_LEFT}
-                  y1={y}
-                  x2={
-                    viewBoxWidth -
-                    CHART_PADDING_RIGHT
+      <div className="webhook-failed-table__wrapper">
+        <table className="webhook-failed-table">
+          <thead>
+            <tr>
+              {SORT_COLUMNS.map(({ key, label }) => (
+                <th
+                  key={key}
+                  className="webhook-failed-table__th"
+                  scope="col"
+                  aria-sort={
+                    sortKey === key
+                      ? sortDirection === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
                   }
-                  y2={y}
-                  stroke="rgba(255,255,255,0.07)"
-                  strokeWidth="1"
-                />
-
-                <text
-                  x={CHART_PADDING_LEFT - 6}
-                  y={y + 4}
-                  textAnchor="end"
-                  fontSize="11"
-                  fill="#6b7280"
                 >
-                  {value}
-                </text>
-              </g>
-            ))}
-
-            {/* X-axis baseline */}
-            <line
-              x1={CHART_PADDING_LEFT}
-              y1={baseY}
-              x2={
-                viewBoxWidth -
-                CHART_PADDING_RIGHT
-              }
-              y2={baseY}
-              stroke="rgba(255,255,255,0.1)"
-              strokeWidth="1"
-            />
-
-            {/* Filled areas */}
-            <path
-              d={successArea}
-              fill="url(#wh-success-fill)"
-            />
-
-            <path
-              d={failedArea}
-              fill="url(#wh-failed-fill)"
-            />
-
-            {/* Lines */}
-            <polyline
-              points={successPoints}
-              fill="none"
-              stroke="#34d399"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-
-            <polyline
-              points={failedPoints}
-              fill="none"
-              stroke="#f87171"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-
-            {/* X-axis labels */}
-            {tickIndices.map((idx) => {
-              const bucket = buckets[idx];
-
-              const x =
-                CHART_PADDING_LEFT +
-                (buckets.length > 1
-                  ? (idx / (buckets.length - 1)) *
-                    drawWidth
-                  : drawWidth / 2);
-
-              return (
-                <text
-                  key={idx}
-                  x={x}
-                  y={viewBoxHeight - 6}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fill="#6b7280"
-                >
-                  {bucket.displayLabel}
-                </text>
-              );
-            })}
-          </svg>
-        )}
+                  <button
+                    type="button"
+                    className={`webhook-failed-table__sort-btn${sortKey === key ? ' webhook-failed-table__sort-btn--active' : ''}`}
+                    onClick={() => toggleSort(key)}
+                    aria-label={`Sort by ${label}, ${sortLabel(key, sortKey === key ? sortDirection : 'asc')}`}
+                  >
+                    {label}
+                  </button>
+                </th>
+              ))}
+              <th className="webhook-failed-table__th" scope="col">
+                Error
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? Array.from({ length: 4 }, (_, index) => (
+                  <tr
+                    key={`skeleton-${index}`}
+                    className="webhook-failed-table__row webhook-failed-table__row--skeleton"
+                    aria-hidden="true"
+                  >
+                    {SORT_COLUMNS.map(({ key }) => (
+                      <td key={key} className="webhook-failed-table__cell">
+                        <span className="webhook-failed-table__skeleton" />
+                      </td>
+                    ))}
+                    <td className="webhook-failed-table__cell">
+                      <span className="webhook-failed-table__skeleton" />
+                    </td>
+                  </tr>
+                ))
+              : visibleDeliveries.map((delivery) => {
+                  const category = getErrorCategory(delivery);
+                  const isExpanded = expandedId === delivery.id;
+                  const codeClass =
+                    category === 'network' ? 'network' : category === '4xx' ? '4xx' : '5xx';
+                  return (
+                    <Fragment key={delivery.id}>
+                      <tr
+                        key={delivery.id}
+                        className={`webhook-failed-table__row${isExpanded ? ' webhook-failed-table__row--expanded' : ''}`}
+                      >
+                        <td className="webhook-failed-table__cell" data-label="Event type">
+                          <span className="webhook-failed-table__event-badge">
+                            {delivery.eventType}
+                          </span>
+                        </td>
+                        <td
+                          className="webhook-failed-table__cell webhook-failed-table__cell--url"
+                          data-label="Endpoint"
+                          title={delivery.targetUrl}
+                        >
+                          {delivery.targetUrl}
+                        </td>
+                        <td className="webhook-failed-table__cell" data-label="Response">
+                          <div className="webhook-failed-table__cell-row">
+                            <span
+                              className={`webhook-failed-table__code webhook-failed-table__code--${codeClass}`}
+                            >
+                              {delivery.httpStatus ?? 'Network'}
+                            </span>
+                            {category && (
+                              <span
+                                className={`webhook-failed-table__category webhook-failed-table__category--${category}`}
+                              >
+                                {category}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td
+                          className="webhook-failed-table__cell webhook-failed-table__cell--mono"
+                          data-label="Attempt"
+                        >
+                          #{delivery.attemptNumber}
+                        </td>
+                        <td className="webhook-failed-table__cell" data-label="Last attempted">
+                          <time dateTime={new Date(delivery.attemptedAt).toISOString()}>
+                            {formatTimestamp(delivery.attemptedAt)}
+                          </time>
+                        </td>
+                        <td className="webhook-failed-table__cell" data-label="Error">
+                          {delivery.errorPayload ? (
+                            <button
+                              type="button"
+                              className="webhook-failed-table__expand-btn"
+                              aria-expanded={isExpanded}
+                              onClick={() =>
+                                setExpandedId(isExpanded ? null : delivery.id)
+                              }
+                            >
+                              {isExpanded ? 'Hide details' : 'View details'}
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded && delivery.errorPayload && (
+                        <tr
+                          key={`${delivery.id}-details`}
+                          className="webhook-failed-table__detail-row"
+                        >
+                          <td colSpan={SORT_COLUMNS.length + 1} className="webhook-failed-table__detail-cell">
+                            <pre className="webhook-failed-table__error-payload">
+                              {delivery.errorPayload}
+                            </pre>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+            {!isLoading && deliveries.length === 0 && (
+              <tr>
+                <td colSpan={SORT_COLUMNS.length + 1}>
+                  <EmptyState
+                    className="webhook-failed-table__empty"
+                    size="compact"
+                    title="No failed deliveries"
+                    description="All webhook attempts in this time range were successful."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-    );
-  },
-);
+
+      {!isLoading && pageCount > 1 && (
+        <nav className="webhook-failed-table__pagination" aria-label="Failed deliveries pages">
+          <span className="webhook-failed-table__pagination-info">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, deliveries.length)} of{' '}
+            {deliveries.length}
+          </span>
+          <div className="webhook-failed-table__pagination-controls">
+            <button
+              type="button"
+              className="webhook-failed-table__page-btn"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </button>
+            <span className="webhook-failed-table__page-indicator">
+              Page {page} of {pageCount}
+            </span>
+            <button
+              type="button"
+              className="webhook-failed-table__page-btn"
+              onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+              disabled={page === pageCount}
+            >
+              Next
+            </button>
+          </div>
+        </nav>
+      )}
+    </section>
+  );
+});

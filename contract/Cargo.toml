@@ -4,6 +4,9 @@ members = [
   "contracts/*",
 ]
 
+[workspace.package]
+rust-version = "1.86"
+
 [workspace.dependencies]
 soroban-sdk = "23"
 

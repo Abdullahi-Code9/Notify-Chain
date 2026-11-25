@@ -20,7 +20,7 @@ export interface WebhookApiFailureInjection {
   status?: number;
 }
 
-let failureInjection: WebhookApiFailureInjection { failures: 0 } = { failures: 0 };
+let failureInjection: WebhookApiFailureInjection = { failures: 0 };
 let remainingFailures = 0;
 
 /**

@@ -114,7 +114,7 @@ describe('RetryScheduler', () => {
       await scheduler.runOnce();
 
       expect(discordService.sendEventNotification).toHaveBeenCalledTimes(1);
-      expect(repo.markAsCompleted).toHaveBeenCalledWith(1, 'test-req-id');
+      expect(repo.markAsCompleted).toHaveBeenCalledWith(1, 'test-req-id', expect.any(Date));
       expect(repo.logExecution).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'SUCCESS', scheduledNotificationId: 1 })
       );

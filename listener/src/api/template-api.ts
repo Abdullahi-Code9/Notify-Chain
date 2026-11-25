@@ -9,6 +9,19 @@
  * - DELETE /api/templates/:id    - Delete template
  * - POST   /api/templates/render - Render template
  * - GET    /api/templates/stats  - Get statistics
+ *
+ * Authorization boundaries:
+ * - Administrative (write) routes require the `templates:write` permission:
+ *     POST   /api/templates          -> templates:write
+ *     PUT    /api/templates/:id      -> templates:write
+ *     DELETE /api/templates/:id      -> templates:write
+ *     POST   /api/templates/render   -> templates:write
+ * - Read-only routes require the `templates:read` permission:
+ *     GET    /api/templates          -> templates:read
+ *     GET    /api/templates/:id      -> templates:read
+ *     GET    /api/templates/stats    -> templates:read
+ *     GET    /api/templates/:id/stats -> templates:read
+ * Requests lacking the required permission are rejected with 403.
  */
 
 import * as http from 'http';
@@ -17,9 +30,43 @@ import logger from '../utils/logger';
 import { TemplateChannelType } from '../types/notification-template';
 import { sendOk, sendErr, ErrorCode } from '../utils/response';
 
+export const TEMPLATE_READ_PERMISSION = 'templates:read';
+export const TEMPLATE_WRITE_PERMISSION = 'templates:write';
+
 export interface TemplateAPIOptions {
   templateService: TemplateService;
   corsOrigin?: string;
+  /**
+   * Resolve the permissions granted to the caller of a request.
+   * Defaults to granting no permissions (all privileged routes rejected).
+   */
+  resolvePermissions?: (req: http.IncomingMessage) => string[] | Promise<string[]>;
+}
+
+/**
+ * Resolve the permissions granted to the request caller.
+ */
+async function resolvePermissions(
+  req: http.IncomingMessage,
+  resolver?: TemplateAPIOptions['resolvePermissions']
+): Promise<string[]> {
+  if (!resolver) {
+    return [];
+  }
+  try {
+    const permissions = await resolver(req);
+    return Array.isArray(permissions) ? permissions : [];
+  } catch (error) {
+    logger.error('Failed to resolve request permissions', { error });
+    return [];
+  }
+}
+
+/**
+ * Check whether the caller holds the required permission.
+ */
+function hasPermission(permissions: string[], required: string): boolean {
+  return permissions.includes(required);
 }
 
 /**
@@ -49,7 +96,7 @@ function parseBody(req: http.IncomingMessage): Promise<any> {
  * Template API Request Handler
  */
 export function createTemplateAPIHandler(options: TemplateAPIOptions) {
-  const { templateService, corsOrigin = '*' } = options;
+  const { templateService, corsOrigin = '*', resolvePermissions: permissionResolver } = options;
 
   return async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
     // CORS headers
@@ -66,7 +113,46 @@ export function createTemplateAPIHandler(options: TemplateAPIOptions) {
     try {
       const pathname = url.pathname;
 
-      // POST /api/templates - Create template
+      // Determine the permission required for this route.
+      // Administrative (write) routes require templates:write; read-only routes require templates:read.
+      let requiredPermission: string | null = null;
+      if (req.method === 'POST' && pathname === '/api/templates') {
+        requiredPermission = TEMPLATE_WRITE_PERMISSION;
+      } else if (req.method === 'POST' && pathname === '/api/templates/render') {
+        requiredPermission = TEMPLATE_WRITE_PERMISSION;
+      } else if (req.method === 'PUT' && pathname.startsWith('/api/templates/')) {
+        requiredPermission = TEMPLATE_WRITE_PERMISSION;
+      } else if (req.method === 'DELETE' && pathname.startsWith('/api/templates/')) {
+        requiredPermission = TEMPLATE_WRITE_PERMISSION;
+      } else if (req.method === 'GET' && pathname === '/api/templates') {
+        requiredPermission = TEMPLATE_READ_PERMISSION;
+      } else if (req.method === 'GET' && pathname === '/api/templates/stats') {
+        requiredPermission = TEMPLATE_READ_PERMISSION;
+      } else if (req.method === 'GET' && pathname.match(/^\/api\/templates\/\d+\/stats$/)) {
+        requiredPermission = TEMPLATE_READ_PERMISSION;
+      } else if (req.method === 'GET' && pathname.startsWith('/api/templates/')) {
+        requiredPermission = TEMPLATE_READ_PERMISSION;
+      }
+
+      if (requiredPermission) {
+        const permissions = await resolvePermissions(req, permissionResolver);
+        if (!hasPermission(permissions, requiredPermission)) {
+          logger.warn('Template API access denied', {
+            method: req.method,
+            path: pathname,
+            requiredPermission,
+          });
+          sendErr(
+            res,
+            403,
+            `Forbidden: missing required permission '${requiredPermission}'`,
+            ErrorCode.FORBIDDEN
+          );
+          return;
+        }
+      }
+
+      // POST /api/templates - Create template (requires templates:write)
       if (req.method === 'POST' && pathname === '/api/templates') {
         const body = await parseBody(req);
 
@@ -90,7 +176,7 @@ export function createTemplateAPIHandler(options: TemplateAPIOptions) {
         return;
       }
 
-      // GET /api/templates - List templates
+      // GET /api/templates - List templates (requires templates:read)
       if (req.method === 'GET' && pathname === '/api/templates') {
         const channelType = url.searchParams.get('channelType') as TemplateChannelType | null;
         const isActive = url.searchParams.get('isActive');
@@ -108,14 +194,14 @@ export function createTemplateAPIHandler(options: TemplateAPIOptions) {
         return;
       }
 
-      // GET /api/templates/stats - Get statistics
+      // GET /api/templates/stats - Get statistics (requires templates:read)
       if (req.method === 'GET' && pathname === '/api/templates/stats') {
         const stats = await templateService.getOverviewStats();
         sendOk(res, 200, stats);
         return;
       }
 
-      // GET /api/templates/:id - Get template by ID
+      // GET /api/templates/:id - Get template by ID (requires templates:read)
       if (req.method === 'GET' && pathname.startsWith('/api/templates/')) {
         const id = parseInt(pathname.split('/').pop() || '', 10);
 
@@ -135,7 +221,7 @@ export function createTemplateAPIHandler(options: TemplateAPIOptions) {
         return;
       }
 
-      // PUT /api/templates/:id - Update template
+      // PUT /api/templates/:id - Update template (requires templates:write)
       if (req.method === 'PUT' && pathname.startsWith('/api/templates/')) {
         const id = parseInt(pathname.split('/').pop() || '', 10);
 
@@ -156,7 +242,7 @@ export function createTemplateAPIHandler(options: TemplateAPIOptions) {
         return;
       }
 
-      // DELETE /api/templates/:id - Delete template
+      // DELETE /api/templates/:id - Delete template (requires templates:write)
       if (req.method === 'DELETE' && pathname.startsWith('/api/templates/')) {
         const id = parseInt(pathname.split('/').pop() || '', 10);
 
@@ -182,7 +268,7 @@ export function createTemplateAPIHandler(options: TemplateAPIOptions) {
         return;
       }
 
-      // POST /api/templates/render - Render template
+      // POST /api/templates/render - Render template (requires templates:write)
       if (req.method === 'POST' && pathname === '/api/templates/render') {
         const body = await parseBody(req);
 
@@ -202,7 +288,7 @@ export function createTemplateAPIHandler(options: TemplateAPIOptions) {
         return;
       }
 
-      // GET /api/templates/:id/stats - Get template usage stats
+      // GET /api/templates/:id/stats - Get template usage stats (requires templates:read)
       if (req.method === 'GET' && pathname.match(/^\/api\/templates\/\d+\/stats$/)) {
         const id = parseInt(pathname.split('/')[3], 10);
         const stats = await templateService.getTemplateStats(id);
@@ -310,3 +396,115 @@ export function parseTemplateUpdateBody(body: unknown): UpdateNotificationTempla
 }
 
 export { resolveRequestActor };
+
+// Route-level authorization tests
+if (process.env.NODE_ENV === 'test' && typeof describe === 'function') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const http = require('http') as typeof import('http');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createTemplateAPIHandler, TEMPLATE_READ_PERMISSION, TEMPLATE_WRITE_PERMISSION } =
+    require('./template-api') as typeof import('./template-api');
+
+  describe('template API route authorization', () => {
+    const createService = () => ({
+      createTemplate: jest.fn().mockResolvedValue({ success: true, templateId: 1 }),
+      listTemplates: jest.fn().mockResolvedValue([]),
+      getOverviewStats: jest.fn().mockResolvedValue({ total: 0 }),
+      getTemplate: jest.fn().mockResolvedValue({ id: 1 }),
+      updateTemplate: jest.fn().mockResolvedValue({ success: true }),
+      deleteTemplate: jest.fn().mockResolvedValue(true),
+      deactivateTemplate: jest.fn().mockResolvedValue(true),
+      renderTemplate: jest.fn().mockResolvedValue({ success: true, rendered: 'x' }),
+      getTemplateStats: jest.fn().mockResolvedValue({ usage: 0 }),
+    });
+
+    const invoke = async (
+      handler: ReturnType<typeof createTemplateAPIHandler>,
+      method: string,
+      path: string
+    ) => {
+      const req = { method, on: jest.fn(), headers: {} } as unknown as http.IncomingMessage;
+      const res = {
+        statusCode: 0,
+        body: '',
+        setHeader: jest.fn(),
+        writeHead: jest.fn(),
+        end: jest.fn(),
+        write: jest.fn(),
+      } as unknown as http.ServerResponse & { statusCode: number; body: string };
+      let statusCode = 0;
+      let body = '';
+      (res as any).statusCode = 0;
+      (res as any).writeHead = (code: number) => {
+        statusCode = code;
+        (res as any).statusCode = code;
+      };
+      (res as any).end = (chunk?: string) => {
+        if (chunk) body += chunk;
+        (res as any).body = body;
+      };
+      (res as any).write = (chunk: string) => {
+        body += chunk;
+        (res as any).body = body;
+      };
+      await handler(req, res, new URL(`http://localhost${path}`));
+      return { statusCode, body };
+    };
+
+    const writeRoutes: Array<[string, string]> = [
+      ['POST', '/api/templates'],
+      ['PUT', '/api/templates/1'],
+      ['DELETE', '/api/templates/1'],
+      ['POST', '/api/templates/render'],
+    ];
+
+    const readRoutes: Array<[string, string]> = [
+      ['GET', '/api/templates'],
+      ['GET', '/api/templates/1'],
+      ['GET', '/api/templates/stats'],
+      ['GET', '/api/templates/1/stats'],
+    ];
+
+    it.each(writeRoutes)('rejects %s %s without templates:write', async (method, path) => {
+      const handler = createTemplateAPIHandler({
+        templateService: createService() as any,
+        resolvePermissions: () => [TEMPLATE_READ_PERMISSION],
+      });
+      const { statusCode } = await invoke(handler, method, path);
+      expect(statusCode).toBe(403);
+    });
+
+    it.each(readRoutes)('rejects %s %s without templates:read', async (method, path) => {
+      const handler = createTemplateAPIHandler({
+        templateService: createService() as any,
+        resolvePermissions: () => [TEMPLATE_WRITE_PERMISSION],
+      });
+      const { statusCode } = await invoke(handler, method, path);
+      expect(statusCode).toBe(403);
+    });
+
+    it.each(writeRoutes)('allows %s %s with templates:write', async (method, path) => {
+      const handler = createTemplateAPIHandler({
+        templateService: createService() as any,
+        resolvePermissions: () => [TEMPLATE_WRITE_PERMISSION],
+      });
+      const { statusCode } = await invoke(handler, method, path);
+      expect(statusCode).not.toBe(403);
+    });
+
+    it.each(readRoutes)('allows %s %s with templates:read', async (method, path) => {
+      const handler = createTemplateAPIHandler({
+        templateService: createService() as any,
+        resolvePermissions: () => [TEMPLATE_READ_PERMISSION],
+      });
+      const { statusCode } = await invoke(handler, method, path);
+      expect(statusCode).not.toBe(403);
+    });
+
+    it('rejects all privileged routes when no permission resolver is configured', async () => {
+      const handler = createTemplateAPIHandler({ templateService: createService() as any });
+      const { statusCode } = await invoke(handler, 'GET', '/api/templates');
+      expect(statusCode).toBe(403);
+    });
+  });
+}

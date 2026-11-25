@@ -15,6 +15,7 @@
 import {
   ProviderCapability,
   NotificationProvider,
+  NotificationFormat,
   ProviderMetadata,
   DeliveryPayload,
   DeliveryResult,
@@ -45,17 +46,22 @@ function makePayload(overrides: Partial<DeliveryPayload> = {}): DeliveryPayload 
 /** Minimal stub that always returns success */
 function makeStubProvider(
   id: string,
-  capabilities: ProviderCapability[] = []
+  capabilities: ProviderCapability[] = [],
+  formats: NotificationFormat[] = [NotificationFormat.PLAIN_TEXT]
 ): NotificationProvider {
   const capSet = new Set(capabilities);
+  const fmtSet = new Set(formats.length ? formats : [NotificationFormat.PLAIN_TEXT]);
   return {
     metadata: {
       id,
       name: `Stub(${id})`,
       version: '0.0.1',
       capabilities: capSet,
+      supportedFormats: fmtSet,
+      defaultFormat: fmtSet.values().next().value as NotificationFormat,
     },
     hasCapability: (c: ProviderCapability) => capSet.has(c),
+    supportsFormat: (f: NotificationFormat) => fmtSet.has(f),
     deliver: jest.fn().mockResolvedValue({ success: true, degradedCapabilities: [] }),
   };
 }
@@ -80,6 +86,7 @@ jest.mock('../webhook-sender', () => ({
   sendWebhook: jest.fn().mockResolvedValue({
     ok: true,
     status: 204,
+    headers: { get: () => null },
     text: () => Promise.resolve(''),
   }),
 }));
@@ -150,7 +157,7 @@ describe('DiscordNotificationProvider', () => {
 
   it('delivers successfully when webhook returns 2xx', async () => {
     const { sendWebhook } = require('../webhook-sender');
-    (sendWebhook as jest.Mock).mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+    (sendWebhook as jest.Mock).mockResolvedValueOnce({ ok: true, status: 204, headers: { get: () => null }, text: () => Promise.resolve('') });
 
     const provider = new DiscordNotificationProvider(discordConfig);
     const result = await provider.deliver(makePayload({ targetRecipient: discordConfig.webhookUrl }));
@@ -164,6 +171,7 @@ describe('DiscordNotificationProvider', () => {
     (sendWebhook as jest.Mock).mockResolvedValueOnce({
       ok: false,
       status: 400,
+      headers: { get: () => null },
       text: () => Promise.resolve('Bad Request'),
     });
 
@@ -176,7 +184,7 @@ describe('DiscordNotificationProvider', () => {
 
   it('lists unsupported features in degradedCapabilities but still delivers', async () => {
     const { sendWebhook } = require('../webhook-sender');
-    (sendWebhook as jest.Mock).mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+    (sendWebhook as jest.Mock).mockResolvedValueOnce({ ok: true, status: 204, headers: { get: () => null }, text: () => Promise.resolve('') });
 
     const provider = new DiscordNotificationProvider(discordConfig);
     const result = await provider.deliver(
@@ -464,9 +472,14 @@ describe('Pipeline independence', () => {
           ProviderCapability.RICH_FORMATTING,
           ProviderCapability.NATIVE_SCHEDULING,
         ]),
+        supportedFormats: new Set([NotificationFormat.PLAIN_TEXT, NotificationFormat.MARKDOWN]),
+        defaultFormat: NotificationFormat.PLAIN_TEXT,
       },
       hasCapability(c) {
         return this.metadata.capabilities.has(c);
+      },
+      supportsFormat(f) {
+        return this.metadata.supportedFormats.has(f);
       },
       async deliver(p): Promise<DeliveryResult> {
         const degraded: ProviderCapability[] = [];

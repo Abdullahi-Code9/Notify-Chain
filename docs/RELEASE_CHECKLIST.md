@@ -95,6 +95,9 @@ npm run check-migrations
 
 - [ ] Release version number chosen (semver tag, e.g. `v1.2.0`)
 - [ ] Contract version / WASM artifacts identified if contracts ship in this release
+- [ ] Release artifacts are produced by the [release workflow](../.github/workflows/release.yml)
+      with `SHA256SUMS` and build provenance attestations, and the steps in
+      [RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md) have been reviewed
 - [ ] If upgrading deployed contracts, [CONTRACT_UPGRADE_GUIDE.md](../CONTRACT_UPGRADE_GUIDE.md) followed and testnet verification completed
 
 ### Tag and publish

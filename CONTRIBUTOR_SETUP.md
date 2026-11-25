@@ -46,16 +46,16 @@ For Git workflow (fork, branch, PR), see
 
 | Dependency | Minimum Version | Install | Used By |
 |---|---|---|---|
-| Rust (stable) | stable | [rustup.rs](https://rustup.rs) | Smart contracts |
-| `wasm32-unknown-unknown` | — | `rustup target add wasm32-unknown-unknown` | Soroban contracts |
+| Rust | **1.86.0** (`contract/rust-toolchain.toml`) | [rustup.rs](https://rustup.rs) | Smart contracts |
+| `wasm32v1-none` | — | Installed by the contract toolchain configuration | Soroban contract build |
 | Stellar CLI | latest | `cargo install --locked stellar-cli --features opt` | Contract build/deploy |
 | Node.js | **22** | [nodejs.org](https://nodejs.org) or `nvm` | Listener, Dashboard |
 | Git | — | your package manager | Version control |
 
 | Dependency     | Minimum Version | Install Method                          | Used By            |
 |----------------|-----------------|-----------------------------------------|--------------------|
-| Rust           | stable          | [rustup.rs](https://rustup.rs)          | Smart contracts    |
-| `wasm32-unknown-unknown` | —       | `rustup target add wasm32-unknown-unknown` | Soroban contracts |
+| Rust           | **1.86.0** (`contract/rust-toolchain.toml`) | [rustup.rs](https://rustup.rs) | Smart contracts    |
+| `wasm32v1-none` | —       | Installed by the contract toolchain configuration | Soroban contract build |
 | Stellar CLI    | latest          | `cargo install --locked stellar-cli --features opt`             | Contract build/deploy |
 | Node.js        | **18** (dashboard), **20** (listener) | [nodejs.org](https://nodejs.org) or `nvm` | Listener, Dashboard |
 | npm            | comes with Node  | —                                       | Package management |
@@ -71,12 +71,17 @@ For Git workflow (fork, branch, PR), see
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
-rustup target add wasm32-unknown-unknown
+rustup toolchain install 1.86.0 --component rustfmt --target wasm32v1-none
 cargo install --locked stellar-cli --features opt
 
 # Verify
 rustc --version && cargo --version && stellar --version
 ```
+
+The `contract/` workspace pins Rust 1.86.0 and declares Soroban SDK 23, with
+the exact SDK release recorded in `contract/Cargo.lock`. Run Cargo commands
+from `contract/` to select the pinned toolchain automatically. CI runs the
+contract tests and Wasm build before changes merge.
 
 ---
 
@@ -291,7 +296,7 @@ cd contract
 stellar contract build
 ```
 
-Output goes to `contract/target/wasm32-unknown-unknown/release/`.
+Output goes to `contract/target/wasm32v1-none/release/`.
 
 ### 5.2 Run tests
 
@@ -310,7 +315,7 @@ stellar keys fund my-identity --network testnet
 # Deploy
 cd contract
 stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/hello_world.wasm \
+  --wasm target/wasm32v1-none/release/hello_world.wasm \
   --source my-identity \
   --network testnet
 # Contract ID is printed on success
@@ -438,7 +443,7 @@ The repo includes this already:
 
 ```json
 {
-  "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+  "rust-analyzer.cargo.target": "wasm32v1-none",
   "rust-analyzer.checkOnSave.allTargets": false
 }
 ```
@@ -517,10 +522,10 @@ EVENTS_API_PORT=8788
 
 ---
 
-### `error: toolchain 'stable' does not support target 'wasm32-unknown-unknown'`
+### Rust reports that the contract target is not installed
 
 ```bash
-rustup target add wasm32-unknown-unknown
+rustup toolchain install 1.86.0 --target wasm32v1-none
 ```
 
 ---

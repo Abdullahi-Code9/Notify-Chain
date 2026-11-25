@@ -1,0 +1,12 @@
+{
+  "eventName": "NotifCrtd",
+  "topics": [
+    "NotifCrtd",
+    "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+    "0101010101010101010101010101010101010101010101010101010101010101"
+  ],
+  "data": {
+    "payload_version": 1,
+    "message": "Test notification v1 - legacy format"
+  }
+}

@@ -10,7 +10,7 @@ import { NOTIFICATION_STATUS_EVENTS } from '../types/event';
  * set from the first render — not left `undefined` until a mutation action
  * patches them in.
  */
-function hydrateNotificationStatus(events: BlockchainEvent[]): BlockchainEvent[] {
+export function hydrateNotificationStatus(events: BlockchainEvent[]): BlockchainEvent[] {
   return events.map((event) => {
     if (!event.eventName) return event;
     const status = NOTIFICATION_STATUS_EVENTS[event.eventName];

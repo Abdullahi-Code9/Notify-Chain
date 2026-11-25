@@ -88,6 +88,22 @@ Legend for **Required**:
 - **Pair** — required only when the sibling setting is present
 - **Operational** — not enforced by the parser, but needed for useful behavior
 
+### Missed-schedule recovery
+
+`SCHEDULE_RECOVERY_POLICY` controls what happens when the scheduler starts or resumes and finds due notifications still pending. The default is `EXECUTE`, preserving the existing catch-up behavior.
+
+| Value | Behavior |
+|---|---|
+| `EXECUTE` | Leave overdue pending notifications eligible for normal atomic claiming and delivery. |
+| `EXPIRE` | Atomically mark overdue pending notifications `EXPIRED`; they will not be sent. |
+| `REQUIRE_INTERVENTION` | Hold overdue pending notifications from automatic claiming until an operator resolves them. |
+
+```dotenv
+SCHEDULE_RECOVERY_POLICY=REQUIRE_INTERVENTION
+```
+
+Resolve a held schedule using an API key with `POST /api/schedule/:id/recovery` and JSON `{"action":"EXECUTE"}` or `{"action":"EXPIRE"}`. `EXECUTE` returns it to the normal pending queue; `EXPIRE` permanently skips delivery. Recovery updates are conditional and idempotent. This policy is applied at scheduler startup/resume; changing the environment variable takes effect on restart.
+
 ### Logging
 
 | Name | Type | Default | Required | Purpose / effect |

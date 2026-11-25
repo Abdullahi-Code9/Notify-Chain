@@ -127,8 +127,8 @@ Emitted when batch event processing finishes.
 
 ### `AuditRecordAppended`
 Emitted when an immutable audit trail entry is logged.
-* **Topics**: `category: NotificationCategory`, `priority: NotificationPriority`
-* **Data**: `record_id: u64`
+* **Topics**: `notification_id: BytesN<32>`, `action: AuditAction`, `category: NotificationCategory`, `priority: NotificationPriority`
+* **Data**: `seq: u64`, `actor: Address`
 
 ### `OwnershipTransferInitiated`
 Emitted when contract ownership transfer is queued.
@@ -162,8 +162,8 @@ Emitted when protocol schema version is updated.
 
 ### `NotificationAccessed`
 Emitted upon reading secured notification content.
-* **Topics**: `reader: Address`
-* **Data**: `notification_id: BytesN<32>`
+* **Topics**: `notification_id: BytesN<32>`, `accessor: Address`, `category: NotificationCategory`, `priority: NotificationPriority`
+* **Data**: `accessed_at: u64`
 
 ### `ChannelMetadataUpdated`
 Emitted when channel metadata is modified.
@@ -193,4 +193,19 @@ Run the documentation drift validation script:
 
 ```bash
 python3 scripts/validate-contract-events.py
+```
+
+## 4. Naming and Topic Conventions
+
+- Declare event structs with unique `PascalCase` names. Soroban exposes the generated event name in `snake_case`.
+- Use `snake_case` for event fields.
+- Mark indexed fields with `#[topic]` and place all indexed fields before unindexed data fields.
+- Declare no more than four indexed fields per event.
+- When both `category` and `priority` are indexed, keep them as the final two topics in that order.
+
+Run the naming and topic convention tests and validator:
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_contract_event_conventions.py'
+python3 scripts/check_contract_event_conventions.py
 ```

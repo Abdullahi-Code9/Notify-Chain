@@ -11,7 +11,7 @@ use crate::test_utils::setup_test_env;
 use crate::AutoShareContractClient;
 
 use soroban_sdk::testutils::{Address as _, Events, Ledger};
-use soroban_sdk::{Address, BytesN, Env, Symbol, TryFromVal, Val, Vec};
+use soroban_sdk::{Address, BytesN, Env, String, Symbol, TryFromVal, Val, Vec};
 
 const ONE_HOUR: u64 = 3_600;
 
@@ -19,6 +19,22 @@ fn make_id(env: &Env, tag: u8) -> BytesN<32> {
     let mut bytes = [0u8; 32];
     bytes[0] = tag;
     BytesN::from_array(env, &bytes)
+}
+
+/// Schedules a notification with the default one-hour TTL and Medium priority.
+fn schedule_test_notification(
+    client: &AutoShareContractClient<'_>,
+    env: &Env,
+    id: &BytesN<32>,
+    creator: &Address,
+) {
+    client.schedule_notification(
+        id,
+        creator,
+        &ONE_HOUR,
+        &String::from_str(env, "Test Notification"),
+        &NotificationPriority::Medium,
+    );
 }
 
 fn set_now(env: &Env, timestamp: u64) {
@@ -54,9 +70,9 @@ fn test_acknowledge_multiple_notifications() {
     let id2 = make_id(&test_env.env, 2);
     let id3 = make_id(&test_env.env, 3);
 
-    client.schedule_notification(&id1, &creator, &ONE_HOUR);
-    client.schedule_notification(&id2, &creator, &ONE_HOUR);
-    client.schedule_notification(&id3, &creator, &ONE_HOUR);
+    schedule_test_notification(&client, &test_env.env, &id1, &creator);
+    schedule_test_notification(&client, &test_env.env, &id2, &creator);
+    schedule_test_notification(&client, &test_env.env, &id3, &creator);
 
     let mut batch = Vec::new(&test_env.env);
     batch.push_back(id1.clone());
@@ -82,7 +98,7 @@ fn test_acknowledge_unauthorized_fails() {
     set_now(&test_env.env, 1_000);
 
     let id1 = make_id(&test_env.env, 1);
-    client.schedule_notification(&id1, &creator, &ONE_HOUR);
+    schedule_test_notification(&client, &test_env.env, &id1, &creator);
 
     let mut batch = Vec::new(&test_env.env);
     batch.push_back(id1.clone());
@@ -100,7 +116,7 @@ fn test_acknowledge_revoked_fails() {
 
     set_now(&test_env.env, 1_000);
     let id1 = make_id(&test_env.env, 1);
-    client.schedule_notification(&id1, &creator, &ONE_HOUR);
+    schedule_test_notification(&client, &test_env.env, &id1, &creator);
 
     client.revoke_notification(&id1, &creator);
 
@@ -120,7 +136,7 @@ fn test_acknowledge_expired_fails() {
 
     set_now(&test_env.env, 1_000);
     let id1 = make_id(&test_env.env, 1);
-    client.schedule_notification(&id1, &creator, &ONE_HOUR);
+    schedule_test_notification(&client, &test_env.env, &id1, &creator);
 
     set_now(&test_env.env, 1_000 + ONE_HOUR + 1);
 
@@ -133,77 +149,51 @@ fn test_acknowledge_expired_fails() {
 
 #[test]
 fn benchmark_gas_usage() {
-    let env_single = Env::default();
-    env_single.mock_all_auths();
-    env_single.cost_estimate().budget().reset_unlimited();
+    // The budget meter resets before every top-level contract invocation, so
+    // `cpu_instruction_cost()` only reflects the most recent call. We therefore
+    // compare the cost of a single call acknowledging one notification against
+    // a single call acknowledging the remaining nine.
+    let env = Env::default();
+    env.mock_all_auths();
+    env.cost_estimate().budget().reset_unlimited();
 
-    let client_single = AutoShareContractClient::new(
-        &env_single,
-        &env_single.register_contract(None, crate::AutoShareContract),
+    let client = AutoShareContractClient::new(
+        &env,
+        &env.register_contract(None, crate::AutoShareContract),
     );
-    let creator_single = Address::generate(&env_single);
-    client_single.initialize_admin(&Address::generate(&env_single));
+    let creator = Address::generate(&env);
+    client.initialize_admin(&Address::generate(&env));
 
-    set_now(&env_single, 1_000);
+    set_now(&env, 1_000);
 
-    let mut ids_single = Vec::new(&env_single);
+    let mut ids = Vec::new(&env);
     for i in 0..10u8 {
-        let id = make_id(&env_single, i);
-        client_single.schedule_notification(&id, &creator_single, &ONE_HOUR);
-        ids_single.push_back(id);
+        let id = make_id(&env, i);
+        schedule_test_notification(&client, &env, &id, &creator);
+        ids.push_back(id);
     }
 
-    let start_cpu_single = env_single
-        .cost_estimate()
-        .budget()
-        .get_cpu_instruction_cost();
-    for id in ids_single.iter() {
-        let mut single_batch = Vec::new(&env_single);
-        single_batch.push_back(id);
-        client_single.acknowledge_notifications(&creator_single, &single_batch);
+    // Cost of acknowledging a single notification in its own transaction.
+    let mut single_batch = Vec::new(&env);
+    single_batch.push_back(ids.get(0).unwrap());
+    client.acknowledge_notifications(&creator, &single_batch);
+    let single_cost = env.cost_estimate().budget().cpu_instruction_cost();
+
+    // Cost of acknowledging the remaining nine in one batched transaction.
+    let mut bulk_batch = Vec::new(&env);
+    for i in 1..10u32 {
+        bulk_batch.push_back(ids.get(i).unwrap());
     }
-    let end_cpu_single = env_single
-        .cost_estimate()
-        .budget()
-        .get_cpu_instruction_cost();
-    let single_cost = end_cpu_single - start_cpu_single;
+    let bulk_len = bulk_batch.len() as u64;
+    client.acknowledge_notifications(&creator, &bulk_batch);
+    let batch_cost = env.cost_estimate().budget().cpu_instruction_cost();
 
-    let env_batch = Env::default();
-    env_batch.mock_all_auths();
-    env_batch.cost_estimate().budget().reset_unlimited();
-
-    let client_batch = AutoShareContractClient::new(
-        &env_batch,
-        &env_batch.register_contract(None, crate::AutoShareContract),
-    );
-    let creator_batch = Address::generate(&env_batch);
-    client_batch.initialize_admin(&Address::generate(&env_batch));
-
-    set_now(&env_batch, 1_000);
-
-    let mut ids_batch = Vec::new(&env_batch);
-    for i in 0..10u8 {
-        let id = make_id(&env_batch, i);
-        client_batch.schedule_notification(&id, &creator_batch, &ONE_HOUR);
-        ids_batch.push_back(id);
-    }
-
-    let start_cpu_batch = env_batch
-        .cost_estimate()
-        .budget()
-        .get_cpu_instruction_cost();
-    client_batch.acknowledge_notifications(&creator_batch, &ids_batch);
-    let end_cpu_batch = env_batch
-        .cost_estimate()
-        .budget()
-        .get_cpu_instruction_cost();
-    let batch_cost = end_cpu_batch - start_cpu_batch;
-
-    // Batch cost should be significantly less than running 10 separate transactions
+    // Batching must be cheaper than the equivalent number of single calls.
     assert!(
-        batch_cost < single_cost,
-        "Batch cost ({}) should be less than individual cost ({})",
+        batch_cost < single_cost * bulk_len,
+        "Batch cost ({}) should be less than {} individual costs ({})",
         batch_cost,
-        single_cost
+        bulk_len,
+        single_cost * bulk_len
     );
 }

@@ -130,7 +130,17 @@ pub struct CategoryRegistered {
 }
 
 /// Emitted when the contract is paused by the admin.
-#[contractevent]
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct ContractPaused {
+    #[topic]
+    pub admin: Address,
+    #[topic]
+    pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
+}
+
 /// Emitted when a recipient updates a delivery channel preference.
 ///
 /// Off-chain consumers can filter on `recipient` and inspect `channel` /
@@ -151,18 +161,6 @@ pub struct ChannelPreferenceUpdated {
     pub enabled: bool,
     /// Ledger timestamp when the preference was updated.
     pub updated_at: u64,
-}
-
-/// Emitted when an AutoShare group is deactivated by its creator.
-#[contractevent(data_format = "single-value")]
-#[derive(Clone)]
-pub struct ContractPaused {
-    #[topic]
-    pub admin: Address,
-    #[topic]
-    pub category: NotificationCategory,
-    #[topic]
-    pub priority: NotificationPriority,
 }
 
 /// Emitted when the contract is unpaused by the admin.
@@ -420,6 +418,12 @@ pub enum AuditAction {
 }
 
 /// Emitted when a new audit record is appended to the on-chain log.
+///
+/// The category and priority are both carried as trailing indexed topics so
+/// off-chain consumers can subscribe by notification type without decoding the
+/// payload. Existing listeners continue to read the first topic and the
+/// pre-existing fields unchanged because the new metadata is appended after the
+/// original data.
 #[contractevent]
 #[derive(Clone)]
 pub struct AuditRecordAppended {
@@ -429,6 +433,8 @@ pub struct AuditRecordAppended {
     pub action: AuditAction,
     #[topic]
     pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
     pub seq: u64,
     pub actor: Address,
     // GAS: Removed `timestamp` — derivable from ledger metadata
@@ -548,6 +554,8 @@ pub struct NotificationAccessed {
     pub accessor: Address,
     #[topic]
     pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
     /// Ledger timestamp (seconds) when the access occurred.
     pub accessed_at: u64,
 }

@@ -10,6 +10,7 @@ export enum NotificationStatus {
   DEAD_LETTERED = 'DEAD_LETTERED',
   CANCELLED = 'CANCELLED',
   EXPIRED = 'EXPIRED',
+  AWAITING_INTERVENTION = 'AWAITING_INTERVENTION',
 }
 
 export enum NotificationType {
@@ -17,6 +18,15 @@ export enum NotificationType {
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   SMS = 'sms',
+}
+
+export type RecurrenceFrequency = 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval?: number;
+  until?: Date | string;
+  count?: number;
 }
 
 export interface ScheduledNotification {
@@ -48,6 +58,10 @@ export interface ScheduledNotification {
   nextRetryAt?: Date | null;
   /** Stable logical key used to prevent duplicate delivery of the same notification. */
   deduplicationKey?: string | null;
+  recurrence?: RecurrenceRule | null;
+  /** Number of executed or skipped series occurrences. */
+  occurrenceCount?: number;
+  lastRunAt?: Date | null;
 }
 
 export interface CreateScheduledNotificationInput {
@@ -55,6 +69,8 @@ export interface CreateScheduledNotificationInput {
   notificationType: NotificationType;
   targetRecipient: string;
   executeAt: Date;
+  /** IANA timezone used to interpret/display executeAt; storage remains UTC. */
+  timezone?: string;
   expiresAt?: Date | string | number | null;
   maxRetries?: number;
   deduplicationKey?: string;
@@ -62,10 +78,13 @@ export interface CreateScheduledNotificationInput {
   contractAddress?: string;
   priority?: number;
   metadata?: Record<string, any>;
+  recurrence?: RecurrenceRule;
 }
 
 export interface ScheduledNotificationRow {
   id: number;
+  version: number;
+  recovery_state: 'AWAITING_INTERVENTION' | null;
   payload: string;
   payload_hash: string | null;
   notification_type: string;
@@ -89,6 +108,9 @@ export interface ScheduledNotificationRow {
   metadata: string | null;
   next_retry_at: string | null;
   deduplication_key: string | null;
+  recurrence_rule?: string | null;
+  occurrence_count?: number;
+  last_run_at?: string | null;
 }
 
 export interface NotificationExecutionLog {
@@ -102,6 +124,17 @@ export interface NotificationExecutionLog {
   durationMs?: number | null;
 }
 
+export type ScheduleRecoveryPolicy = 'EXECUTE' | 'EXPIRE' | 'REQUIRE_INTERVENTION';
+/**
+ * What to do when a notification is still pending after its executeAt and the
+ * scheduler was not available to run it inside the timing buffer.
+ *
+ * - `execute` — deliver it late (default, previous catch-up behavior)
+ * - `expire` — mark it EXPIRED and do not deliver
+ * - `intervene` — hold it until an operator resumes it
+ */
+export type MissedSchedulePolicy = 'execute' | 'expire' | 'intervene';
+
 export interface SchedulerConfig {
   enabled: boolean;
   pollIntervalMs: number;
@@ -112,6 +145,9 @@ export interface SchedulerConfig {
   retryDelayMs?: number;
   /** Max notifications processed concurrently per poll cycle (WORKER_CONCURRENCY). Default 1 = serial. */
   concurrency?: number;
+  recoveryPolicy?: ScheduleRecoveryPolicy;
+  /** Overdue notifications outside the timing buffer. Default `execute`. */
+  missedSchedulePolicy?: MissedSchedulePolicy;
 }
 
 export interface DeadLetterQueueEntry {

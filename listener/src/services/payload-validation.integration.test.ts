@@ -15,7 +15,7 @@ import { DEFAULT_MAX_PAYLOAD_SIZE_BYTES } from '../utils/payload-size-validator'
 
 jest.mock('../utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
+  default: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
 }));
 
 jest.mock('../store/event-registry', () => ({

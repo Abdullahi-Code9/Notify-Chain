@@ -5,6 +5,7 @@ import {
   redactObject,
   redactString,
 } from './redact';
+import { getCorrelationContext } from './correlation-context';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +22,8 @@ export interface FormattedError {
 export interface LogContext {
   /** Identifier scoped to a single poll/request cycle for end-to-end tracing. */
   requestId?: string;
+  /** Cross-service trace ID; filled from the active request context when omitted (#986). */
+  correlationId?: string;
   /** Elapsed milliseconds for timed operations (RPC calls, webhook delivery, etc.). */
   durationMs?: number;
   /** Any additional structured fields the caller wants to attach. */
@@ -243,14 +246,32 @@ function formatMeta(meta: LogContext): LogContext {
   return redactObject(normalized as Record<string, unknown>) as LogContext;
 }
 
+/**
+ * Adds the active request's `correlationId` / `requestId` (#986) to the log
+ * metadata unless the caller already supplied them, so every line emitted while
+ * serving a request — or running a job bound to it — can be joined in the
+ * aggregator without each call site threading the IDs through by hand.
+ */
+export function withCorrelationMeta(meta?: LogContext): LogContext | undefined {
+  const context = getCorrelationContext();
+  if (!context) return meta;
+  const merged: LogContext = { ...meta };
+  if (merged.correlationId === undefined) merged.correlationId = context.correlationId;
+  if (merged.requestId === undefined && context.requestId !== undefined) {
+    merged.requestId = context.requestId;
+  }
+  return merged;
+}
+
 function logWithMeta(
   level: LogLevel,
   message: string,
-  meta?: LogContext
+  rawMeta?: LogContext
 ): void {
   // The message itself is redacted too: interpolated strings such as
   // `Posting to ${webhookUrl}` would otherwise bypass metadata redaction.
   const safeMessage = typeof message === 'string' ? redactString(message) : message;
+  const meta = withCorrelationMeta(rawMeta);
   if (meta && Object.keys(meta).length > 0) {
     baseLogger[level](safeMessage, formatMeta(meta));
   } else {

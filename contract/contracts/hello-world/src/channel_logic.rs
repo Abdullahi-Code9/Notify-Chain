@@ -5,6 +5,7 @@ use crate::base::channel::{
     ChannelCreated, ChannelSubscribed, ChannelUnsubscribed, NotificationChannel,
     MAX_BATCH_SUBSCRIBE, MAX_CHANNEL_NAME_LENGTH,
 };
+use crate::base::clock::current_time;
 use crate::base::errors::Error;
 use crate::base::events::{NotificationCategory, NotificationPriority};
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
@@ -46,7 +47,7 @@ pub fn create_channel(
         name,
         subscriber_count: 0,
         is_active: true,
-        created_at: env.ledger().timestamp(),
+        created_at: current_time(&env),
     };
     save_channel(&env, &channel);
     push_all_channel_id(&env, &id);

@@ -22,6 +22,7 @@ import {
   isListenerApiTimeoutError,
   type ContractStatus,
 } from '../services/eventsApi';
+import { openEventStream, toEventStreamUrl } from '../services/eventStream';
 import { resolveIndexingHealthUrl } from '../services/indexingHealthApi';
 import { resolveNotificationHealthUrl } from '../services/notificationHealthApi';
 import { generateMockEvents } from '../utils/eventData';
@@ -34,12 +35,20 @@ const DEFAULT_EVENT_COUNT = 5000;
 const DEFAULT_LIMIT = 12;
 const EVENT_ID_PARAM = 'eventId';
 const API_URL = import.meta.env.VITE_EVENTS_API_URL ?? 'http://localhost:8787/api/events';
+const STREAM_URL = toEventStreamUrl(API_URL);
 const POLL_INTERVAL_MS = 15_000;
 const LISTENER_BASE_URL = API_URL.replace('/api/events', '');
 const INDEXING_HEALTH_URL =
   import.meta.env.VITE_INDEXING_HEALTH_URL ?? resolveIndexingHealthUrl(API_URL);
 const NOTIFICATION_HEALTH_URL =
   import.meta.env.VITE_NOTIFICATION_HEALTH_URL ?? resolveNotificationHealthUrl(API_URL);
+
+const ACTIVITY_RANGE_LABELS: Record<EventActivityRange, string> = {
+  '1h': 'the last hour',
+  '6h': 'the last 6 hours',
+  '24h': 'the last 24 hours',
+  '7d': 'the last 7 days',
+};
 
 function parsePageParam(search: string) {
   const params = new URLSearchParams(search);
@@ -69,9 +78,12 @@ export function EventExplorerPage() {
   const [limit, setLimit] = useState(() => parseLimitParam(initialSearch));
   const [selectedNotification, setSelectedNotification] = useState<BlockchainEvent | null>(null);
   const [contractStatuses, setContractStatuses] = useState<ContractStatus[]>([]);
+  const [activityRange, setActivityRange] =
+    useState<EventActivityRange>(DEFAULT_EVENT_ACTIVITY_RANGE);
 
   const events = useEventStore((state) => state.events);
   const setEvents = useEventStore((state) => state.setEvents);
+  const appendEvents = useEventStore((state) => state.appendEvents);
   const setLoading = useEventStore((state) => state.setLoading);
   const setError = useEventStore((state) => state.setError);
   const markSyncSuccess = useEventStore((state) => state.markSyncSuccess);
@@ -144,6 +156,8 @@ export function EventExplorerPage() {
     // Poll for status updates so delivered/failed notifications are reflected
     // without requiring a manual page refresh.
     const intervalId = setInterval(async () => {
+      setIsRefreshing(true);
+      setRefreshError(null);
       try {
         const remoteEvents = await fetchEvents(API_URL);
         if (!cancelled) {
@@ -152,16 +166,22 @@ export function EventExplorerPage() {
         }
       } catch {
         if (!cancelled) {
+          setRefreshError('Background refresh failed');
           markSyncFailure('Background refresh failed');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRefreshing(false);
         }
       }
     }, POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
+      if (intervalId) clearInterval(intervalId);
+      closeStream?.();
     };
-  }, [lastFetchedAt, setEvents, setError, setLoading]);
+  }, [appendEvents, setEvents, markSyncSuccess, markSyncFailure]);
 
   // Clear stale events and re-fetch whenever the connected wallet address
   // changes (switch or disconnect). This is the fix for issue #175.
@@ -255,6 +275,13 @@ export function EventExplorerPage() {
     return filteredEvents.slice(startIndex, startIndex + limit);
   }, [filteredEvents, page, limit]);
 
+  // Event activity buckets (#982). Computed from the same filtered dataset the
+  // table renders so chart values reconcile with the underlying events.
+  const eventActivity = useMemo(
+    () => computeEventActivity(filteredEvents, activityRange),
+    [filteredEvents, activityRange],
+  );
+
   const fromIndex = filteredEvents.length === 0 ? 0 : (page - 1) * limit + 1;
   const toIndex = Math.min(filteredEvents.length, page * limit);
 
@@ -269,25 +296,29 @@ export function EventExplorerPage() {
   }, [setSearch, setContractFilter, setEventTypeFilter, setStatusFilter, setDateFrom, setDateTo]);
 
   const handleRetry = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setIsRefreshing(true);
+    setRefreshError(null);
 
     try {
       const remoteEvents = await fetchEvents(API_URL);
       setEvents(remoteEvents);
       markSyncSuccess();
+      setError(null);
     } catch {
-      setEvents(generateMockEvents(DEFAULT_EVENT_COUNT));
-      setError('Retry failed — still using demo event data.');
+      setRefreshError('Manual refresh failed');
       markSyncFailure('Manual refresh failed');
     } finally {
-      setLoading(false);
+      setIsRefreshing(false);
     }
-  }, [markSyncFailure, markSyncSuccess, setError, setEvents, setLoading]);
+  }, [markSyncFailure, markSyncSuccess, setError, setEvents]);
 
   const handleSelectEvent = useCallback((event: BlockchainEvent) => {
     setSelectedNotification(event);
     replaceSelectedEventInUrl(event.eventId);
+  }, []);
+
+  const handleContractClick = useCallback((contractAddress: string) => {
+    window.location.hash = `contract-detail?address=${contractAddress}`;
   }, []);
 
   const handleCloseDrawer = useCallback(() => {
@@ -336,6 +367,34 @@ export function EventExplorerPage() {
       <EventFiltersBar />
       <NotificationSearchBar />
 
+      {error && !filteredEvents.length && (
+      <section className="event-activity" aria-labelledby="event-activity-heading">
+        <div className="event-activity__header">
+          <h2 id="event-activity-heading">Event Activity</h2>
+          <div className="event-activity__range" role="group" aria-label="Activity time range">
+            {EVENT_ACTIVITY_RANGES.map((range) => (
+              <button
+                key={range}
+                type="button"
+                className={`event-activity__range-button${
+                  range === activityRange ? ' event-activity__range-button--active' : ''
+                }`}
+                aria-pressed={range === activityRange}
+                onClick={() => setActivityRange(range)}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <EventActivityChart
+          buckets={eventActivity.buckets}
+          isLoading={isLoading}
+          rangeLabel={ACTIVITY_RANGE_LABELS[activityRange]}
+        />
+      </section>
+
       {error && (
         <section className="event-explorer__error-banner" role="alert">
           <div>
@@ -347,21 +406,40 @@ export function EventExplorerPage() {
         </section>
       )}
 
+      {refreshError && filteredEvents.length > 0 && (
+        <section
+          className="event-explorer__error-banner event-explorer__error-banner--refresh"
+          role="alert"
+        >
+          <div>
+            <strong>Refresh Error:</strong> {refreshError} — existing events are still displayed.
+          </div>
+          <button type="button" className="event-explorer__retry-button" onClick={handleRetry}>
+            Retry Refresh
+          </button>
+        </section>
+      )}
+
       <div className="event-explorer__status-row">
         <p className="event-explorer__summary">
           Showing {fromIndex.toLocaleString()}–{toIndex.toLocaleString()} of{' '}
           {filteredEvents.length.toLocaleString()} events
         </p>
-        {isLoading && <p className="event-explorer__loading-note">Loading events…</p>}
+        {(isLoading || isRefreshing) && (
+          <p className="event-explorer__loading-note">
+            {isRefreshing ? 'Refreshing events…' : 'Loading events…'}
+          </p>
+        )}
       </div>
 
-      {isLoading ? (
+      {isLoading && filteredEvents.length === 0 ? (
         <EventExplorerSkeleton rows={Math.min(limit, 8)} />
       ) : currentPageEvents.length > 0 ? (
         <EventExplorerTable
           events={currentPageEvents}
           onSelectEvent={handleSelectEvent}
           contractStatuses={contractStatuses}
+          onContractClick={handleContractClick}
         />
       ) : (
         <EmptyState

@@ -18,8 +18,8 @@ Related guides (deeper detail, not required for first setup):
 | Tool | Version (CI) | Purpose |
 |------|----------------|---------|
 | Git | 2.30+ | Clone and contribute |
-| Rust (stable) | stable | Soroban smart contracts |
-| `wasm32-unknown-unknown` | — | Contract WASM target |
+| Rust | **1.86.0** (`contract/rust-toolchain.toml`) | Soroban contract workspace |
+| `wasm32v1-none` | — | Contract WASM target |
 | Stellar CLI | latest | Build and deploy contracts |
 | Node.js | **22** | Listener and dashboard (see `.github/workflows/ci.yml`) |
 | npm | bundled with Node | Install dependencies |
@@ -29,9 +29,15 @@ Related guides (deeper detail, not required for first setup):
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
-rustup target add wasm32-unknown-unknown
+rustup toolchain install 1.86.0 --component rustfmt --target wasm32v1-none
 cargo install --locked stellar-cli --features opt
 ```
+
+The contract workspace declares Rust 1.86 and Soroban SDK 23, with the exact
+SDK release recorded in `contract/Cargo.lock`. Running Cargo commands from
+`contract/` selects the pinned toolchain automatically. CI checks the locked
+SDK dependency graph, runs all workspace tests, and builds the Wasm target on
+pull requests.
 
 ### Install Node.js 22
 
@@ -133,7 +139,54 @@ Open [http://localhost:5173](http://localhost:5173). The UI should load without 
 
 ---
 
-## 5. Smart contracts
+## 5. End-to-end environment (Docker)
+
+Docker Compose can start an isolated local scenario with the contract test suite,
+the listener and its SQLite database, a local Stellar RPC stub, and the dashboard.
+It does not require a root `.env` file, deployed contracts, Stellar credentials,
+or production service credentials.
+
+From the repository root, run:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --build -d
+```
+
+Compose runs `cargo test --workspace --all-features` in the contract workspace
+before starting the listener. The listener stores its database in its own named
+volume; the dashboard waits for the listener health check.
+
+| Service | URL / behavior |
+|---------|----------------|
+| Dashboard | http://localhost:5173 |
+| Listener API | http://localhost:8787 |
+| Listener health | http://localhost:8787/health |
+| Local Stellar RPC stub | Internal to the Compose network; returns an empty event page |
+
+Check the stack and contract test output:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml ps
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml logs contract-tests
+```
+
+Stop the scenario and remove its containers, network, and test database/cache
+volumes:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml down --volumes --remove-orphans
+```
+
+This stack is intended for local integration and UI development. Soroban
+contracts are initialized in-process by their test suite; no contract is
+deployed to the stub. The stub returns no chain events, so it verifies service
+connectivity and dashboard/API startup rather than live contract event delivery.
+For a real testnet integration, follow [Listener service](#3-listener-service)
+and configure a deployed test contract separately.
+
+---
+
+## 6. Smart contracts
 
 ### AutoShare (`contract/`)
 
@@ -154,7 +207,7 @@ cargo test
 
 ---
 
-## 6. Optional: frontend analytics app
+## 7. Optional: frontend analytics app
 
 ```bash
 cd frontend
@@ -166,7 +219,7 @@ Open [http://localhost:3000](http://localhost:3000) when you work on analytics U
 
 ---
 
-## 7. Environment variables
+## 8. Environment variables
 
 - Listener: see `listener/.env.example` and [ENVIRONMENT_VARIABLES_AND_SECRETS.md](../ENVIRONMENT_VARIABLES_AND_SECRETS.md)
 - Dashboard: `VITE_EVENTS_API_URL` (events API base URL)
@@ -180,7 +233,8 @@ Complete these steps to confirm your environment is ready for development.
 ### Toolchain
 
 - [ ] `rustc`, `cargo`, `stellar`, `node`, and `npm` versions print successfully
-- [ ] `rustup target list --installed` includes `wasm32-unknown-unknown`
+- [ ] `rustup toolchain list` includes Rust 1.86.0 and
+      `rustup target list --toolchain 1.86.0 --installed` includes `wasm32v1-none`
 
 ### Listener
 
@@ -188,6 +242,9 @@ Complete these steps to confirm your environment is ready for development.
 - [ ] `npm run migrate` creates `listener/data/notifications.db`
 - [ ] `npm run dev` starts without crashing
 - [ ] `curl http://localhost:8787/health` returns HTTP 200 with `"status":"ok"`
+- [ ] `npm test -- --runInBand src/migrations/migration-upgrade.test.ts src/database/database-transaction.test.ts`
+      passes the prior-schema upgrade and rollback checks (fixtures cover
+      pre-004 and pre-005 databases)
 
 ### Dashboard
 
@@ -211,20 +268,20 @@ cd listener && npm ci && npm run lint && npm run typecheck && npm test --silent
 cd dashboard && npm ci && npm run lint && npm run build && npm test --silent && npm run test:wallet --silent
 
 # Contracts
-cd contract && cargo fmt --all -- --check && cargo test --workspace --all-features --verbose
+cd contract && cargo test --workspace --all-features --locked && cargo build --workspace --release --locked --target wasm32v1-none
 ```
 
 - [ ] All commands above succeed on your machine (or note pre-existing upstream failures in your PR)
 
 ---
 
-## 8. VS Code (recommended)
+## 9. VS Code (recommended)
 
-Install [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) and [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint). The repo includes `.vscode/settings.json` with `wasm32-unknown-unknown` configured for contracts.
+Install [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) and [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint). Configure rust-analyzer to use `wasm32v1-none` when working on Soroban contracts.
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|

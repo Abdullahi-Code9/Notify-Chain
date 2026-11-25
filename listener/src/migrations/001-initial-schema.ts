@@ -4,6 +4,15 @@ const migration = {
   id: '001',
   name: 'initial-schema',
   up: async (db: sqlite3.Database) => {
+    // The production bootstrap path (Database.initialize()) applies schema.sql with
+    // its own robust splitter. If the schema already exists, skip this migration
+    // to avoid issues with naive statement splitting and duplicate objects.
+    const existing = await new Promise<any>((resolve, reject) => {
+      db.get("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'scheduled_notifications'", (error, row) => (error ? reject(error) : resolve(row)));
+    });
+    if (existing) {
+      return;
+    }
     const schemaSql = `
       -- Main table for scheduled notifications
       CREATE TABLE IF NOT EXISTS scheduled_notifications (

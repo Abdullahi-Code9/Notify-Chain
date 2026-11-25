@@ -723,7 +723,7 @@ export function NotificationSearchPage() {
 
                   <div
                     className="pagination__pages"
-                    role="list"
+                    role="group"
                     aria-label="Page numbers"
                   >
                     {visiblePages.map(
