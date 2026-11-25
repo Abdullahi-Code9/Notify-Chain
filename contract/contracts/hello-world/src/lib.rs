@@ -1093,6 +1093,7 @@ mod tests {
     mod channel_metadata_test;
     mod channel_subscription_test;
     mod clock_test;
+    mod event_compatibility_test;
     mod event_regression_test;
     mod expired_authorization_test;
     mod expiration_test;
