@@ -905,6 +905,40 @@ impl AutoShareContract {
         nonce_logic::get_nonce_record(&env, &signer, operation, nonce)
     }
 
+    /// Returns `true` when a persisted authorization record has expired.
+    ///
+    /// Missing records fail with `NotFound` instead of being treated as valid.
+    pub fn is_authorization_expired(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        nonce: u64,
+    ) -> Result<bool, base::errors::Error> {
+        let record = nonce_logic::require_valid_authorization(
+            &env,
+            &signer,
+            operation,
+            nonce,
+        );
+        match record {
+            Ok(_) => Ok(false),
+            Err(base::errors::Error::NonceExpired) => Ok(true),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Removes only expired authorization records up to `max_nonce`.
+    ///
+    /// Active records and the next-nonce counter are never modified.
+    pub fn prune_expired_authorizations(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        max_nonce: u64,
+    ) -> u32 {
+        nonce_logic::prune_expired_authorizations(&env, &signer, operation, max_nonce)
+    }
+
     /// Replay-protected variant of [`Self::pause`].
     ///
     /// The admin's signature covers `nonce`, `contract` and `valid_until`
@@ -1060,6 +1094,7 @@ mod tests {
     mod channel_subscription_test;
     mod clock_test;
     mod event_regression_test;
+    mod expired_authorization_test;
     mod expiration_test;
     mod extended_coverage_test;
     mod fuzz_test;
