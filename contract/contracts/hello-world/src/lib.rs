@@ -49,6 +49,21 @@ impl AutoShareContract {
         VERSION
     }
 
+    /// Returns a consistent, read-only snapshot of related contract state.
+    ///
+    /// See `docs/CONTRACT_STATE_SNAPSHOT.md` for the meaning of every field.
+    /// This function performs no storage writes and emits no events.
+    pub fn get_state_snapshot(env: Env) -> base::types::ContractStateSnapshot {
+        base::types::ContractStateSnapshot {
+            admin: autoshare_logic::get_admin(env.clone()).ok(),
+            pending_owner: autoshare_logic::get_pending_owner(env.clone()),
+            paused: autoshare_logic::get_paused_status(&env),
+            schema_version: autoshare_logic::get_schema_version(env.clone()),
+            notification_version: autoshare_logic::get_notification_version(env.clone()),
+            limits: autoshare_logic::get_notification_limits(env),
+        }
+    }
+
     // ============================================================================
     // Admin Management
     // ============================================================================
@@ -1061,6 +1076,7 @@ mod tests {
     mod preferences_test;
     mod revocation_test;
     mod schema_version_test;
+    mod state_snapshot_test;
     mod storage_optimization_test;
     mod subscription_cancellation_test;
     mod template_registry_test;
