@@ -35,6 +35,8 @@ import { NotificationHealthMonitor } from './services/notification-health-monito
 import { getWorkerManager } from './services/worker-manager';
 import { DeliveryReceiptRepository } from './services/delivery-receipt-repository';
 import { ApiCredentialService } from './services/api-credential-service';
+import { installCrashDiagnosticsHandlers, formatCrashDiagnostic } from './utils/crash-diagnostics';
+import { redactValue } from './utils/redact';
 
 dotenv.config();
 
@@ -265,7 +267,7 @@ async function main() {
       logger.info('Graceful shutdown completed successfully', { signal });
       process.exit(0);
     } catch (error) {
-      logger.error('Error during graceful shutdown', { signal, error });
+      logger.error('Error during graceful shutdown', { signal, error: redactValue(error) });
       process.exit(1);
     }
   };
@@ -273,6 +275,8 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
+
+installCrashDiagnosticsHandlers(logger);
 
 main().catch((err) => {
   if (err instanceof SecretValidationError) {
@@ -282,7 +286,7 @@ main().catch((err) => {
   } else if (err instanceof ConfigError) {
     logger.error('Configuration error', { error: err.message });
   } else {
-    logger.error('Error starting service', { error: err });
+    logger.error('Error starting service', formatCrashDiagnostic(err));
   }
   process.exit(1);
 });
