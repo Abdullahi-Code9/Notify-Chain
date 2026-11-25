@@ -25,6 +25,7 @@ import {
 } from '../utils/validation';
 import { ScheduleAuditTrail } from './schedule-audit-trail';
 import { assertValidTimezone, InvalidTimezoneError } from '../utils/timezone';
+import { validateNotificationDestinationUrl } from '../utils/ssrf-url-validation';
 
 const PRIORITY_MIN = 1;
 const PRIORITY_MAX = 10;
@@ -131,6 +132,9 @@ export class NotificationAPI {
     if (!isNonEmptyString(input.targetRecipient)) {
       throw new Error('targetRecipient is required and must be a non-empty string');
     }
+    // SSRF protection (#1205): reject internal/unsupported destinations before
+    // the schedule is persisted. DNS is revalidated at delivery time as well.
+    validateNotificationDestinationUrl(input.targetRecipient);
 
     const v = new InputValidator();
     v.check(
