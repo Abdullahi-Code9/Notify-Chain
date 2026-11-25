@@ -40,6 +40,7 @@ CI quality checks: [dashboard accessibility](docs/accessibility-automation.md),
 > **Repository map**: [Project Structure Guide](docs/PROJECT-STRUCTURE.md) — major directories, modules, and where code belongs.
 >
 > **Event reference**: [Smart Contract Event Reference Guide](CONTRACT_EVENT_REFERENCE.md) — all emitted events, parameters, data types, and usage recommendations for indexers and listeners.
+> **Event decoding**: [Stellar Event Decoding Cookbook](STELLAR_EVENT_DECODING_COOKBOOK.md) — RPC event structure, XDR topic/payload decoding, SDK examples, and common mistakes.
 >
 > **Dashboard Storybook**: [dashboard/STORYBOOK.md](dashboard/STORYBOOK.md) — component documentation for design and development reviews.
 > **API errors**: [API Error Reference](docs/API_ERROR_REFERENCE.md) — every error response the listener API returns, with causes and resolutions.
