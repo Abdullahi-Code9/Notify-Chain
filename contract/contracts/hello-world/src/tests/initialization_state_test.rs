@@ -55,7 +55,7 @@ fn failed_operations_leave_storage_unchanged() {
     client.initialize_admin(&admin);
     assert_eq!(client.get_usage_fee(), 10);
 
-    let other_admin = Address::generate(&_env);
+    let other_admin = Address::generate(&env);
     assert!(client.try_initialize_admin(&other_admin).is_err());
     assert_eq!(client.get_usage_fee(), 10);
 }

@@ -1065,6 +1065,7 @@ mod tests {
     mod revocation_test;
     mod schema_version_test;
     mod storage_optimization_test;
+    mod structured_error_codes_test;
     mod subscription_cancellation_test;
     mod template_registry_test;
     mod test_utils_test;
