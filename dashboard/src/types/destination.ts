@@ -30,6 +30,8 @@ export interface DestinationFieldDefinition {
 
 export interface NotificationDestination {
   id: string;
+  /** Server-assigned account/principal identifier owning this destination. */
+  ownerId?: string;
   provider: DestinationProvider;
   displayName: string;
   enabled: boolean;
@@ -42,6 +44,17 @@ export interface NotificationDestination {
   lastError?: string | null;
   /** Epoch milliseconds of the last test notification. */
   lastTestedAt?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateDestinationInput {
+  id?: string;
+  provider: DestinationProvider;
+  displayName?: string;
+  enabled?: boolean;
+  settings?: Record<string, string>;
+  secrets?: Record<string, string>;
 }
 
 /**
