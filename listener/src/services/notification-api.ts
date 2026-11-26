@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_PAYLOAD_SIZE_BYTES,
 } from '../utils/payload-size-validator';
 import { validateNotificationMetadata } from '../utils/metadata-validator';
+import { NotificationAmplificationGuard } from '../utils/notification-amplification-guard';
 import { ensureNotificationVersion } from '../utils/notification-version';
 import logger from '../utils/logger';
 import {
@@ -25,12 +26,23 @@ import {
 } from '../utils/validation';
 import { ScheduleAuditTrail } from './schedule-audit-trail';
 import { assertValidTimezone, InvalidTimezoneError } from '../utils/timezone';
+import {
+  DeliveryWindow,
+  QuietHours,
+  validateDeliveryWindow,
+  validateQuietHours,
+} from '../utils/delivery-window';
+import { validateNotificationDestinationUrl } from '../utils/ssrf-url-validation';
 
 const PRIORITY_MIN = 1;
 const PRIORITY_MAX = 10;
 import { buildRetryStatisticsPayload } from './retry-statistics';
 import { canModifyScheduleStatus } from './schedule-state-machine';
 import { DEFAULT_MAX_SCHEDULING_HORIZON_MS, validateScheduleInput } from './schedule-validator';
+import {
+  DestinationOwnershipError,
+  DestinationService,
+} from './destination-service';
 
 export { InvalidTimezoneError };
 
@@ -46,6 +58,24 @@ export interface CancelScheduleResult {
   status: string | null;
   message: string;
   notification?: Awaited<ReturnType<ScheduledNotificationRepository['getById']>>;
+}
+
+/**
+ * User notification delivery preferences exposed to the dashboard.
+ * Quiet hours and delivery windows are timezone-aware and never cause
+ * matching events to be discarded — they only delay delivery.
+ */
+export interface NotificationDeliveryPreferences {
+  /** User-specific quiet hours during which delivery is suppressed. */
+  quietHours: QuietHours | null;
+  /** Configurable delivery windows during which notifications may be sent. */
+  deliveryWindow: DeliveryWindow | null;
+}
+
+/** Patch shape accepted by the preference update endpoint. */
+export interface NotificationDeliveryPreferencesPatch {
+  quietHours?: QuietHours | null;
+  deliveryWindow?: DeliveryWindow | null;
 }
 
 function parseExpiresAt(value: Date | string | number): Date | null {
@@ -87,6 +117,7 @@ export class NotificationAPI {
     private maxSchedulingHorizonMs: number | null = DEFAULT_MAX_SCHEDULING_HORIZON_MS,
     private clock: () => Date = () => new Date(),
     private scheduleAudit?: ScheduleAuditTrail | null,
+    private amplificationGuard: NotificationAmplificationGuard = new NotificationAmplificationGuard(),
   ) {
     if (typeof maxPayloadSizeBytesOrIdempotency === 'number') {
       this.maxPayloadSizeBytes = maxPayloadSizeBytesOrIdempotency;
@@ -104,6 +135,60 @@ export class NotificationAPI {
     this.scheduleAudit = audit;
   }
 
+  /** Attach or replace the destination service used to validate destination ownership. */
+  setDestinationService(service: DestinationService | null): void {
+    this.destinationService = service;
+  }
+
+  /**
+   * Read the current delivery preferences (quiet hours + delivery window).
+   * Returns nulls when no preferences have been configured yet.
+   */
+  async getDeliveryPreferences(): Promise<NotificationDeliveryPreferences> {
+    const stored = await this.repository.getDeliveryPreferences();
+    return {
+      quietHours: stored?.quietHours ?? null,
+      deliveryWindow: stored?.deliveryWindow ?? null,
+    };
+  }
+
+  /**
+   * Update delivery preferences. Both fields are optional; omitted fields are
+   * left unchanged. Passing `null` explicitly clears a preference.
+   * Values are validated (including timezone) before being persisted.
+   */
+  async updateDeliveryPreferences(
+    patch: NotificationDeliveryPreferencesPatch,
+    requestId?: string,
+  ): Promise<NotificationDeliveryPreferences> {
+    if (!isPlainObject(patch)) {
+      throw new Error('preferences must be an object');
+    }
+
+    const update: NotificationDeliveryPreferencesPatch = {};
+
+    if (patch.quietHours !== undefined) {
+      update.quietHours =
+        patch.quietHours === null ? null : validateQuietHours(patch.quietHours);
+    }
+    if (patch.deliveryWindow !== undefined) {
+      update.deliveryWindow =
+        patch.deliveryWindow === null ? null : validateDeliveryWindow(patch.deliveryWindow);
+    }
+
+    logger.info('Updating notification delivery preferences', {
+      requestId,
+      quietHours: update.quietHours !== undefined,
+      deliveryWindow: update.deliveryWindow !== undefined,
+    });
+
+    const stored = await this.repository.updateDeliveryPreferences(update);
+    return {
+      quietHours: stored?.quietHours ?? null,
+      deliveryWindow: stored?.deliveryWindow ?? null,
+    };
+  }
+
   /**
    * Schedule a notification for future delivery
    * Supports idempotent request handling via idempotency keys
@@ -114,6 +199,36 @@ export class NotificationAPI {
     idempotencyKey?: string,
   ): Promise<number> {
     // Validate input
+    let resolvedDestination: Awaited<ReturnType<DestinationService['resolveOwnedDestination']>> | null =
+      null;
+    if (input.destinationId !== undefined) {
+      if (!this.destinationService) {
+        throw new DestinationOwnershipError(
+          'Destination service is unavailable to verify destination ownership.',
+        );
+      }
+      if (!isNonEmptyString(input.ownerId)) {
+        throw new DestinationOwnershipError(
+          'Authenticated ownerId is required when referencing a destination.',
+        );
+      }
+      resolvedDestination = await this.destinationService.resolveOwnedDestination(
+        input.destinationId,
+        input.ownerId,
+      );
+      const mappedType =
+        resolvedDestination.provider === 'discord'
+          ? NotificationType.DISCORD
+          : resolvedDestination.provider === 'email'
+            ? NotificationType.EMAIL
+            : NotificationType.WEBHOOK;
+      input = {
+        ...input,
+        notificationType: input.notificationType ?? mappedType,
+        targetRecipient: resolvedDestination.targetRecipient || input.targetRecipient,
+      };
+    }
+
     input = {
       ...input,
       recurrence: validateScheduleInput(
@@ -131,6 +246,16 @@ export class NotificationAPI {
     if (!isNonEmptyString(input.targetRecipient)) {
       throw new Error('targetRecipient is required and must be a non-empty string');
     }
+    // SSRF protection (#1205): reject internal/unsupported destinations before
+    // the schedule is persisted. DNS is revalidated at delivery time as well.
+    validateNotificationDestinationUrl(input.targetRecipient);
+
+    // Apply per-destination limits and equivalent-request protection before
+    // validating or persisting further, so repeated triggers cannot amplify.
+    this.amplificationGuard.check(
+      input.targetRecipient,
+      JSON.stringify([input.targetRecipient, input.notificationType, input.payload]),
+    );
 
     const v = new InputValidator();
     v.check(
@@ -210,15 +335,23 @@ export class NotificationAPI {
 
     const createAndAudit = async (): Promise<number> => {
       const id = await this.repository.create(input, requestId);
+      if (resolvedDestination) {
+        await this.repository.bindDestinationOwnership(
+          id,
+          resolvedDestination.id,
+          resolvedDestination.ownerId,
+        );
+      }
       await this.scheduleAudit?.record({
         scheduledNotificationId: id,
         action: 'CREATED',
-        actor: 'api',
+        actor: input.ownerId ?? 'api',
         toStatus: NotificationStatus.PENDING,
         details: {
           notificationType: input.notificationType,
           eventId: input.eventId ?? null,
           contractAddress: input.contractAddress ?? null,
+          destinationId: resolvedDestination?.id ?? null,
           executeAt: input.executeAt.toISOString(),
         },
       });

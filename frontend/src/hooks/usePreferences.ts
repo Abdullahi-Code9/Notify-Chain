@@ -10,6 +10,7 @@ import type {
   ChannelPreference,
   DeliveryChannel,
   NotificationCategory,
+  QuietHours,
   RecipientPreferences,
 } from "../types/preferences";
 import { DEFAULT_PREFERENCES } from "../types/preferences";
@@ -34,6 +35,8 @@ export interface UsePreferencesReturn {
     channels: ChannelPreference[],
     categories: CategoryPreference[]
   ) => Promise<void>;
+  /** Update the user's quiet hours (timezone-aware delivery window) */
+  setQuietHours: (quietHours: QuietHours | null) => Promise<void>;
   /** Reset everything to the all-enabled defaults */
   reset: () => Promise<void>;
 }
@@ -122,6 +125,24 @@ export function usePreferences(recipient: string | null): UsePreferencesReturn {
     [recipient, state]
   );
 
+  const setQuietHours = useCallback(
+    async (quietHours: QuietHours | null) => {
+      if (!recipient || state.status !== "success") return;
+      const prev = state.data;
+      setState({
+        status: "success",
+        data: { ...prev, quietHours },
+      });
+      try {
+        await preferenceService.setQuietHours(recipient, quietHours);
+      } catch (err) {
+        setState({ status: "success", data: prev });
+        throw err;
+      }
+    },
+    [recipient, state]
+  );
+
   const reset = useCallback(async () => {
     if (!recipient || state.status !== "success") return;
     const prev = state.data;
@@ -140,5 +161,5 @@ export function usePreferences(recipient: string | null): UsePreferencesReturn {
     }
   }, [recipient, state]);
 
-  return { state, refresh, setChannel, setCategory, setAll, reset };
+  return { state, refresh, setChannel, setCategory, setAll, setQuietHours, reset };
 }

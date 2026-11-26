@@ -16,6 +16,7 @@ Complete technical documentation of NotifyChain backend services, their responsi
 6. [Communication Patterns](#communication-patterns)
 7. [Error Handling & Recovery](#error-handling--recovery)
 8. [Scalability Considerations](#scalability-considerations)
+9. [Database Reference](#database-reference)
 
 ---
 
@@ -58,9 +59,9 @@ NotifyChain is composed of three major backend layers:
 ├────────────────────────────────┼───────────────────────────────┤
 │                                │                               │
 │  ┌──────────────────────────────▼────────────────────────┐    │ │
-│  │  Storage Layer (SQLite / PostgreSQL)                 │    │ │
-│  │  - Events table                                       │    │ │
-│  │  - Notifications table                                │    │ │
+│  │  Storage Layer (SQLite)                              │    │ │
+│  │  - processed_events / polling_cursors                │    │ │
+│  │  - scheduled_notifications / delivery records         │    │ │
 │  │  - Scheduling metadata                                │    │ │
 │  │  - Deduplication state                                │    │ │
 │  └──────────────────────────────┬────────────────────────┘    │ │
@@ -456,24 +457,21 @@ Contract Event       Listener     Dedup Check    Database      API Query
 | Tier | Technology | Purpose | Retention | Scalability |
 |------|-----------|---------|-----------|------------|
 | **Hot** | In-memory cache (Deduplicator) | Fast dedup lookup | 5 minutes | Local process only |
-| **Warm** | SQLite (local) | Event persistence | 30-90 days | Single machine (~1GB/day) |
-| **Cold** | PostgreSQL (optional) | Long-term archive | Unlimited | Horizontally scalable |
+| **Warm** | SQLite `scheduled_notifications` and operational tables | Active delivery state and audit | Configurable retention | One writer per database file |
+| **Cold** | SQLite `notification_archive` | Terminal notification snapshots | Configurable archive retention | Remains in the same database file |
+
+PostgreSQL, horizontal Listener scaling, and a shared PostgreSQL repository are
+future design directions, not implemented current runtime behavior. See
+[Database Schema and Relationships](docs/DATABASE_SCHEMA.md) for the implemented
+SQLite entities, constraints, indexes, and relationships.
 
 ### Migration Path: SQLite → PostgreSQL
 
-For production deployments handling high event volume, migrate to PostgreSQL:
-
-```sql
--- Connection string format:
-DATABASE_URL=postgresql://user:pass@host:5432/notifychain
-
--- Automatic migration on startup:
-// In listener/src/db/index.ts
-if (DATABASE_URL.includes("postgresql")) {
-  pool = new PGPool(parseUrl(DATABASE_URL));
-  await runMigrations(pool);
-}
-```
+PostgreSQL support is not implemented in the current Listener. A future migration
+would require a new connection implementation, PostgreSQL migration dialect,
+cross-database backup/export tooling, and validation of SQLite-specific triggers,
+partial indexes, and constraints. Do not configure `DATABASE_URL` expecting it
+to switch databases; the current Listener opens `DATABASE_PATH` through SQLite.
 
 ---
 
@@ -495,8 +493,8 @@ if (DATABASE_URL.includes("postgresql")) {
        └─> If duplicate → emit event_filtered, discard
 
 4. Database Storage
-   └─> Insert event into events table
-       └─> Store metadata (ledger, timestamp, etc.)
+   └─> Record event identity in processed_events
+       └─> Update polling_cursors and schedule notification rows as applicable
 
 5. Notification Dispatch
    └─> NotificationDispatcher picks up event
@@ -690,15 +688,27 @@ For high-volume deployments, run multiple Listener instances:
    NOTIFICATION_BATCH_TIMEOUT_MS=1000
    ```
 
-4. **Archive old events** to keep database fast:
-   ```sql
-   DELETE FROM events WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
-   ```
+4. **Run configured retention and archival jobs** rather than ad-hoc event deletion:
+   - purge or archive terminal `scheduled_notifications`
+   - account for cascades from `dead_letter_queue` and `notification_execution_log`
+   - remove expired `processed_events`, rate-limit records, and idempotency keys
+   - back up first, then apply retention policy
 
-5. **Migrate to PostgreSQL** for unlimited scalability:
-   - Handles millions of events efficiently
-   - Supports connection pooling
-   - Built-in replication for high availability
+5. **For higher concurrency**, PostgreSQL would require a dedicated implementation
+   and migration; it is not a runtime fallback for the SQLite Listener today.
+
+---
+
+## Database Reference
+
+The authoritative persisted-entity guide is
+[Database Schema and Relationships](docs/DATABASE_SCHEMA.md). It documents the
+core, audit, template, delivery, deduplication, metrics, and auxiliary tables,
+their constraints and foreign keys, the ER diagram, and SQLite-specific behavior.
+
+Use [Database Query Performance](docs/DATABASE_QUERY_PERFORMANCE.md) for index
+rationale and query plans, and [Database Backup and Restore](docs/DATABASE_BACKUP_RESTORE.md)
+for data protection and recovery procedures.
 
 ---
 

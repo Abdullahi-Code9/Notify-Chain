@@ -42,6 +42,33 @@ export enum NotificationFormat {
 export type FormatPreference = NotificationFormat;
 
 /**
+ * Provider-specific payload limits.
+ *
+ * A provider declares only the limits that are relevant to it; omitted limits
+ * are treated as unbounded. The orchestration layer (`ProviderRegistry`)
+ * validates every outbound payload against these limits before dispatch so a
+ * provider is never asked to deliver a message it cannot handle.
+ */
+export interface PayloadLimits {
+  /** Maximum length of the message body, in characters. */
+  maxBodyLength?: number;
+  /** Maximum length of the title/subject, in characters. */
+  maxTitleLength?: number;
+  /** Maximum number of attachments permitted in a single payload. */
+  maxAttachmentCount?: number;
+  /** Maximum number of top-level fields permitted in the payload object. */
+  maxFieldCount?: number;
+  /** Maximum serialized payload size, in bytes. */
+  maxPayloadBytes?: number;
+  /**
+   * Maximum number of messages accepted in a single batched delivery.
+   * Declarative metadata for batch-aware callers; the single-message
+   * pre-delivery validator does not enforce it.
+   */
+  maxBatchSize?: number;
+}
+
+/**
  * Metadata that describes a provider and the features it supports.
  */
 export interface ProviderMetadata {
@@ -59,6 +86,11 @@ export interface ProviderMetadata {
    * Must be a member of `supportedFormats`.
    */
   readonly defaultFormat: NotificationFormat;
+  /**
+   * Optional provider-specific payload limits, enforced by the orchestration
+   * layer before dispatch. Providers without limits accept any payload.
+   */
+  readonly payloadLimits?: PayloadLimits;
 }
 
 export interface DeliveryPayload {
@@ -123,6 +155,17 @@ export interface NotificationProvider {
    * Returns `true` when the given format is listed in `metadata.supportedFormats`.
    */
   supportsFormat(format: NotificationFormat): boolean;
+
+  /**
+   * Returns this provider's declared capability metadata (supported formats,
+   * capability flags and payload limits).
+   *
+   * Optional so existing providers remain compatible; when omitted the
+   * orchestration layer falls back to `metadata`. New providers should
+   * implement it so capabilities can be inspected without coupling the
+   * orchestrator to the concrete provider type.
+   */
+  getCapabilities?(): ProviderMetadata;
 
   deliver(payload: DeliveryPayload): Promise<DeliveryResult>;
 

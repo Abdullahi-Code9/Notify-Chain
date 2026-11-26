@@ -1,6 +1,7 @@
 import { Database } from '../database/database';
 import logger from '../utils/logger';
 import { generateFingerprint } from './notification-deduplicator';
+import { MetadataStatus, TransactionMetadata } from '../types/transaction-metadata';
 
 export interface ProcessedEventRecord {
   eventId: string;
@@ -14,6 +15,35 @@ export interface ProcessedEventRecord {
   notificationSent: boolean;
   status: 'PROCESSED' | 'SKIPPED' | 'ERROR';
   errorReason?: string;
+  /** Completeness of the persisted transaction metadata, when recorded. */
+  metadataStatus?: MetadataStatus | null;
+  /** Blockchain transaction context enriched during ingestion, when recorded. */
+  txMetadata?: TransactionMetadata | null;
+}
+
+/** Serialise transaction metadata for persistence; never throws. */
+function serializeMetadata(metadata?: TransactionMetadata | null): string | null {
+  if (!metadata) {
+    return null;
+  }
+  try {
+    return JSON.stringify(metadata);
+  } catch (error) {
+    logger.warn('Failed to serialise transaction metadata for persistence', { error });
+    return null;
+  }
+}
+
+/** Parse persisted transaction metadata; returns null on missing/invalid data. */
+function parseMetadata(raw: unknown): TransactionMetadata | null {
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as TransactionMetadata;
+  } catch {
+    return null;
+  }
 }
 
 export interface PollingCursorRecord {
@@ -143,8 +173,11 @@ export class EventDeduplicationService {
     notificationSent: boolean,
     status: 'PROCESSED' | 'ERROR',
     errorReason?: string,
+    txMetadata?: TransactionMetadata | null,
   ): Promise<void> {
     const fingerprint = generateFingerprint(eventId, contractAddress);
+    const serializedMetadata = serializeMetadata(txMetadata);
+    const metadataStatus = txMetadata?.metadataStatus ?? null;
     try {
       await this.db.run(
         `
@@ -162,6 +195,32 @@ export class EventDeduplicationService {
         [eventId, contractAddress, fingerprint, ledgerNumber, txHash ?? null, eventType,
           notificationSent ? 1 : 0, status, errorReason ?? null],
       );
+
+        UPDATE processed_events
+        SET status = ?, notification_sent = ?, error_reason = ?,
+            tx_metadata = COALESCE(?, tx_metadata),
+            metadata_status = COALESCE(?, metadata_status),
+            processed_at = CURRENT_TIMESTAMP
+        WHERE fingerprint = ?
+        `,
+        [status, notificationSent ? 1 : 0, errorReason ?? null, serializedMetadata, metadataStatus, fingerprint],
+      );
+
+      if (result.changes === 0) {
+        await this.db.run(
+          `
+          INSERT INTO processed_events (
+            event_id, contract_address, fingerprint, ledger_number, tx_hash,
+            event_type, notification_sent, status, error_reason, is_reorg_duplicate,
+            tx_metadata, metadata_status
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+          ON CONFLICT(fingerprint) DO NOTHING
+          `,
+          [eventId, contractAddress, fingerprint, ledgerNumber, txHash ?? null, eventType,
+            notificationSent ? 1 : 0, status, errorReason ?? null, serializedMetadata, metadataStatus],
+        );
+      }
 
       logger.info('Event processed and recorded', {
         eventId,
@@ -367,10 +426,13 @@ export class EventDeduplicationService {
     eventType: string,
     notificationSent: boolean = true,
     status: 'PROCESSED' | 'SKIPPED' | 'ERROR' = 'PROCESSED',
-    errorReason?: string
+    errorReason?: string,
+    txMetadata?: TransactionMetadata | null,
   ): Promise<void> {
     try {
       const fingerprint = generateFingerprint(eventId, contractAddress);
+      const serializedMetadata = serializeMetadata(txMetadata);
+      const metadataStatus = txMetadata?.metadataStatus ?? null;
 
       // Single atomic upsert: insert a new record, or — if the fingerprint
       // already exists (reorg duplicate) — bump the counter in SQL. The old
@@ -380,18 +442,21 @@ export class EventDeduplicationService {
         `
         INSERT INTO processed_events (
           event_id, contract_address, fingerprint, ledger_number, tx_hash,
-          event_type, notification_sent, status, error_reason, is_reorg_duplicate
+          event_type, notification_sent, status, error_reason, is_reorg_duplicate,
+          tx_metadata, metadata_status
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         ON CONFLICT(fingerprint) DO UPDATE SET
           is_reorg_duplicate = 1,
           reorg_detection_count = processed_events.reorg_detection_count + 1,
           last_redetected_at = CURRENT_TIMESTAMP,
           status = excluded.status,
-          ledger_number = excluded.ledger_number
+          ledger_number = excluded.ledger_number,
+          tx_metadata = COALESCE(excluded.tx_metadata, processed_events.tx_metadata),
+          metadata_status = COALESCE(excluded.metadata_status, processed_events.metadata_status)
         RETURNING reorg_detection_count
         `,
-        [eventId, contractAddress, fingerprint, ledgerNumber, txHash, eventType, notificationSent ? 1 : 0, status, errorReason]
+        [eventId, contractAddress, fingerprint, ledgerNumber, txHash, eventType, notificationSent ? 1 : 0, status, errorReason, serializedMetadata, metadataStatus]
       );
 
       const reorgDetectionCount = rows[0]?.reorg_detection_count ?? 0;
@@ -420,6 +485,55 @@ export class EventDeduplicationService {
         error,
       });
       // Don't throw - allow processing to continue even if DB write fails
+    }
+  }
+
+  /**
+   * Fetch a single processed-event record (including its persisted transaction
+   * metadata) by event identity. Returns null when the event has not been
+   * recorded or the lookup fails.
+   */
+  async getProcessedEvent(
+    eventId: string,
+    contractAddress: string,
+  ): Promise<ProcessedEventRecord | null> {
+    try {
+      const fingerprint = generateFingerprint(eventId, contractAddress);
+      const rows = await this.db.all(
+        `
+        SELECT event_id, contract_address, fingerprint, ledger_number, tx_hash,
+               event_type, is_reorg_duplicate, reorg_detection_count,
+               notification_sent, status, error_reason, metadata_status, tx_metadata
+        FROM processed_events
+        WHERE fingerprint = ?
+        LIMIT 1
+        `,
+        [fingerprint],
+      );
+
+      if (rows.length === 0) {
+        return null;
+      }
+
+      const row = rows[0] as any;
+      return {
+        eventId: row.event_id,
+        contractAddress: row.contract_address,
+        fingerprint: row.fingerprint,
+        ledgerNumber: row.ledger_number,
+        txHash: row.tx_hash ?? undefined,
+        eventType: row.event_type,
+        isReorgDuplicate: row.is_reorg_duplicate === 1,
+        reorgDetectionCount: row.reorg_detection_count ?? 0,
+        notificationSent: row.notification_sent === 1,
+        status: row.status,
+        errorReason: row.error_reason ?? undefined,
+        metadataStatus: row.metadata_status ?? null,
+        txMetadata: parseMetadata(row.tx_metadata),
+      };
+    } catch (error) {
+      logger.error('Error retrieving processed event', { eventId, contractAddress, error });
+      return null;
     }
   }
 

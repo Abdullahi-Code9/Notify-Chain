@@ -619,6 +619,8 @@ All configuration is via environment variables, parsed and validated in
 ### Architecture Docs
 - [`SYSTEM_ARCHITECTURE_DIAGRAM.md`](SYSTEM_ARCHITECTURE_DIAGRAM.md) — **Visual ASCII architecture diagram** covering all on-chain and off-chain components, data flow, event lifecycle, scheduler state machine, deduplication, DB schema, and deployment topologies
 - [`ARCHITECTURE_OVERVIEW.md`](ARCHITECTURE_OVERVIEW.md) — Contributor-facing architecture deep-dive
+- [`SECURITY_THREAT_MODEL.md`](SECURITY_THREAT_MODEL.md) — Critical assets, trust boundaries, threat-to-mitigation mapping, dependencies, and open risks
+- [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — SQLite tables, relationships, constraints, ER diagram, and indexes
 - [`ARCHITECTURE_DIAGRAM.md`](ARCHITECTURE_DIAGRAM.md) — Scheduler retry deduplication flow diagrams
 - [`listener/ARCHITECTURE-DIAGRAM.md`](listener/ARCHITECTURE-DIAGRAM.md) — Scheduler subsystem diagrams
 - [`Documents/Task Bounty/ARCHITECTURE.md`](Documents/Task%20Bounty/ARCHITECTURE.md) — TaskBounty contract architecture

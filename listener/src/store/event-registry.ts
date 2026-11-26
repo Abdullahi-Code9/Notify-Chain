@@ -71,16 +71,31 @@ export class EventRegistry {
     }
 
     const topic = formatScValArray(input.topic);
+    const value = formatScValValue(input.value);
+    const eventName = input.eventName ?? topic[0] ?? null;
     const displayEvent: DisplayEvent = {
       eventId: input.eventId,
       contractAddress: input.contractAddress,
-      eventName: input.eventName ?? topic[0] ?? null,
+      eventName,
       ledger: input.ledger,
       type: input.type,
       topic,
-      value: formatScValValue(input.value),
+      value,
       txHash: input.txHash,
       receivedAt: Date.now(),
+      // Preserve the decoded payload exactly as ingested. Falls back to a
+      // snapshot of the decoded values when the caller did not supply one.
+      rawPayload: input.rawPayload ?? {
+        eventId: input.eventId,
+        contractAddress: input.contractAddress,
+        eventName,
+        ledger: input.ledger,
+        type: input.type,
+        topic: [...topic],
+        value,
+        txHash: input.txHash,
+      },
+      txMetadata: input.txMetadata,
     };
 
     this.events.set(eventKey, displayEvent);

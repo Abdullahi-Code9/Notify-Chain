@@ -5,6 +5,7 @@ import { EmptyState } from '../components/EmptyState';
 import { CopyButton } from '../components/CopyButton';
 import { EventCard } from '../components/EventCard';
 import { formatTimestamp as formatTime } from '../utils/formatTime';
+import { useActiveTimeZone } from '../store/timezoneStore';
 
 interface ContractStats {
   totalEvents: number;
@@ -28,6 +29,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 function ContractHeader({ address, stats }: { address: string; stats: ContractStats }) {
+  const timeZone = useActiveTimeZone();
   return (
     <header className="contract-detail__header">
       <div>
@@ -43,11 +45,11 @@ function ContractHeader({ address, stats }: { address: string; stats: ContractSt
         <StatCard label="Event Types" value={stats.uniqueEventTypes.toString()} />
         <StatCard
           label="First Event"
-          value={stats.firstEventAt ? formatTime(stats.firstEventAt) : 'N/A'}
+          value={stats.firstEventAt ? formatTime(stats.firstEventAt, timeZone) : 'N/A'}
         />
         <StatCard
           label="Last Event"
-          value={stats.lastEventAt ? formatTime(stats.lastEventAt) : 'N/A'}
+          value={stats.lastEventAt ? formatTime(stats.lastEventAt, timeZone) : 'N/A'}
         />
       </div>
     </header>

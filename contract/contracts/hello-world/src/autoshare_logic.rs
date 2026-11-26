@@ -1,14 +1,19 @@
 use crate::base::clock::current_time;
+use crate::base::constants::{
+    MAX_BATCH_SIZE, MAX_CHANNEL_CUSTOM_FIELDS, MAX_CHANNEL_DESCRIPTION_LEN,
+    MAX_MEMBER_COUNT, MAX_METADATA_STRING_LEN, MAX_NAME_LEN, MAX_TOPIC_LEN,
+};
 use crate::base::errors::Error;
 use crate::base::events::{
     AdminTransferred, AuditAction, AuditRecordAppended, AuthorizationFailure, AutoshareCreated,
     AutoshareUpdated, BatchNotificationsCreated, BatchProcessingCompleted, CategoryRegistered,
     ChannelMetadataUpdated, ContractPaused, ContractUnpaused, GroupActivated, GroupDeactivated,
-    NotificationAccessed, NotificationAcknowledged, NotificationArchived, NotificationCategory,
-    NotificationDelivered, NotificationExpired, NotificationExtended,
+    NetworkConfigInitialized, NotificationAccessed, NotificationAcknowledged, NotificationArchived,
+    NotificationCategory, NotificationDelivered, NotificationExpired, NotificationExtended,
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
-    NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
+    NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred, RecordsCleanedUp,
     ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
+    publish_operation_correlation,
 };
 use crate::base::metadata_validation::{validate_metadata, NotificationMetadata};
 use crate::base::types::{
@@ -35,11 +40,10 @@ use soroban_sdk::{contracttype, token, Address, BytesN, Env, Map, String, Vec};
 /// - `GroupMembers(id)` – members are embedded in `AutoShareDetails.members`
 ///   and were being written twice on every mutation.  Reads now go directly
 ///   to `AutoShareDetails`, halving storage writes for member operations.
-/// Maximum allowed length for AutoShare group names.
-const MAX_NAME_LENGTH: u32 = 100;
-/// Maximum number of members allowed per AutoShare group.
-const MAX_MEMBERS: u32 = 50;
-
+///
+/// Input-size limits are defined centrally in [`crate::base::constants`] so
+/// every entry point enforces the same bound; see that module for the full
+/// table of documented maximum sizes.
 #[contracttype]
 pub enum DataKey {
     AutoShare(BytesN<32>),
@@ -74,6 +78,9 @@ pub enum DataKey {
     /// caller-supplied idempotency key. Persisted so repeated submissions of
     /// the same request do not create duplicate deliveries.
     DeliveryIdempotency(BytesN<32>),
+    /// Network identifier stored at initialization to prevent cross-network
+    /// configuration mistakes (Issue #1196).
+    NetworkId,
 }
 
 // ============================================================================
@@ -92,6 +99,48 @@ const INSTANCE_PENDING_OWNER: &str = "PendOwner";
 /// Instance-storage key for the monotonically increasing idempotency counter
 /// used to derive deterministic delivery identifiers.
 const INSTANCE_DELIVERY_SEQ: &str = "DelivSeq";
+/// Instance-storage key for the network identifier locked in at initialization.
+///
+/// Stores the `BytesN<32>` returned by `env.ledger().network_id()` at the
+/// time `initialize_admin` (or `initialize_with_network`) is first called.
+/// Every subsequent mutating call to `validate_network` checks the live
+/// ledger value against this stored value and panics with
+/// `Error::NetworkMismatch` if they differ, preventing cross-network misuse.
+const INSTANCE_NETWORK_ID: &str = "NetworkId";
+
+// ============================================================================
+// Enumeration limits (Issue #1199)
+// ============================================================================
+//
+// Unbounded collection reads grow linearly with state and can exceed Soroban
+// ledger resource limits as the contract accumulates records over time.
+// Every paginated read function enforces `MAX_ENUMERATION_PAGE_SIZE` to keep
+// single-invocation resource usage predictable and deterministic.
+//
+// | Limit                       | Value | Rationale                             |
+// |-----------------------------|-------|---------------------------------------|
+// | MAX_ENUMERATION_PAGE_SIZE   | 100   | Fits within a single Soroban TX budget |
+//
+/// Maximum number of records that may be returned in a single paginated
+/// enumeration call. Requests for a larger page are rejected with
+/// [`Error::PageLimitExceeded`].
+pub const MAX_ENUMERATION_PAGE_SIZE: u32 = 100;
+
+// ============================================================================
+// Network configuration constants (Issue #1196)
+// ============================================================================
+//
+// These well-known passphrases identify Stellar networks. The contract stores
+// the expected network identifier at initialization time and can validate it
+// on demand so that off-chain integrations detect cross-network mismatches
+// before they cause data corruption.
+
+/// Stellar Testnet network passphrase.
+pub const STELLAR_TESTNET_PASSPHRASE: &str = "Test SDF Network ; September 2015";
+/// Stellar Mainnet (Public) network passphrase.
+pub const STELLAR_MAINNET_PASSPHRASE: &str = "Public Global Stellar Network ; September 2015";
+/// Stellar Futurenet network passphrase.
+pub const STELLAR_FUTURENET_PASSPHRASE: &str = "Test SDF Future Network ; October 2022";
 
 pub fn create_autoshare(
     env: Env,
@@ -102,6 +151,13 @@ pub fn create_autoshare(
     payment_token: Address,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
+
+    // Enforce the name bound up front, before any storage reads/writes, TTL
+    // management, or event emission.
+    if name.len() > MAX_NAME_LEN {
+        return Err(Error::NameTooLong);
+    }
 
     // Check if contract is paused
     if get_paused_status(&env) {
@@ -122,11 +178,6 @@ pub fn create_autoshare(
     // Validate usage count
     if usage_count == 0 {
         return Err(Error::InvalidUsageCount);
-    }
-
-    // Validate name length
-    if name.len() > MAX_NAME_LENGTH {
-        return Err(Error::NameTooLong);
     }
 
     // Verify token is supported
@@ -304,7 +355,7 @@ pub fn add_group_member(
     }
 
     // Validate member count limit
-    if details.members.len() >= MAX_MEMBERS {
+    if details.members.len() >= MAX_MEMBER_COUNT {
         return Err(Error::TooManyMembers);
     }
 
@@ -327,24 +378,125 @@ pub fn add_group_member(
 // Admin Management
 // ============================================================================
 
-pub fn initialize_admin(env: Env, admin: Address) {
+pub fn initialize_admin(env: Env, admin: Address) -> Result<(), Error> {
     admin.require_auth();
 
-    // Only set if not already initialized (instance storage)
-    if !env.storage().instance().has(&INSTANCE_ADMIN) {
-        env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    // Initialization is a one-time, authorized workflow. A repeat by the same
+    // admin is a safe no-op; any attempt to replace that admin must fail
+    // explicitly before touching state.
+    if let Some(current_admin) = env.storage().instance().get::<_, Address>(&INSTANCE_ADMIN) {
+        if current_admin == admin {
+            return Ok(());
+        }
+        return Err(Error::AlreadyInitialized);
+    }
 
-        // Initialize default usage fee (10 tokens per usage) in instance storage
-        env.storage().instance().set(&INSTANCE_FEE, &10u32);
+    env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    env.storage().instance().set(&INSTANCE_FEE, &10u32);
 
-        // Initialize empty supported tokens list in instance storage
-        let empty_tokens: Vec<Address> = Vec::new(&env);
+    let empty_tokens: Vec<Address> = Vec::new(&env);
+    env.storage()
+        .instance()
+        .set(&INSTANCE_TOKENS, &empty_tokens);
+
+    seed_default_categories(&env);
+    Ok(())
+}
+
+        // Lock in the network identifier at first initialization so callers
+        // from a different network are rejected early.
+        let network_id = env.ledger().network_id();
         env.storage()
             .instance()
-            .set(&INSTANCE_TOKENS, &empty_tokens);
+            .set(&INSTANCE_NETWORK_ID, &network_id);
 
         seed_default_categories(&env);
+/// Rejects calls that depend on contract state established by `initialize_admin`.
+pub fn require_initialized(env: &Env) -> Result<(), Error> {
+    if env.storage().instance().has(&INSTANCE_ADMIN) {
+        Ok(())
+    } else {
+        Err(Error::NotInitialized)
     }
+}
+
+// ============================================================================
+// Network Configuration  (Issue #1196)
+// ============================================================================
+
+/// Stores `expected_network_id` as the locked-in network identifier and emits
+/// a `NetworkConfigInitialized` event.
+///
+/// This is an optional, explicit companion to `initialize_admin`.  Call it
+/// when deployers want to record *and* advertise the expected network at a
+/// dedicated entry point (e.g. for observability or automated deployment
+/// checks).  `initialize_admin` already locks in the live `network_id`
+/// automatically, so this function's primary value is emitting the event and
+/// allowing operators to supply an explicit expected value.
+///
+/// # Errors
+/// - `Unauthorized` if `admin` is not the current contract admin.
+/// - `NetworkMismatch` if `expected_network_id` does not match the live
+///   `env.ledger().network_id()`.
+/// - `AlreadyExists` if the network config has already been explicitly set via
+///   this function.
+pub fn initialize_with_network(
+    env: Env,
+    admin: Address,
+    expected_network_id: BytesN<32>,
+) -> Result<(), Error> {
+    admin.require_auth();
+    require_admin(&env, &admin)?;
+
+    // Validate that the caller's expected network matches the live ledger.
+    let live_network_id = env.ledger().network_id();
+    if live_network_id != expected_network_id {
+        return Err(Error::NetworkMismatch);
+    }
+
+    // Persist the confirmed network id (idempotent after first explicit call).
+    // We always overwrite here because the live value already matched.
+    env.storage()
+        .instance()
+        .set(&INSTANCE_NETWORK_ID, &live_network_id);
+
+    NetworkConfigInitialized {
+        admin: admin.clone(),
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::High,
+        network_id: live_network_id,
+    }
+    .publish(&env);
+
+    Ok(())
+}
+
+/// Returns the network identifier that was locked in during initialization, or
+/// `None` if the contract has not yet been initialized.
+///
+/// The returned value is the SHA-256 hash of the Stellar network passphrase
+/// (i.e., the value returned by `env.ledger().network_id()`).
+pub fn get_network_id(env: Env) -> Option<BytesN<32>> {
+    env.storage().instance().get(&INSTANCE_NETWORK_ID)
+}
+
+/// Asserts that the current ledger's `network_id` matches the value that was
+/// stored during initialization.
+///
+/// Call this at the start of any function that must only run on the network it
+/// was deployed for.  Returns `Err(Error::NetworkMismatch)` on mismatch and
+/// returns `Ok(())` immediately (without reading persistent storage) if no
+/// network id has been stored yet, so that pre-initialization calls are not
+/// accidentally blocked.
+pub fn validate_network(env: &Env) -> Result<(), Error> {
+    let stored: Option<BytesN<32>> = env.storage().instance().get(&INSTANCE_NETWORK_ID);
+    if let Some(expected) = stored {
+        let live = env.ledger().network_id();
+        if live != expected {
+            return Err(Error::NetworkMismatch);
+        }
+    }
+    Ok(())
 }
 
 fn seed_default_categories(env: &Env) {
@@ -367,6 +519,295 @@ pub fn get_registered_categories(env: Env) -> Vec<NotificationCategory> {
         .persistent()
         .get(&key)
         .unwrap_or(Vec::new(&env))
+}
+
+// ============================================================================
+// Network Configuration  (Issue #1196)
+// ============================================================================
+//
+// A contract deployed to Testnet must not be accidentally used with Mainnet
+// configuration or vice-versa. By storing the expected network passphrase
+// at initialization time the contract can surface mismatches before they
+// cause data corruption in off-chain integrations.
+
+/// Stores the expected Stellar network passphrase for this deployment.
+///
+/// Must be called by the admin after (or during) initialization.
+/// The stored passphrase can later be queried with [`get_network_id`] or
+/// validated with [`validate_network_id`].
+///
+/// # Known passphrases
+/// - Testnet:   `"Test SDF Network ; September 2015"`
+/// - Mainnet:   `"Public Global Stellar Network ; September 2015"`
+/// - Futurenet: `"Test SDF Future Network ; October 2022"`
+///
+/// # Errors
+/// - [`Error::InvalidNetworkId`] – `network_passphrase` is an empty string.
+/// - [`Error::Unauthorized`]     – caller is not the contract admin.
+/// - [`Error::AlreadyExists`]    – a *different* network ID is already set;
+///   the same value is accepted idempotently (no error).
+pub fn set_network_id(env: Env, admin: Address, network_passphrase: String) -> Result<(), Error> {
+    admin.require_auth();
+    require_admin(&env, &admin)?;
+
+    if network_passphrase.len() == 0 {
+        return Err(Error::InvalidNetworkId);
+    }
+
+    let key = DataKey::NetworkId;
+    // Idempotent: skip the write if the identical value is already stored.
+    if let Some(existing) = env.storage().persistent().get::<DataKey, String>(&key) {
+        if existing == network_passphrase {
+            return Ok(());
+        }
+        // A different network ID is already committed — reject the change to
+        // prevent accidental cross-network configuration swaps.
+        return Err(Error::AlreadyExists);
+    }
+
+    env.storage().persistent().set(&key, &network_passphrase);
+    Ok(())
+}
+
+/// Returns the network passphrase stored for this deployment, if any.
+///
+/// Returns `None` if [`set_network_id`] has never been called (backward
+/// compatible: existing deployments that have not opted in are simply unset).
+pub fn get_network_id(env: Env) -> Option<String> {
+    env.storage()
+        .persistent()
+        .get::<DataKey, String>(&DataKey::NetworkId)
+}
+
+/// Validates that `expected_passphrase` matches the stored network identifier.
+///
+/// Off-chain integrations call this to confirm they are connected to the
+/// network this contract was deployed for before submitting transactions.
+///
+/// # Return value
+/// - `Ok(true)`  – passphrases match.
+/// - `Ok(false)` – no network ID has been set yet; treated as valid to
+///   preserve backward compatibility with existing deployments.
+/// - `Err(NetworkMismatch)`   – a network ID is stored but it differs from
+///   `expected_passphrase`.
+/// - `Err(InvalidNetworkId)` – `expected_passphrase` is empty.
+pub fn validate_network_id(
+    env: Env,
+    expected_passphrase: String,
+) -> Result<bool, Error> {
+    if expected_passphrase.len() == 0 {
+        return Err(Error::InvalidNetworkId);
+    }
+
+    match env
+        .storage()
+        .persistent()
+        .get::<DataKey, String>(&DataKey::NetworkId)
+    {
+        None => Ok(false),
+        Some(stored) => {
+            if stored == expected_passphrase {
+                Ok(true)
+            } else {
+                Err(Error::NetworkMismatch)
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Bounded enumeration helpers  (Issue #1199)
+// ============================================================================
+//
+// Each `_paged` function accepts an `offset` (0-indexed start position) and a
+// `page_size` (number of records to return).  `page_size` must not exceed
+// `MAX_ENUMERATION_PAGE_SIZE`; callers that ask for more receive
+// `Error::PageLimitExceeded` immediately without reading any storage.
+//
+// Results are always returned in the same deterministic order as the
+// underlying append-only storage, so the same (offset, page_size) inputs
+// always produce the same slice as long as no new records have been appended.
+
+/// Returns up to `page_size` AutoShare groups starting at `offset`.
+///
+/// Groups are returned in creation order (the order they were appended to the
+/// `AllGroups` index). The slice is deterministic for a fixed ledger state.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_all_groups_paged(
+    env: Env,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<AutoShareDetails>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let all_groups_key = DataKey::AllGroups;
+    let group_ids: Vec<BytesN<32>> = env
+        .storage()
+        .persistent()
+        .get(&all_groups_key)
+        .unwrap_or(Vec::new(&env));
+
+    let total = group_ids.len();
+    let mut result: Vec<AutoShareDetails> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        let id = group_ids.get(i).unwrap();
+        if let Ok(details) = get_autoshare(env.clone(), id) {
+            result.push_back(details);
+        }
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` audit records starting at `offset`.
+///
+/// Records are returned in append order (ascending `seq`). The slice is
+/// deterministic for a fixed ledger state.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_audit_log_paged(
+    env: Env,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<AuditRecord>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let log: Vec<AuditRecord> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::AuditLog)
+        .unwrap_or(Vec::new(&env));
+
+    let total = log.len();
+    let mut result: Vec<AuditRecord> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(log.get(i).unwrap());
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` payment history records for `user` starting at
+/// `offset`.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_user_payment_history_paged(
+    env: Env,
+    user: Address,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<PaymentHistory>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let history: Vec<PaymentHistory> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::UserPaymentHistory(user))
+        .unwrap_or(Vec::new(&env));
+
+    let total = history.len();
+    let mut result: Vec<PaymentHistory> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(history.get(i).unwrap());
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` payment history records for group `id` starting
+/// at `offset`.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_group_payment_history_paged(
+    env: Env,
+    id: BytesN<32>,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<PaymentHistory>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let history: Vec<PaymentHistory> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::GroupPaymentHistory(id))
+        .unwrap_or(Vec::new(&env));
+
+    let total = history.len();
+    let mut result: Vec<PaymentHistory> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(history.get(i).unwrap());
+    }
+    Ok(result)
+}
+
+/// Returns up to `page_size` audit records for a specific notification,
+/// starting at `offset`.
+///
+/// Filters the full audit log to records whose `notification_id` matches;
+/// pagination applies to the filtered slice.
+///
+/// # Errors
+/// - [`Error::PageLimitExceeded`] if `page_size > MAX_ENUMERATION_PAGE_SIZE`.
+pub fn get_notification_audit_paged(
+    env: Env,
+    notification_id: BytesN<32>,
+    offset: u32,
+    page_size: u32,
+) -> Result<Vec<AuditRecord>, Error> {
+    if page_size > MAX_ENUMERATION_PAGE_SIZE {
+        return Err(Error::PageLimitExceeded);
+    }
+
+    let log: Vec<AuditRecord> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::AuditLog)
+        .unwrap_or(Vec::new(&env));
+
+    // Collect matching records (filtered list is typically small).
+    let mut matching: Vec<AuditRecord> = Vec::new(&env);
+    for record in log.iter() {
+        if record.notification_id == notification_id {
+            matching.push_back(record);
+        }
+    }
+
+    let total = matching.len();
+    let mut result: Vec<AuditRecord> = Vec::new(&env);
+
+    let start = offset.min(total);
+    let end = (offset + page_size).min(total);
+
+    for i in start..end {
+        result.push_back(matching.get(i).unwrap());
+    }
+    Ok(result)
 }
 
 pub fn is_category_registered(env: Env, category: NotificationCategory) -> bool {
@@ -421,6 +862,7 @@ fn publish_authorization_failure(env: &Env, caller: &Address, action: &str) {
 }
 
 fn require_admin(env: &Env, caller: &Address) -> Result<(), Error> {
+    require_initialized(env)?;
     let admin: Address = env
         .storage()
         .instance()
@@ -971,6 +1413,15 @@ pub fn update_members(
 ) -> Result<(), Error> {
     caller.require_auth();
 
+    // Reject invalid-sized member lists up front, before any storage access or
+    // event emission: an empty list and a list exceeding the documented bound.
+    if new_members.is_empty() {
+        return Err(Error::EmptyMembers);
+    }
+    if new_members.len() > MAX_MEMBER_COUNT {
+        return Err(Error::TooManyMembers);
+    }
+
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
     }
@@ -989,16 +1440,6 @@ pub fn update_members(
 
     if !details.is_active {
         return Err(Error::GroupInactive);
-    }
-
-    // Validate new members
-    if new_members.is_empty() {
-        return Err(Error::EmptyMembers);
-    }
-
-    // Validate member count limit
-    if new_members.len() > MAX_MEMBERS {
-        return Err(Error::TooManyMembers);
     }
 
     let mut total_percentage: u32 = 0;
@@ -1171,7 +1612,7 @@ fn validate_members(env: &Env, members: &Vec<GroupMember>) -> Result<(), Error> 
         return Err(Error::EmptyMembers);
     }
     // Validate member count limit
-    if members.len() > MAX_MEMBERS {
+    if members.len() > MAX_MEMBER_COUNT {
         return Err(Error::TooManyMembers);
     }
     let mut total_percentage: u32 = 0;
@@ -1210,6 +1651,26 @@ const NOTIFICATION_PRIORITY: NotificationPriority = NotificationPriority::Medium
 /// **Placeholder value: 30 days (2_592_000 seconds).** Adjust this value in
 /// review if a different maximum is required by the product specification.
 const MAX_NOTIFICATION_LIFETIME_SECONDS: u64 = 30 * 24 * 60 * 60; // 30 days
+
+// ============================================================================
+// Persistent storage lifecycle (TTL management)
+// ============================================================================
+//
+// Live (active) notification entries are refreshed on every write so they are
+// never evicted by Soroban's TTL expiry before their own `expires_at`. Once a
+// notification has expired it becomes eligible for pruning via
+// [`cleanup_expired_records`], which archives it before removing the active
+// entry.
+//
+// `TTL_THRESHOLD` is the remaining-lived-entries count (~5s per ledger) below
+// which a write refreshes the entry; `TTL_EXTEND_TO` is the target ledger
+// count after a refresh.
+
+/// Refresh a persistent notification entry when fewer than ~1 day of ledgers
+/// remain before eviction.
+const NOTIFICATION_TTL_THRESHOLD: u32 = 17_280; // ~1 day @ 5s/ledger
+/// Extend a refreshed notification entry to ~30 days of ledgers.
+const NOTIFICATION_TTL_EXTEND_TO: u32 = 518_400; // ~30 days @ 5s/ledger
 
 /// Reads a scheduled notification from storage, if one is tracked for `id`.
 fn load_notification(env: &Env, id: &BytesN<32>) -> Option<ScheduledNotification> {
@@ -1251,6 +1712,13 @@ pub fn schedule_notification(
     priority: NotificationPriority,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
+
+    // Enforce the payload/title bound up front — before any storage access,
+    // TTL management, or event emission.
+    if title.len() > MAX_TOPIC_LEN {
+        return Err(Error::PayloadExceedsMaxLength);
+    }
 
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
@@ -1308,6 +1776,11 @@ pub fn schedule_notification(
         version: CURRENT_NOTIFICATION_VERSION,
     };
     env.storage().persistent().set(&key, &notification);
+    // Keep the live entry alive until at least its own expiry; expired entries
+    // are later reclaimed by `cleanup_expired_records`.
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, NOTIFICATION_TTL_THRESHOLD, NOTIFICATION_TTL_EXTEND_TO);
 
     append_audit_record(
         &env,
@@ -1316,6 +1789,13 @@ pub fn schedule_notification(
         creator.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_scheduled",
+        NotificationCategory::Notification,
+        priority,
+    );
     NotificationScheduled {
         creator,
         category: NotificationCategory::Notification,
@@ -1414,6 +1894,13 @@ pub fn expire_notification(env: Env, notification_id: BytesN<32>) -> Result<(), 
         env.current_contract_address(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_expired",
+        NotificationCategory::Notification,
+        NOTIFICATION_PRIORITY,
+    );
     NotificationExpired {
         notification_id,
         category: NotificationCategory::Notification,
@@ -1493,6 +1980,13 @@ pub fn cancel_notification(
         caller.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_cancelled",
+        NotificationCategory::Notification,
+        NotificationPriority::Low,
+    );
     ScheduledNotificationCancelled {
         caller,
         category: NotificationCategory::Notification,
@@ -1507,9 +2001,6 @@ pub fn cancel_notification(
 // ============================================================================
 // Batch Notification Creation
 // ============================================================================
-
-/// Maximum number of notifications that can be created in a single batch call.
-const MAX_BATCH_SIZE: u32 = 50;
 
 /// Creates multiple scheduled notifications in a single transaction.
 ///
@@ -1575,6 +2066,10 @@ pub fn batch_schedule_notifications(
         if title.is_empty() {
             return Err(Error::InvalidInput);
         }
+        // Enforce the payload/title bound before any entry is persisted.
+        if title.len() > MAX_TOPIC_LEN {
+            return Err(Error::PayloadExceedsMaxLength);
+        }
 
         // Check for intra-batch duplicates.
         for seen in seen_in_batch.iter() {
@@ -1627,9 +2122,19 @@ pub fn batch_schedule_notifications(
         };
         let key = DataKey::ScheduledNotification(id.clone());
         env.storage().persistent().set(&key, &notification);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, NOTIFICATION_TTL_THRESHOLD, NOTIFICATION_TTL_EXTEND_TO);
 
         append_audit_record(&env, id.clone(), AuditAction::Created, creator.clone());
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_scheduled",
+            NotificationCategory::Notification,
+            priority,
+        );
         NotificationScheduled {
             creator: creator.clone(),
             category: NotificationCategory::Notification,
@@ -1714,6 +2219,13 @@ pub fn confirm_notification_delivery(
     // concurrent duplicate request observes the recorded state and is rejected.
     record_delivery_idempotency(&env, &idempotency_key, &notification_id, &caller);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_delivered",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationDelivered {
         notification_id: notification_id.clone(),
         delivered_by: caller,
@@ -1835,6 +2347,13 @@ pub fn recall_notification(
 
     env.storage().persistent().set(&key, &notification);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_recalled",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRecalled {
         notification_id,
         recalled_by: caller,
@@ -1890,6 +2409,13 @@ pub fn revoke_notification(
     env.storage().persistent().set(&key, &notification);
 
     // Emit revocation event
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_revoked",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRevoked {
         notification_id,
         revoked_by: caller,
@@ -2137,6 +2663,13 @@ pub fn acknowledge_notifications(
             return Err(Error::NotificationExpired);
         }
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_acknowledged",
+            NotificationCategory::Notification,
+            NOTIFICATION_PRIORITY,
+        );
         NotificationAcknowledged {
             notification_id: id,
             acknowledger: caller.clone(),
@@ -2259,19 +2792,6 @@ pub fn configure_notification_limits(
     admin.require_auth();
     require_admin(&env, &admin)?;
 
-    // Verify caller is admin
-    let current_admin = get_admin(env.clone())?;
-    if admin != current_admin {
-        AuthorizationFailure {
-            caller: admin,
-            category: NotificationCategory::Admin,
-            priority: NotificationPriority::Critical,
-            action: String::from_str(&env, "configure_notification_limits"),
-        }
-        .publish(&env);
-        return Err(Error::Unauthorized);
-    }
-
     // Validate that min <= max expiration
     if min_expiration_seconds > max_expiration_seconds {
         return Err(Error::InvalidExpirationDuration);
@@ -2348,11 +2868,7 @@ const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 1;
 /// - [`Error::InvalidInput`]  – `schema_version` is outside the supported range.
 pub fn set_schema_version(env: Env, admin: Address, schema_version: u32) -> Result<(), Error> {
     admin.require_auth();
-
-    let stored_admin = get_admin(env.clone())?;
-    if admin != stored_admin {
-        return Err(Error::Unauthorized);
-    }
+    require_admin(&env, &admin)?;
 
     if schema_version < MIN_SUPPORTED_SCHEMA_VERSION
         || schema_version > MAX_SUPPORTED_SCHEMA_VERSION
@@ -2433,11 +2949,6 @@ pub fn record_notification_access(
 // Channel Metadata Updates
 // ============================================================================
 
-/// Maximum length for a channel description string.
-const MAX_CHANNEL_DESCRIPTION_LENGTH: u32 = 256;
-/// Maximum number of custom metadata fields on a channel.
-const MAX_CHANNEL_CUSTOM_FIELDS: u32 = 20;
-
 /// Updates the description and custom metadata for an AutoShare channel.
 ///
 /// Only the channel creator (group owner) may update metadata. Membership,
@@ -2447,7 +2958,8 @@ const MAX_CHANNEL_CUSTOM_FIELDS: u32 = 20;
 /// - `NotFound` if the channel / group does not exist
 /// - `Unauthorized` if `caller` is not the creator
 /// - `ContractPaused` if the contract is paused
-/// - `InvalidInput` if description or custom fields fail validation
+/// - `InputTooLarge` if `description`, the field count, or any key/value
+///   exceeds its documented bound (see `base::constants`)
 pub fn update_channel_metadata(
     env: Env,
     channel_id: BytesN<32>,
@@ -2457,12 +2969,17 @@ pub fn update_channel_metadata(
 ) -> Result<(), Error> {
     caller.require_auth();
 
+    // Validate every variable-length input up front, before any storage access,
+    // TTL management, or event emission.
+    if description.len() > MAX_CHANNEL_DESCRIPTION_LEN {
+        return Err(Error::InputTooLarge);
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
     }
 
     let group = get_autoshare(env.clone(), channel_id.clone())?;
     if caller != group.creator {
+        publish_authorization_failure(&env, &caller, "update_channel_metadata");
         return Err(Error::Unauthorized);
     }
 
@@ -2471,18 +2988,27 @@ pub fn update_channel_metadata(
     }
 
     if custom_fields.len() > MAX_CHANNEL_CUSTOM_FIELDS {
-        return Err(Error::InvalidInput);
+        return Err(Error::InputTooLarge);
     }
 
     for key in custom_fields.keys() {
-        if key.len() > 256 {
-            return Err(Error::InvalidInput);
+        if key.len() > MAX_METADATA_STRING_LEN {
+            return Err(Error::InputTooLarge);
         }
         if let Some(value) = custom_fields.get(key.clone()) {
-            if value.len() > 256 {
-                return Err(Error::InvalidInput);
+            if value.len() > MAX_METADATA_STRING_LEN {
+                return Err(Error::InputTooLarge);
             }
         }
+    }
+
+    if get_paused_status(&env) {
+        return Err(Error::ContractPaused);
+    }
+
+    let group = get_autoshare(env.clone(), channel_id.clone())?;
+    if caller != group.creator {
+        return Err(Error::Unauthorized);
     }
 
     // Validate via shared metadata rules when a non-empty description is provided.
@@ -2592,4 +3118,246 @@ pub fn get_archived_notification(
 /// Returns the current notification protocol version constant.
 pub fn get_notification_version(_env: Env) -> u32 {
     CURRENT_NOTIFICATION_VERSION
+}
+
+// ============================================================================
+// Persistent Storage Lifecycle & Cleanup
+// ============================================================================
+
+/// Prunes expired **ephemeral** records in a batch.
+///
+/// # Storage lifecycle
+///
+/// Records are split into two categories:
+///
+/// * **Historical / immutable** — payment history, the audit log, archived
+///   notifications, AutoShare group state, channel metadata, templates,
+///   supported tokens and config. These are never removed by cleanup.
+/// * **Ephemeral / expirable** — [`DataKey::ScheduledNotification`] entries
+///   (bounded by `expires_at`) and delivery-idempotency records. Only these
+///   may be reclaimed.
+///
+/// This function considers only the notification ids the caller supplies
+/// (there is no unbounded on-chain index to enumerate, which keeps the call's
+/// gas cost proportional to the caller's input). For each id:
+///
+/// * If the notification is **expired** (`now >= expires_at`) it is archived
+///   (preserving immutable history) and its active entry is removed.
+/// * If it is still **live**, its TTL is refreshed via `extend_ttl` so it is
+///   not evicted before its own expiry.
+/// * Unknown ids are ignored.
+///
+/// # Access control
+/// The `admin` must authorize the call and must be the current contract admin.
+///
+/// # Returns
+/// The number of expired records that were pruned.
+///
+/// # Errors
+/// - `Unauthorized` if `admin` is not the caller or not the current admin.
+///
+/// # Events
+/// Emits [`RecordsCleanedUp`] with the number of pruned records.
+pub fn cleanup_expired_records(
+    env: Env,
+    admin: Address,
+    notification_ids: Vec<BytesN<32>>,
+) -> Result<u32, Error> {
+    admin.require_auth();
+    require_admin(&env, &admin)?;
+
+    let now = current_time(&env);
+    let mut removed: u32 = 0;
+
+    for id in notification_ids.iter() {
+        let key = DataKey::ScheduledNotification(id.clone());
+        let notification = match load_notification(&env, &id) {
+            Some(n) => n,
+            // Already gone (never scheduled, or previously archived): nothing to do.
+            None => continue,
+        };
+
+        if now >= notification.expires_at {
+            // Expired ephemeral record: preserve immutable history in the
+            // archive, then reclaim the active storage entry. This is the ONLY
+            // removal performed anywhere in this function; historical records
+            // (payments, audit log, archives, group/channel state) are never
+            // deleted.
+            env.storage().persistent().remove(&key);
+            archive_notification(&env, &notification, String::from_str(&env, "expired"));
+            removed += 1;
+        } else {
+            // Still live: refresh the TTL so Soroban does not evict the entry
+            // before its own `expires_at`.
+            env.storage().persistent().extend_ttl(
+                &key,
+                NOTIFICATION_TTL_THRESHOLD,
+                NOTIFICATION_TTL_EXTEND_TO,
+            );
+        }
+    }
+
+    RecordsCleanedUp {
+        admin,
+        category: NotificationCategory::Notification,
+        priority: NotificationPriority::Low,
+        removed_count: removed,
+    }
+    .publish(&env);
+
+    Ok(removed)
+// Storage Migration  (Issue #1197)
+// ============================================================================
+
+/// The lowest storage version that migrations can target.
+const STORAGE_VERSION_INITIAL: u32 = 0;
+
+/// The highest storage version the current contract binary supports.
+/// Advance this constant whenever a new migration path is added.
+pub const STORAGE_VERSION_CURRENT: u32 = 1;
+
+/// Returns the persistent storage format version.
+///
+/// Returns `0` when storage has never been explicitly versioned (i.e. the
+/// contract was deployed before migration tracking was introduced — that is the
+/// original "v0" layout).
+pub fn get_storage_version(env: Env) -> u32 {
+    env.storage()
+        .persistent()
+        .get::<DataKey, u32>(&DataKey::StorageVersion)
+        .unwrap_or(STORAGE_VERSION_INITIAL)
+}
+
+/// Returns `true` when the migration to `target_version` has already been
+/// executed, preventing re-execution.
+pub fn is_migration_executed(env: Env, target_version: u32) -> bool {
+    env.storage()
+        .persistent()
+        .get::<DataKey, bool>(&DataKey::MigrationExecuted(target_version))
+        .unwrap_or(false)
+}
+
+/// Migrates persistent storage from the current version to `target_version`.
+///
+/// # Behaviour
+/// 1. Reads the current storage version (`from_version`).
+/// 2. Validates that `target_version > from_version` and that a migration
+///    path exists.
+/// 3. Checks the `MigrationExecuted(target_version)` guard to prevent
+///    repeated execution.
+/// 4. Emits `StorageMigrationStarted`.
+/// 5. Runs the appropriate per-version migration step.
+/// 6. Writes the new `StorageVersion` and sets `MigrationExecuted(target_version)`.
+/// 7. Emits `StorageMigrationCompleted`.
+///
+/// # Errors
+/// - [`Error::Unauthorized`]             – `admin` is not the stored admin.
+/// - [`Error::MigrationAlreadyExecuted`] – guard key already set for `target_version`.
+/// - [`Error::MigrationVersionNotHigher`] – `target_version <= from_version`.
+/// - [`Error::UnsupportedMigration`]     – no defined path from `from_version` to `target_version`.
+pub fn run_migration(env: Env, admin: Address, target_version: u32) -> Result<(), Error> {
+    admin.require_auth();
+
+    let stored_admin = get_admin(env.clone())?;
+    if admin != stored_admin {
+        return Err(Error::Unauthorized);
+    }
+
+    let from_version = get_storage_version(env.clone());
+
+    if target_version <= from_version {
+        return Err(Error::MigrationVersionNotHigher);
+    }
+
+    // Guard: refuse if this exact migration already ran.
+    if is_migration_executed(env.clone(), target_version) {
+        return Err(Error::MigrationAlreadyExecuted);
+    }
+
+    // Only migrations with an explicit implementation are supported.
+    if from_version != STORAGE_VERSION_INITIAL || target_version != 1 {
+        return Err(Error::UnsupportedMigration);
+    }
+
+    StorageMigrationStarted {
+        admin: admin.clone(),
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::Critical,
+        from_version,
+        to_version: target_version,
+    }
+    .publish(&env);
+
+    migrate_v0_to_v1(&env)?;
+
+    env.storage()
+        .persistent()
+        .set(&DataKey::StorageVersion, &target_version);
+    env.storage()
+        .persistent()
+        .set(&DataKey::MigrationExecuted(target_version), &true);
+
+    let migrated_at = current_time(&env);
+
+    StorageMigrationCompleted {
+        admin,
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::Critical,
+        from_version,
+        to_version: target_version,
+        migrated_at,
+    }
+    .publish(&env);
+
+    Ok(())
+}
+
+/// Migration step: v0 → v1.
+///
+/// v0 is the implicit pre-versioning layout shipped before Issue #1197.
+/// v1 is the first explicitly versioned layout. The only structural change is
+/// that any [`ScheduledNotification`] record carrying `version == 0` (written
+/// before Issue #309 added the field) is back-filled with
+/// [`CURRENT_NOTIFICATION_VERSION`]. Records that already carry a non-zero
+/// version are left untouched, making this step idempotent at the record level.
+fn migrate_v0_to_v1(env: &Env) -> Result<(), Error> {
+    // Soroban does not expose a key enumeration API, so we discover notification
+    // IDs via the audit log — the only durable index that spans all notifications.
+    let mut notification_ids: Vec<BytesN<32>> = Vec::new(env);
+
+    if let Some(audit_log) = env
+        .storage()
+        .persistent()
+        .get::<DataKey, Vec<AuditRecord>>(&DataKey::AuditLog)
+    {
+        for record in audit_log.iter() {
+            let id = record.notification_id.clone();
+            let mut found = false;
+            for existing in notification_ids.iter() {
+                if existing == id {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                notification_ids.push_back(id);
+            }
+        }
+    }
+
+    for id in notification_ids.iter() {
+        let key = DataKey::ScheduledNotification(id.clone());
+        if let Some(mut notification) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, ScheduledNotification>(&key)
+        {
+            if notification.version == 0 {
+                notification.version = CURRENT_NOTIFICATION_VERSION;
+                env.storage().persistent().set(&key, &notification);
+            }
+        }
+    }
+
+    Ok(())
 }

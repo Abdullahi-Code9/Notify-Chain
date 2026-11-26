@@ -1,6 +1,7 @@
 import {
   ProviderCapability,
   ProviderMetadata,
+  PayloadLimits,
   NotificationProvider,
   NotificationFormat,
   DeliveryPayload,
@@ -27,6 +28,18 @@ const DISCORD_SUPPORTED_FORMATS = new Set<NotificationFormat>([
   NotificationFormat.PLAIN_TEXT,
 ]);
 
+/**
+ * Payload limits derived from Discord's webhook constraints:
+ * message content is capped at 2000 characters, embed titles at 256, and an
+ * embed accepts at most 25 fields / 10 attachments.
+ */
+const DISCORD_PAYLOAD_LIMITS: PayloadLimits = {
+  maxBodyLength: 2_000,
+  maxTitleLength: 256,
+  maxAttachmentCount: 10,
+  maxFieldCount: 25,
+};
+
 export class DiscordNotificationProvider implements NotificationProvider {
   readonly metadata: ProviderMetadata = {
     id: 'discord',
@@ -35,6 +48,7 @@ export class DiscordNotificationProvider implements NotificationProvider {
     capabilities: DISCORD_CAPABILITIES,
     supportedFormats: DISCORD_SUPPORTED_FORMATS,
     defaultFormat: NotificationFormat.EMBED,
+    payloadLimits: DISCORD_PAYLOAD_LIMITS,
   };
 
   private readonly service: DiscordNotificationService;
@@ -51,6 +65,10 @@ export class DiscordNotificationProvider implements NotificationProvider {
 
   supportsFormat(format: NotificationFormat): boolean {
     return this.metadata.supportedFormats.has(format);
+  }
+
+  getCapabilities(): ProviderMetadata {
+    return this.metadata;
   }
 
   async deliver(payload: DeliveryPayload): Promise<DeliveryResult> {

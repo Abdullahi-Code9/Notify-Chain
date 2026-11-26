@@ -6,6 +6,7 @@ import { NotificationType } from '../types/scheduled-notification';
 export interface ImportRecord {
   id?: string;
   recipient?: string;
+  destinationId?: string;
   channel?: string;
   message?: string;
   executeAt?: string;
@@ -37,6 +38,8 @@ export interface ImportOptions {
   /** Default execute-at offset in ms from now when record omits executeAt (default 5 min). */
   defaultExecuteAtOffsetMs?: number;
   requestId?: string;
+  /** Authenticated account owner used to validate any referenced destinationId. */
+  ownerId?: string;
 }
 
 const CHANNEL_TO_TYPE: Record<string, NotificationType> = {
@@ -100,7 +103,7 @@ export class NotificationImportService {
           continue;
         }
 
-        const targetRecipient = record.targetRecipient || record.recipient!;
+        const targetRecipient = record.targetRecipient || record.recipient || '';
         const channel = (record.channel || record.notificationType || 'discord').toLowerCase();
         const notificationType =
           CHANNEL_TO_TYPE[channel] ?? NotificationType.DISCORD;
@@ -122,6 +125,8 @@ export class NotificationImportService {
             executeAt,
             maxRetries: record.maxRetries,
             priority: record.priority,
+            ...(record.destinationId ? { destinationId: record.destinationId } : {}),
+            ...(options.ownerId ? { ownerId: options.ownerId } : {}),
             metadata: {
               ...record.metadata,
               importId: record.id,
@@ -263,7 +268,7 @@ export class NotificationImportService {
 
   private validateImportRecord(record: ImportRecord): string | null {
     const recipient = record.recipient || record.targetRecipient;
-    if (!recipient) {
+    if (!recipient && !record.destinationId) {
       return 'Missing required field: recipient';
     }
     const channel = (record.channel || record.notificationType || '').toLowerCase();

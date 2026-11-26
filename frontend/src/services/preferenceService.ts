@@ -9,7 +9,9 @@ import type {
   CategoryPreference,
   ChannelPreference,
   DeliveryChannel,
+  DeliveryWindow,
   NotificationCategory,
+  QuietHours,
   RecipientPreferences,
 } from "../types/preferences";
 import { DEFAULT_PREFERENCES } from "../types/preferences";
@@ -69,18 +71,23 @@ export const preferenceService = {
   },
 
   /**
-   * Atomically replace all channel and category preferences.
+   * Atomically replace all channel and category preferences, including
+   * quiet hours and delivery windows (Issue #1227).
    * Requires the recipient's wallet to sign the transaction.
    */
   async setPreferences(
     recipient: string,
     channels: ChannelPreference[],
-    categories: CategoryPreference[]
+    categories: CategoryPreference[],
+    quietHours?: QuietHours,
+    deliveryWindow?: DeliveryWindow
   ): Promise<void> {
     await invokeContract<void>("set_preferences", {
       recipient,
       channels,
       categories,
+      quiet_hours: quietHours,
+      delivery_window: deliveryWindow,
     });
   },
 
@@ -113,6 +120,33 @@ export const preferenceService = {
       recipient,
       category,
       enabled,
+    });
+  },
+
+  /**
+   * Configure user-specific quiet hours (Issue #1227).
+   * Events received during quiet hours are preserved and delivered once the
+   * window opens — they are never discarded.
+   * Requires the recipient's wallet to sign the transaction.
+   */
+  async setQuietHours(recipient: string, quietHours: QuietHours): Promise<void> {
+    await invokeContract<void>("set_quiet_hours", {
+      recipient,
+      quiet_hours: quietHours,
+    });
+  },
+
+  /**
+   * Configure the timezone-aware delivery window (Issue #1227).
+   * Requires the recipient's wallet to sign the transaction.
+   */
+  async setDeliveryWindow(
+    recipient: string,
+    deliveryWindow: DeliveryWindow
+  ): Promise<void> {
+    await invokeContract<void>("set_delivery_window", {
+      recipient,
+      delivery_window: deliveryWindow,
     });
   },
 

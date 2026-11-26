@@ -1,6 +1,9 @@
 import { memo } from 'react';
 import type { BlockchainEvent } from '../types/event';
-import { formatRelativeTimestamp, formatTimestamp, parseToDate } from '../utils/formatTime';
+import { formatRelativeTimestamp, formatTimestamp, toUtcIsoString } from '../utils/formatTime';
+import { formatNumber } from '../utils/formatNumber';
+import { useActiveTimeZone } from '../store/timezoneStore';
+import { useActiveLocale } from '../store/localeStore';
 import { CopyButton } from './CopyButton';
 
 interface EventRowProps {
@@ -16,31 +19,40 @@ function shortenAddress(address: string): string {
 
 export const EventRow = memo(function EventRow({ event }: EventRowProps) {
   const label = event.eventName ?? event.type;
-  const receivedAt = parseToDate(event.receivedAt);
+  const timeZone = useActiveTimeZone();
+  const locale = useActiveLocale();
+  const receivedAtUtc = toUtcIsoString(event.receivedAt);
+  const formattedLedger = formatNumber(event.ledger, locale);
+  const formattedValue = formatNumber(event.value, locale);
 
   return (
     <article
       className="event-row"
       data-event-id={event.eventId}
-      aria-label={`${label}, ledger ${event.ledger}`}
+      aria-label={`${label}, ledger ${formattedLedger}`}
     >
       <div className="event-row__primary">
         <span className="event-row__name">{label}</span>
-        <span className="event-row__ledger">Ledger {event.ledger}</span>
+        <span className="event-row__ledger" title={`Ledger ${event.ledger}`}>
+          Ledger {formattedLedger}
+        </span>
       </div>
       <div className="event-row__meta">
         <span>
           <span className="sr-only">Contract: </span>
           {shortenAddress(event.contractAddress)}
         </span>
-        <time dateTime={receivedAt?.toISOString()} title={formatTimestamp(event.receivedAt)}>
+        <time
+          dateTime={receivedAtUtc}
+          title={`${formatTimestamp(event.receivedAt, timeZone, locale)}${receivedAtUtc ? ` (UTC: ${receivedAtUtc})` : ''}`}
+        >
           <span className="sr-only">Received: </span>
-          {formatRelativeTimestamp(event.receivedAt)}
+          {formatRelativeTimestamp(event.receivedAt, Date.now(), timeZone, locale)}
         </time>
         <CopyButton value={event.eventId} label="notification ID" size="xs" />
       </div>
       <div className="event-row__details">
-        <span>Value: {event.value}</span>
+        <span title={`Value: ${event.value}`}>Value: {formattedValue}</span>
         {event.txHash && (
           <span title={event.txHash}>
             <span className="sr-only">Transaction: </span>
