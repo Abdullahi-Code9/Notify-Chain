@@ -31,6 +31,12 @@ The system must balance:
 
 We use SQLite as the primary database for development and single-instance deployments, with a migration path to PostgreSQL for production multi-instance deployments.
 
+> **Implementation note:** The PostgreSQL migration strategy below is an accepted
+> future direction, not an implemented runtime feature. The current Listener
+> opens SQLite at `DATABASE_PATH` and runs SQLite migrations. See
+> [Database Schema and Relationships](../DATABASE_SCHEMA.md) for the live table,
+> constraint, relationship, index, and SQLite behavior reference.
+
 ### Database Choice: SQLite
 
 **Rationale**:

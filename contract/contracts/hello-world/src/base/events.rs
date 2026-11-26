@@ -1,4 +1,44 @@
-use soroban_sdk::{contractevent, contracttype, Address, BytesN, String, Vec};
+use soroban_sdk::{contractevent, contracttype, Address, BytesN, Env, String, Vec};
+
+// ============================================================================
+// Event schema versioning (issue #1122)
+// ============================================================================
+
+/// Schema version of every event this contract currently emits.
+///
+/// Consumers read this through the `get_event_schema_version` view and can
+/// identify the schema of any individual event from its name (topic[0]):
+///
+/// * An event name **without** a version suffix (e.g. `contract_paused`) is
+///   schema **v1**. Every event emitted today is v1, so existing listeners and
+///   indexers keep working byte-for-byte.
+/// * An event name **with** a `_v{N}` suffix (e.g. `notification_scheduled_v2`)
+///   is schema **vN**.
+///
+/// # Versioning rules
+///
+/// Additive, backward-compatible changes keep the current version:
+/// * adding a new event type;
+/// * adding a key to a map-format (`data_format = "map"`) event payload.
+///
+/// Breaking changes MUST ship as a new versioned event name and bump this
+/// constant:
+/// * adding, removing or reordering topics (consumers index topics by
+///   position from both the start and the end);
+/// * removing or renaming payload fields, or changing a field's type;
+/// * changing a single-value payload's type.
+///
+/// When a breaking version ships, the previous version is emitted alongside
+/// the new one for at least one release (dual emission) so consumers can
+/// migrate, and the deprecation is recorded in `docs/EVENT_SCHEMA_VERSIONING.md`.
+///
+/// This is distinct from the *notification payload* schema version managed by
+/// `set_schema_version` / `get_schema_version`, which versions stored
+/// notification payloads rather than event shapes.
+pub const EVENT_SCHEMA_VERSION: u32 = 1;
+
+/// Suffix separator used for versioned event names (`<name>_v<N>`).
+pub const EVENT_SCHEMA_VERSION_SUFFIX: &str = "_v";
 
 /// High-level notification category attached to every emitted event.
 ///
@@ -630,4 +670,83 @@ pub struct TemplateUpdated {
     pub priority: NotificationPriority,
     /// Unique identifier of the updated template.
     pub template_id: BytesN<32>,
+}
+
+// ============================================================================
+// Storage lifecycle / cleanup
+// ============================================================================
+
+/// Emitted when an authorized storage-cleanup call prunes expired records.
+///
+/// Only **ephemeral** records (expired scheduled notifications) are ever
+/// removed; historical/immutable records are never touched. `removed_count`
+/// reports how many active entries were pruned in the call.
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct RecordsCleanedUp {
+    /// Admin address that authorized the cleanup.
+    #[topic]
+    pub admin: Address,
+// Storage Migration  (Issue #1197)
+// ============================================================================
+
+/// Emitted when the admin initiates a storage schema migration.
+///
+/// Off-chain consumers should pause indexing until `StorageMigrationCompleted`
+/// is received for the same `to_version` to avoid reading partially-migrated
+/// state.
+#[contractevent]
+#[derive(Clone)]
+pub struct StorageMigrationStarted {
+    /// Admin address that triggered the migration.
+    #[topic]
+    pub admin: Address,
+// Operation correlation (issue #1194)
+// ============================================================================
+
+/// Published alongside an entity's lifecycle events. All state transitions for
+/// the same entity share the entity's unique 32-byte identifier as their
+/// `correlation_id`, while different entities can never share one by accident.
+///
+/// This is a separate event type: existing event consumers continue to see the
+/// original events unchanged. Consumers that need end-to-end tracing can group
+/// by `correlation_id` and read `operation` for the transition name.
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct OperationCorrelated {
+    /// Identifier shared by all events in one entity's operation chain.
+    #[topic]
+    pub correlation_id: BytesN<32>,
+    #[topic]
+    pub category: NotificationCategory,
+    #[topic]
+    pub priority: NotificationPriority,
+    /// Number of expired records pruned by this call.
+    pub removed_count: u32,
+    /// The locked-in network identifier (SHA-256 of network passphrase).
+    pub network_id: BytesN<32>,
+    /// Name of the lifecycle transition (e.g. `notification_scheduled`).
+    pub operation: String,
+}
+
+/// Derives the stable correlation identifier for an entity's event chain.
+pub fn correlation_id_for(entity_id: &BytesN<32>) -> BytesN<32> {
+    entity_id.clone()
+}
+
+/// Emits the correlation metadata for a lifecycle transition.
+pub fn publish_operation_correlation(
+    env: &Env,
+    entity_id: &BytesN<32>,
+    operation: &str,
+    category: NotificationCategory,
+    priority: NotificationPriority,
+) {
+    OperationCorrelated {
+        correlation_id: correlation_id_for(entity_id),
+        category,
+        priority,
+        operation: String::from_str(env, operation),
+    }
+    .publish(env);
 }

@@ -1,0 +1,2506 @@
+openapi: 3.0.3
+
+info:
+  title: NotifyChain Listener API
+  version: 1.0.0
+  description: |
+    HTTP JSON API exposed by the NotifyChain listener for monitoring Stellar
+    smart-contract events and creating, scheduling, and inspecting notifications.
+
+    ## Base URL
+
+    The listener defaults to `http://localhost:8080`. Both the versioned prefix
+    (`/api/v1/...`) and the unversioned prefix (`/api/...`) are accepted;
+    `/api/v1/*` is rewritten to `/api/*` internally. Every response carries an
+    `X-API-Version: v1` header. See `docs/api-versioning.md` for the versioning
+    policy.
+
+    ## Response envelope
+
+    Most JSON endpoints wrap their payload in a success envelope produced by
+    `sendOk` (`listener/src/utils/response.ts`):
+
+    ```json
+    { "success": true, "data": <payload>, "meta": { ... } }
+    ```
+
+    `meta` is present only for endpoints that return pagination or extra
+    context. A small number of endpoints (signed webhooks, schedule creation,
+    some legacy handlers) return a bare JSON body without the envelope; those
+    bodies are documented inline on each operation.
+
+    ## Errors
+
+    Error responses use the error envelope:
+
+    ```json
+    {
+      "success": false,
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Template not found",
+        "details": [],
+        "correlation_id": "4d1c3c1e-..."
+      }
+    }
+    ```
+
+    `error.code` is one of the stable machine-readable values in
+    `listener/src/errors/api-error-codes.ts`; clients should branch on `code`,
+    never on `message`. See `docs/API_ERROR_REFERENCE.md` for the full catalogue.
+
+    ## Authentication
+
+    Most endpoints accept an optional `X-API-Key` header. When API keys are
+    configured on the server, the header is required and must match a
+    configured key. When no keys are configured (local/dev), requests are
+    allowed anonymously for backward compatibility. Privileged subsystems
+    (credential management) always require authentication.
+
+    The signed webhook endpoint (`POST /api/webhooks`) uses HMAC-SHA256 request
+    signing instead of an API key (see its operation description).
+  contact:
+    name: NotifyChain
+    url: https://github.com/Kilo-Org/kilocode
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development listener
+  - url: http://localhost:3000
+    description: Local listener (default PORT)
+
+tags:
+  - name: Infrastructure
+    description: Health, status, and version introspection.
+  - name: Events
+    description: Stellar event ingestion and retrieval.
+  - name: Webhooks
+    description: Signed inbound webhook ingestion.
+  - name: Scheduling
+    description: Create, inspect, modify, and cancel scheduled notifications.
+  - name: Notifications
+    description: Notification history, search, validation, import, and metrics.
+  - name: Analytics
+    description: Delivery analytics snapshots and history.
+  - name: Rate Limiting
+    description: Rate-limiter metrics.
+  - name: Templates
+    description: Notification template CRUD, rendering, and statistics.
+  - name: Preferences
+    description: Per-user notification preferences.
+  - name: Archive
+    description: Archived notification records and archive runs.
+  - name: Credentials
+    description: Scoped API credential management.
+  - name: Export
+    description: Administrative data export.
+
+paths:
+  # ─── Infrastructure ──────────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [Infrastructure]
+      summary: Health check
+      description: |
+        Reports the listener's overall health, version, uptime, and the status of
+        its dependencies (Stellar RPC, Discord, database, event registry).
+        Returns `503` when any required dependency is in the `error` state.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Listener is healthy (or degraded).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                version: 1.0.0
+                timestamp: '2026-01-15T10:30:00.000Z'
+                uptimeSeconds: 3600
+                network: testnet
+                services:
+                  stellarRpc: { status: ok, latencyMs: 42 }
+                  discord: { status: ok, latencyMs: 120 }
+                  database: { status: ok, latencyMs: 3 }
+                  eventRegistry: { status: ok, eventCount: 1280 }
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/status:
+    get:
+      tags: [Infrastructure]
+      summary: Listener status
+      description: Returns a lightweight status snapshot for the listener.
+      operationId: getStatus
+      responses:
+        '200':
+          description: Status snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/version:
+    get:
+      tags: [Infrastructure]
+      summary: Version catalog and deprecation registry
+      description: |
+        Returns the API versioning strategy, the active route counts, and any
+        deprecated routes with their sunset dates and successor URLs.
+      operationId: getVersionCatalog
+      responses:
+        '200':
+          description: Version catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionCatalog'
+
+  /api/indexing/health:
+    get:
+      tags: [Infrastructure]
+      summary: Event indexing health
+      description: |
+        Reports indexing pipeline health: last indexed ledger, current network
+        tip ledger, ledger lag, and processing delay.
+      operationId: getIndexingHealth
+      responses:
+        '200':
+          description: Indexing health snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexingHealthResponse'
+
+  # ─── Events ──────────────────────────────────────────────────────────────
+  /api/events:
+    get:
+      tags: [Events]
+      summary: List indexed events
+      description: |
+        Returns events from the in-process event registry. The optional `limit`
+        query parameter caps the number of events returned.
+      operationId: listEvents
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of events to return.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Event list.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count:
+                            type: integer
+                          events:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DisplayEvent'
+              example:
+                success: true
+                data:
+                  count: 1
+                  events:
+                    - eventId: evt-123
+                      contractAddress: CXXXX...
+                      eventName: transfer
+                      ledger: 1000
+                      type: notification
+                      topic: ['transfer']
+                      value: '100'
+                      receivedAt: 1700000000000
+
+  /api/events/history:
+    get:
+      tags: [Events]
+      summary: Events by ledger range
+      description: |
+        Returns events whose ledger number falls within the inclusive
+        `[fromLedger, toLedger]` range. The range must not exceed 10 000
+        ledgers.
+      operationId: getEventsByLedgerRange
+      parameters:
+        - name: fromLedger
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+        - name: toLedger
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Events within the range.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count: { type: integer }
+                          startLedger: { type: integer }
+                          endLedger: { type: integer }
+                          events:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DisplayEvent'
+        '400':
+          description: Invalid ledger range.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/events/stream:
+    get:
+      tags: [Events]
+      summary: Live event stream (Server-Sent Events)
+      description: |
+        Optional SSE feed enabled with `EVENT_STREAM_ENABLED=true`. Each newly
+        stored registry event is emitted as one SSE record. Disabled by default;
+        when disabled the path responds `404`.
+      operationId: streamEvents
+      responses:
+        '200':
+          description: SSE stream of notification events.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─── Webhooks ────────────────────────────────────────────────────────────
+  /api/webhooks:
+    post:
+      tags: [Webhooks]
+      summary: Accept a signed webhook
+      description: |
+        Ingests a signed inbound webhook. The request body is authenticated with
+        HMAC-SHA256 over `timestamp + "." + rawBody` (or the bare body for legacy
+        signers) using a per-key secret.
+
+        Required headers:
+          - `X-Webhook-Signature` — `sha256=<hex hmac>` of the signing input.
+          - `X-Webhook-Key-Id` — identifies which shared secret was used.
+          - `X-Webhook-Timestamp` — epoch seconds; required by default and must
+            be within the freshness window (default 300 s).
+
+        Optional headers:
+          - `Idempotency-Key` — replays with the same key and body return `200`
+            with `replay: true` instead of re-processing.
+
+        This endpoint returns a bare JSON body (not the success envelope).
+      operationId: acceptWebhook
+      parameters:
+        - name: X-Webhook-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: X-Webhook-Key-Id
+          in: header
+          required: true
+          schema: { type: string }
+        - name: X-Webhook-Timestamp
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Opaque webhook payload; forwarded to the notification provider.
+            example:
+              event: transfer
+              amount: '100'
+              recipient: GXXXX...
+      responses:
+        '202':
+          description: Webhook accepted and signature verified.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: accepted }
+                  verified: { type: boolean, example: true }
+        '200':
+          description: Idempotent replay of a previously accepted webhook.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  verified: { type: boolean }
+                  replay: { type: boolean }
+        '400':
+          description: Malformed body or unreadable request stream.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  code: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ─── Scheduling ──────────────────────────────────────────────────────────
+  /api/schedule:
+    post:
+      tags: [Scheduling]
+      summary: Schedule a notification
+      description: |
+        Creates a scheduled notification. Requires `payload`, `targetRecipient`,
+        and either `executeAt` (ISO 8601) or `timeZone` + `localDateTime`.
+
+        Optional `Idempotency-Key` header enables replay protection.
+
+        Returns a bare JSON body with `id`, `executeAt`, `timezone`, and
+        `executeAtLocal`. Returns `201` on creation, `200` on idempotent replay.
+      operationId: scheduleNotification
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleNotificationInput'
+            example:
+              executeAt: '2026-01-01T12:00:00Z'
+              payload: { message: Reminder }
+              targetRecipient: GXXXX...
+              notificationType: discord
+              maxRetries: 3
+              priority: 5
+      responses:
+        '201':
+          description: Notification scheduled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledNotificationResult'
+        '200':
+          description: Idempotent replay; `replay` is true.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledNotificationResult'
+        '400':
+          description: Missing fields, invalid date, or invalid local schedule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  code: { type: string }
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Scheduling]
+      summary: Get a scheduled notification
+      operationId: getScheduledNotification
+      responses:
+        '200':
+          description: The scheduled notification.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ScheduledNotification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    patch:
+      tags: [Scheduling]
+      summary: Modify a pending schedule
+      description: Modify an eligible pending scheduled notification. Requires an API key when one is configured.
+      operationId: updateScheduledNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                executeAt: { type: string, format: date-time }
+                payload: { type: object }
+                targetRecipient: { type: string }
+                priority: { type: integer }
+                maxRetries: { type: integer }
+                expiresAt: { type: string, format: date-time }
+                metadata: { type: object }
+      responses:
+        '200':
+          description: Updated schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      tags: [Scheduling]
+      summary: Delete a scheduled notification
+      operationId: deleteScheduledNotification
+      responses:
+        '200':
+          description: Deletion result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [Scheduling]
+      summary: Cancel a scheduled notification
+      description: |
+        Cancels a pending scheduled notification. Also accepts the legacy path
+        `/api/notifications/{id}/cancel`. Returns `409` when the notification is
+        already in a final state (completed, failed, processing).
+      operationId: cancelScheduledNotification
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Cancellation outcome (fresh or already cancelled).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CancelScheduleResult'
+        '409':
+          description: Notification is already in a final state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelScheduleResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/{id}/resume:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [Scheduling]
+      summary: Resume a held notification
+      description: |
+        Releases a notification held by the intervene missed-schedule policy so
+        the next poll delivers it.
+      operationId: resumeScheduledNotification
+      responses:
+        '200':
+          description: Resume result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/{id}/recovery:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [Scheduling]
+      summary: Trigger recovery for a scheduled notification
+      operationId: recoverScheduledNotification
+      responses:
+        '200':
+          description: Recovery result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/stats:
+    get:
+      tags: [Scheduling]
+      summary: Scheduler statistics
+      operationId: getScheduleStats
+      responses:
+        '200':
+          description: Scheduler statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/execution-metrics:
+    get:
+      tags: [Scheduling]
+      summary: Scheduler execution metrics
+      operationId: getScheduleExecutionMetrics
+      responses:
+        '200':
+          description: Execution metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/retry-distribution:
+    get:
+      tags: [Scheduling]
+      summary: Retry distribution
+      operationId: getRetryDistribution
+      responses:
+        '200':
+          description: Retry distribution histogram.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/retry-statistics:
+    get:
+      tags: [Scheduling]
+      summary: Retry statistics
+      operationId: getRetryStatistics
+      responses:
+        '200':
+          description: Retry statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/queue:
+    get:
+      tags: [Scheduling]
+      summary: List pending jobs in the queue
+      description: Returns jobs currently waiting in the queue with id, type, enqueued time, scheduled delivery time, priority, and retry count.
+      operationId: getScheduleQueue
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        '200':
+          description: Pending jobs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/queue/metrics:
+    get:
+      tags: [Scheduling]
+      summary: Queue operational metrics
+      description: |
+        Returns queue operational metrics. Also served at the aliases
+        `/api/schedule/queue-metrics` and `/api/notifications/queue-metrics`.
+      operationId: getQueueMetrics
+      responses:
+        '200':
+          description: Queue metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/schedule/jobs:
+    get:
+      tags: [Scheduling]
+      summary: Background job monitoring snapshot
+      operationId: getScheduleJobs
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 25 }
+      responses:
+        '200':
+          description: Job snapshot with recent jobs and failures.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+
+  /api/schedule/jobs/failures:
+    get:
+      tags: [Scheduling]
+      summary: Failed job log
+      operationId: getScheduleJobFailures
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: Failed jobs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+
+  # ─── Notifications ───────────────────────────────────────────────────────
+  /api/notifications/history:
+    get:
+      tags: [Notifications]
+      summary: Notification delivery history
+      description: |
+        Returns persisted notification delivery history. Requires an API key when
+        one is configured.
+      operationId: getNotificationHistory
+      security:
+        - ApiKeyAuth: []
+        - {}
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [SUCCESS, FAILED, RETRY]
+        - name: startDate
+          in: query
+          schema: { type: string, format: date-time }
+        - name: endDate
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Delivery history page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/notifications/search:
+    get:
+      tags: [Notifications]
+      summary: Search notifications
+      operationId: searchNotifications
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: sender
+          in: query
+          schema: { type: string }
+        - name: txHash
+          in: query
+          schema: { type: string }
+        - name: eventId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string, format: date-time }
+        - name: endDate
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [newest, oldest, status]
+            default: newest
+      responses:
+        '200':
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/search/suggestions:
+    get:
+      tags: [Notifications]
+      summary: Search suggestions
+      operationId: getSearchSuggestions
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, default: '' }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Suggestions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/notifications/health:
+    get:
+      tags: [Notifications]
+      summary: Notification health monitor report
+      operationId: getNotificationHealth
+      responses:
+        '200':
+          description: Health report.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Last report emitted by the notification health monitor.
+        '503':
+          description: Health monitor not configured or no report yet.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+
+  /api/notifications/validate-batch:
+    post:
+      tags: [Notifications]
+      summary: Validate a notification batch
+      description: |
+        Validates an array of notification objects (or a `{ notifications: [...] }`
+        wrapper) without persisting them. Returns a structured per-item error
+        array. Responds with `200` when valid and `400` when invalid, in both
+        cases as a bare validation-result body.
+      operationId: validateNotificationBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/NotificationInput'
+                - type: object
+                  properties:
+                    notifications:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/NotificationInput'
+            example:
+              notifications:
+                - channel: email
+                  recipient: user@example.com
+                - channel: carrier-pigeon
+                  recipient: user@example.com
+      responses:
+        '200':
+          description: Batch is valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchValidationResult'
+        '400':
+          description: Batch is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchValidationResult'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+
+  /api/notifications/import:
+    post:
+      tags: [Notifications]
+      summary: Bulk import notifications
+      description: |
+        Imports notifications from a JSON array or CSV body. Requires an API key
+        when one is configured. Accepts `application/json`, `text/csv`, or
+        `application/csv`.
+      operationId: importNotifications
+      security:
+        - ApiKeyAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/NotificationInput'
+          text/csv:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Import summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/notifications/{id}/receipts:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Notifications]
+      summary: Delivery receipts for a notification
+      operationId: getNotificationReceipts
+      security:
+        - ApiKeyAuth: []
+        - {}
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [delivered, failed, rejected, pending]
+      responses:
+        '200':
+          description: Delivery receipts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          receipts:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DeliveryReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/notifications/delivery-metrics:
+    get:
+      tags: [Notifications]
+      summary: Real-time delivery metrics snapshot
+      operationId: getDeliveryMetrics
+      parameters:
+        - name: reset
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Live analytics snapshot.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryMetricsSnapshot'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/notifications/delivery-metrics/history:
+    get:
+      tags: [Notifications]
+      summary: Persisted delivery metrics history
+      operationId: getDeliveryMetricsHistory
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Historical snapshots, newest first.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count: { type: integer }
+                          snapshots:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DeliveryMetricsSnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ─── Analytics ───────────────────────────────────────────────────────────
+  /api/analytics:
+    get:
+      tags: [Analytics]
+      summary: Analytics snapshot
+      operationId: getAnalytics
+      parameters:
+        - name: reset
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Aggregated analytics snapshot.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryMetricsSnapshot'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/analytics/history:
+    get:
+      tags: [Analytics]
+      summary: Persisted analytics history
+      operationId: getAnalyticsHistory
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Historical snapshots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/metrics/response-time:
+    get:
+      tags: [Analytics]
+      summary: Response-time metrics
+      operationId: getResponseTimeMetrics
+      parameters:
+        - name: reset
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Response-time counters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+
+  # ─── Rate Limiting ───────────────────────────────────────────────────────
+  /api/rate-limit/metrics:
+    get:
+      tags: [Rate Limiting]
+      summary: Rate-limiter metrics
+      description: |
+        Returns rate-limiter metrics. This endpoint is exempt from rate limiting
+        so operators can always inspect it.
+      operationId: getRateLimitMetrics
+      responses:
+        '200':
+          description: Rate-limiter metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitMetrics'
+
+  # ─── Templates ───────────────────────────────────────────────────────────
+  /api/templates:
+    get:
+      tags: [Templates]
+      summary: List notification templates
+      operationId: listTemplates
+      security:
+        - ApiKeyAuth: []
+        - {}
+      responses:
+        '200':
+          description: Templates.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NotificationTemplate'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      tags: [Templates]
+      summary: Create a notification template
+      operationId: createTemplate
+      security:
+        - ApiKeyAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationTemplateInput'
+            example:
+              id: welcome
+              name: Welcome
+              type: email
+              subject: 'Welcome, {{name}}'
+              body: 'Hello {{name}}, welcome to NotifyChain.'
+              variables: [name]
+      responses:
+        '201':
+          description: Template created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NotificationTemplate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/templates/stats:
+    get:
+      tags: [Templates]
+      summary: Template statistics
+      operationId: getTemplateStats
+      security:
+        - ApiKeyAuth: []
+        - {}
+      responses:
+        '200':
+          description: Aggregate template statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/templates/by-key/{uniqueKey}:
+    parameters:
+      - name: uniqueKey
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Templates]
+      summary: Get a template by its unique key
+      operationId: getTemplateByKey
+      security:
+        - ApiKeyAuth: []
+        - {}
+      responses:
+        '200':
+          description: The template.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Templates]
+      summary: Get a template by ID
+      operationId: getTemplate
+      security:
+        - ApiKeyAuth: []
+        - {}
+      responses:
+        '200':
+          description: The template.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NotificationTemplate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    put:
+      tags: [Templates]
+      summary: Update a template
+      operationId: updateTemplate
+      security:
+        - ApiKeyAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNotificationTemplateInput'
+      responses:
+        '200':
+          description: Updated template.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      tags: [Templates]
+      summary: Delete a template
+      operationId: deleteTemplate
+      security:
+        - ApiKeyAuth: []
+        - {}
+      responses:
+        '200':
+          description: Deletion result.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted: { type: boolean }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/templates/{id}/audit:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Templates]
+      summary: Template audit history
+      operationId: getTemplateAudit
+      security:
+        - ApiKeyAuth: []
+        - {}
+      responses:
+        '200':
+          description: Audit records for the template.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          templateId: { type: string }
+                          records:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/TemplateAuditRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/templates/render:
+    post:
+      tags: [Templates]
+      summary: Render a template
+      description: |
+        Renders a template identified by `template.id` or `template.uniqueKey`
+        using the supplied `context` variables.
+      operationId: renderTemplate
+      security:
+        - ApiKeyAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template, context]
+              properties:
+                template:
+                  oneOf:
+                    - type: string
+                    - type: object
+                      properties:
+                        id: { type: string }
+                        uniqueKey: { type: string }
+                context:
+                  type: object
+                  additionalProperties: true
+            example:
+              template: welcome
+              context:
+                name: Alice
+      responses:
+        '200':
+          description: Rendered template.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          rendered: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ─── Preferences ─────────────────────────────────────────────────────────
+  /api/preferences/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Preferences]
+      summary: Get user preferences
+      operationId: getPreferences
+      responses:
+        '200':
+          description: The user's preferences.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+    put:
+      tags: [Preferences]
+      summary: Update user preferences
+      operationId: updatePreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [categories]
+              properties:
+                categories:
+                  type: object
+                  additionalProperties: { type: boolean }
+            example:
+              categories:
+                security: true
+                product: false
+      responses:
+        '200':
+          description: Updated preferences.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+
+  # ─── Archive ─────────────────────────────────────────────────────────────
+  /api/archive:
+    get:
+      tags: [Archive]
+      summary: List archived notifications
+      operationId: listArchive
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: contractAddress
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string, format: date-time }
+        - name: endDate
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Paginated archive records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/archive/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [Archive]
+      summary: Get an archived record
+      operationId: getArchiveRecord
+      responses:
+        '200':
+          description: The archived record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          description: id must be a positive integer.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/archive/run:
+    post:
+      tags: [Archive]
+      summary: Trigger an archive cycle
+      description: Triggers an on-demand archive cycle (administrative).
+      operationId: runArchive
+      responses:
+        '200':
+          description: Archive cycle result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ─── Credentials ─────────────────────────────────────────────────────────
+  /api/credentials:
+    get:
+      tags: [Credentials]
+      summary: List API credentials
+      description: |
+        Lists issued scoped credentials (no secret material). Requires the
+        `credentials:read` scope. Authentication is always required.
+      operationId: listCredentials
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Credential list.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count: { type: integer }
+                          credentials:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ApiCredential'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      tags: [Credentials]
+      summary: Issue an API credential
+      description: |
+        Issues a new scoped API credential. This is the only response that ever
+        contains the plaintext `apiKey`. Requires the `credentials:manage`
+        scope; a scoped caller may only grant scopes it holds itself.
+      operationId: createCredential
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiCredentialInput'
+            example:
+              name: CI pipeline
+              scopes: ['credentials:read', 'templates:read']
+      responses:
+        '201':
+          description: Credential created; includes the plaintext `apiKey` (shown once).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CreatedApiCredential'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/credentials/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[0-9a-f]{16}$' }
+    get:
+      tags: [Credentials]
+      summary: Get an API credential
+      description: Requires the `credentials:read` scope.
+      operationId: getCredential
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: The credential (no secret material).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      tags: [Credentials]
+      summary: Revoke an API credential
+      description: Requires the `credentials:manage` scope.
+      operationId: revokeCredential
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: The revoked credential.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ─── Export ──────────────────────────────────────────────────────────────
+  /api/export:
+    get:
+      tags: [Export]
+      summary: Export data (GET)
+      description: |
+        Exports notifications and/or events as JSON or CSV. Requires an API key
+        when one is configured. Also served at `/api/admin/export`.
+      operationId: exportDataGet
+      security:
+        - ApiKeyAuth: []
+        - {}
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [notifications, events, all]
+            default: all
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+        - name: includeSensitive
+          in: query
+          schema: { type: boolean, default: false }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: offset
+          in: query
+          schema: { type: integer }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: |
+            Export result. JSON when `format=json`, or a `text/csv` attachment
+            when `format=csv`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Export]
+      summary: Export data (POST)
+      description: Same as the GET export but accepts filters in a JSON body.
+      operationId: exportDataPost
+      security:
+        - ApiKeyAuth: []
+        - {}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataExportRequest'
+      responses:
+        '200':
+          description: Export result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key sent in the `X-API-Key` header. When the server has no keys
+        configured, requests are allowed anonymously (development only).
+        Scoped credentials (`nck_...`) additionally require the scope declared
+        by the endpoint; legacy static keys implicitly hold all scopes.
+
+  responses:
+    BadRequest:
+      description: The request is malformed or has invalid parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Credentials are missing, unknown, or invalid.
+      headers:
+        WWW-Authenticate:
+          schema: { type: string, example: 'ApiKey header="X-API-Key"' }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: The credentials lack the required scope for this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: The route or requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    PayloadTooLarge:
+      description: The request body exceeds the size limit (default 64 KB).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnsupportedMediaType:
+      description: The request Content-Type is not accepted by this endpoint.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnprocessableEntity:
+      description: The request is well-formed but cannot be processed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    TooManyRequests:
+      description: Rate limit exceeded; honour the `Retry-After` header.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalError:
+      description: An unexpected server-side failure occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: A required optional service (scheduler, templates, etc.) is not configured.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    # ── Envelopes ──────────────────────────────────────────────────────────
+    SuccessEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          description: Operation-specific payload.
+        meta:
+          type: object
+          additionalProperties: true
+          description: Optional pagination or extra context.
+
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+              enum:
+                - BAD_REQUEST
+                - VALIDATION_ERROR
+                - PARSE_ERROR
+                - UNAUTHORIZED
+                - INVALID_PERMISSIONS
+                - FORBIDDEN
+                - NOT_FOUND
+                - METHOD_NOT_ALLOWED
+                - CONFLICT
+                - PAYLOAD_TOO_LARGE
+                - UNSUPPORTED_MEDIA_TYPE
+                - UNPROCESSABLE
+                - RATE_LIMITED
+                - INTERNAL_ERROR
+                - SERVICE_UNAVAILABLE
+            message:
+              type: string
+            details:
+              description: Validation errors or extra context; empty array when none.
+            correlation_id:
+              type: string
+              description: Present when a correlation ID is known.
+
+    # ── Infrastructure ─────────────────────────────────────────────────────
+    ServiceHealth:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, error, not_configured]
+        latencyMs:
+          type: number
+        detail:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        uptimeSeconds:
+          type: number
+        network:
+          type: string
+        services:
+          type: object
+          properties:
+            stellarRpc:
+              $ref: '#/components/schemas/ServiceHealth'
+            discord:
+              $ref: '#/components/schemas/ServiceHealth'
+            database:
+              $ref: '#/components/schemas/ServiceHealth'
+            eventRegistry:
+              type: object
+              properties:
+                status:
+                  type: string
+                eventCount:
+                  type: integer
+
+    StatusResponse:
+      type: object
+      description: Lightweight listener status snapshot.
+
+    VersionCatalog:
+      type: object
+      properties:
+        currentVersion:
+          type: string
+          example: v1
+        supportedVersions:
+          type: array
+          items:
+            type: string
+        policy:
+          type: object
+          properties:
+            unversionedRoutesDeprecated:
+              type: boolean
+            minDeprecationNoticeMonths:
+              type: integer
+            minSunsetNoticeMonths:
+              type: integer
+        routes:
+          type: object
+          properties:
+            active: { type: integer }
+            deprecated: { type: integer }
+            sunset: { type: integer }
+            total: { type: integer }
+        deprecatedRoutes:
+          type: array
+          items:
+            type: object
+
+    IndexingHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [synced, syncing, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        indexedLedger:
+          type: integer
+          nullable: true
+        networkTipLedger:
+          type: integer
+          nullable: true
+        ledgerLag:
+          type: integer
+          nullable: true
+        processingDelayMs:
+          type: number
+          nullable: true
+        lastIngestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        detail:
+          type: string
+
+    DisplayEvent:
+      type: object
+      properties:
+        eventId:
+          type: string
+        contractAddress:
+          type: string
+        eventName:
+          type: string
+          nullable: true
+        ledger:
+          type: number
+        type:
+          type: string
+        topic:
+          type: array
+          items:
+            type: string
+        value:
+          type: string
+        txHash:
+          type: string
+        receivedAt:
+          type: number
+
+    # ── Scheduling ─────────────────────────────────────────────────────────
+    ScheduleNotificationInput:
+      type: object
+      required: [payload, targetRecipient]
+      properties:
+        executeAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp. Required unless `timeZone` + `localDateTime` are supplied.
+        timeZone:
+          type: string
+          description: IANA time zone for a local schedule (paired with `localDateTime`).
+        localDateTime:
+          type: string
+          description: Local wall-clock time for a local schedule (paired with `timeZone`).
+        recurrence:
+          type: string
+          enum: [daily, weekly]
+        payload:
+          type: object
+        targetRecipient:
+          type: string
+        notificationType:
+          type: string
+          enum: [discord, email, webhook, sms]
+          default: discord
+        expiresAt:
+          type: string
+          format: date-time
+        maxRetries:
+          type: integer
+        priority:
+          type: integer
+        eventId:
+          type: string
+        contractAddress:
+          type: string
+        metadata:
+          type: object
+
+    ScheduledNotificationResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        executeAt:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        executeAtLocal:
+          type: string
+        replay:
+          type: boolean
+          description: Present only on idempotent replays.
+
+    ScheduledNotification:
+      type: object
+      description: A scheduled notification record.
+      properties:
+        id:
+          type: integer
+        payload:
+          type: string
+        notificationType:
+          type: string
+        targetRecipient:
+          type: string
+        executeAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum:
+            - PENDING
+            - PROCESSING
+            - COMPLETED
+            - FAILED
+            - DEAD_LETTERED
+            - CANCELLED
+            - EXPIRED
+            - AWAITING_INTERVENTION
+        retryCount:
+          type: integer
+        maxRetries:
+          type: integer
+        priority:
+          type: integer
+        lastError:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CancelScheduleResult:
+      type: object
+      properties:
+        cancelled:
+          type: boolean
+        state:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+        notification:
+          nullable: true
+
+    # ── Notifications ───────────────────────────────────────────────────────
+    NotificationInput:
+      type: object
+      description: A notification item used by batch validation and import.
+      properties:
+        channel:
+          type: string
+          example: email
+        recipient:
+          type: string
+          example: user@example.com
+        template:
+          type: string
+        data:
+          type: object
+
+    BatchValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        processedCount:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+                description: Zero-based item index, or -1 for a request-level error.
+              code:
+                type: string
+              message:
+                type: string
+
+    ImportSummary:
+      type: object
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+
+    NotificationHistoryResponse:
+      type: object
+      description: Paginated notification delivery history.
+      properties:
+        total:
+          type: integer
+        data:
+          type: array
+          items:
+            type: object
+
+    DeliveryReceipt:
+      type: object
+      properties:
+        id:
+          type: integer
+        notificationId:
+          type: integer
+        status:
+          type: string
+          enum: [delivered, failed, rejected, pending]
+        detail:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Analytics ───────────────────────────────────────────────────────────
+    DeliveryMetricsSnapshot:
+      type: object
+      properties:
+        totalRecorded:
+          type: integer
+        windowStart:
+          type: integer
+        windowEnd:
+          type: integer
+        overall:
+          type: object
+          properties:
+            total: { type: integer }
+            success: { type: integer }
+            failure: { type: integer }
+            retry: { type: integer }
+            skipped: { type: integer }
+            successRate: { type: number }
+            averageDurationMs: { type: number }
+        byType:
+          type: array
+          items:
+            type: object
+        byContract:
+          type: array
+          items:
+            type: object
+        hourlyBuckets:
+          type: array
+          items:
+            type: object
+        errorBreakdown:
+          type: object
+          additionalProperties: true
+
+    RateLimitMetrics:
+      type: object
+      properties:
+        totalRequests:
+          type: integer
+        blockedRequests:
+          type: integer
+        allowedRequests:
+          type: integer
+        uniqueClients:
+          type: integer
+        topBlockedClients:
+          type: array
+          items:
+            type: object
+        startTime:
+          type: string
+          format: date-time
+
+    # ── Templates ──────────────────────────────────────────────────────────
+    NotificationTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateNotificationTemplateInput:
+      type: object
+      required: [id, name, type, body]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    UpdateNotificationTemplateInput:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    TemplateAuditRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        templateId:
+          type: string
+        actor:
+          type: string
+        action:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        previousSnapshot:
+          $ref: '#/components/schemas/NotificationTemplate'
+        newSnapshot:
+          $ref: '#/components/schemas/NotificationTemplate'
+
+    # ── Credentials ─────────────────────────────────────────────────────────
+    CreateApiCredentialInput:
+      type: object
+      required: [name, scopes]
+      properties:
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+
+    ApiCredential:
+      type: object
+      description: A credential without secret material.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreatedApiCredential:
+      allOf:
+        - $ref: '#/components/schemas/ApiCredential'
+        - type: object
+          properties:
+            apiKey:
+              type: string
+              description: The plaintext API key. Shown only once, in this response.
+
+    # ── Export ──────────────────────────────────────────────────────────────
+    DataExportRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [notifications, events, all]
+          default: all
+        format:
+          type: string
+          enum: [json, csv]
+          default: json
+        includeSensitive:
+          type: boolean
+          default: false
+        status:
+          type: string
+        channel:
+          type: string
+        recipient:
+          type: string
+        contract:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        limit:
+          type: integer
+        offset:
+          type: integer

@@ -25,6 +25,7 @@ export type Tab =
   | 'channels'
   | 'destinations'
   | 'rpc-benchmark'
+  | 'transaction-trace'
   | 'contract-detail';
 
 export interface NavItem {
@@ -97,6 +98,11 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: 'rpc-benchmark',
     label: 'RPC Benchmark',
+    group: 'Diagnostics',
+  },
+  {
+    id: 'transaction-trace',
+    label: 'Transaction Trace',
     group: 'Diagnostics',
   },
 ];

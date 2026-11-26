@@ -1,7 +1,9 @@
 import * as sqlite3 from 'sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { AsyncLocalStorage } from 'async_hooks';
 import logger from '../utils/logger';
+import { applyDestinationOwnershipMigration } from '../migrations/008-destination-ownership';
 
 /** How long a write waits for a competing connection's lock before failing. */
 export const DATABASE_BUSY_TIMEOUT_MS = 5_000;
@@ -25,6 +27,14 @@ export class Database {
   private readonly reconnectBaseDelayMs: number;
   /** True while a transaction is open; recovery never fires mid-transaction. */
   private inTransaction: boolean = false;
+  /**
+   * Marks async work running inside a `transaction()` callback so nested
+   * calls become SAVEPOINTs instead of an illegal second BEGIN (issue #1121).
+   */
+  private readonly transactionContext = new AsyncLocalStorage<{ depth: number }>();
+  /** Serialises top-level transactions on the single shared connection. */
+  private transactionQueue: Promise<void> = Promise.resolve();
+  private savepointCounter = 0;
 
   constructor(dbPath: string = './data/notifications.db', recovery: DatabaseRecoveryOptions = {}) {
     this.dbPath = dbPath;
@@ -204,6 +214,7 @@ export class Database {
     await this.transaction(async () => {
       await this.applyIncrementalMigrations();
       await this.exec(schema);
+      await this.applyEventIntegrityConstraints();
     });
 
     logger.info('Database migrations completed');
@@ -272,15 +283,65 @@ export class Database {
       'ALTER TABLE scheduled_notifications ADD COLUMN next_retry_at DATETIME',
       'ALTER TABLE scheduled_notifications ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)',
       "ALTER TABLE scheduled_notifications ADD COLUMN recovery_state TEXT CHECK (recovery_state IS NULL OR recovery_state = 'AWAITING_INTERVENTION')",
+      'ALTER TABLE processed_events ADD COLUMN tx_metadata TEXT',
+      'ALTER TABLE processed_events ADD COLUMN metadata_status TEXT',
     ];
     for (const sql of migrations) {
       try {
         await this.run(sql);
       } catch (error: any) {
-        if (/duplicate column name/i.test(String(error?.message ?? error))) continue;
+        const message = String(error?.message ?? error);
+        // Tolerate an already-applied column and a table that does not yet
+        // exist (created later by schema.sql on this run).
+        if (/duplicate column name/i.test(message) || /no such table/i.test(message)) continue;
         throw error;
       }
     }
+
+    // Safely upgrade any legacy `destinations` table lacking `owner_id` before
+    // `schema.sql` creates ownership indexes on `destinations(owner_id)`.
+    if (this.db) {
+      const legacyDestTable = await this.get<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'destinations'",
+      );
+      if (legacyDestTable) {
+        await applyDestinationOwnershipMigration(this.db);
+      }
+    }
+  }
+
+  /**
+   * Event-table uniqueness that cannot live in schema.sql (issue #1121).
+   *
+   * `CREATE UNIQUE INDEX` fails outright when existing rows already violate
+   * it, which would block startup. The duplicate audit runs first: a clean
+   * table gets the constraint, while a table with legacy duplicates keeps
+   * every row and logs the conflict for an operator to resolve (migration
+   * 008 performs the same audit and refuses to proceed).
+   */
+  private async applyEventIntegrityConstraints(): Promise<void> {
+    const existing = await this.get<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'ux_processed_events_contract_event'",
+    );
+    if (existing) return;
+
+    const duplicates = await this.get<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM (
+         SELECT 1 FROM processed_events
+         GROUP BY contract_address, event_id HAVING COUNT(*) > 1
+       )`,
+    );
+    if ((duplicates?.count ?? 0) > 0) {
+      logger.error('processed_events has duplicate (contract_address, event_id) rows; unique constraint not applied', {
+        duplicateGroups: duplicates?.count,
+      });
+      return;
+    }
+
+    await this.run(
+      `CREATE UNIQUE INDEX IF NOT EXISTS ux_processed_events_contract_event
+         ON processed_events(contract_address, event_id)`,
+    );
   }
 
   /**
@@ -360,29 +421,78 @@ export class Database {
   }
 
   /**
-   * Execute multiple statements in a transaction
+   * Execute multiple statements atomically: every write made by `callback`
+   * commits together, or all of it is rolled back and the error rethrown.
+   *
+   * Transaction boundaries (issue #1121):
+   * - Top-level transactions are serialised. All callers share one SQLite
+   *   connection, so two overlapping `BEGIN`s would otherwise fail with
+   *   "cannot start a transaction within a transaction".
+   * - A `transaction()` call made from inside another transaction's callback
+   *   becomes a SAVEPOINT. A failing inner step rolls back only its own
+   *   writes; the error still propagates, so an outer callback that does not
+   *   catch it rolls back the whole unit.
    */
-  async transaction(callback: () => Promise<void>): Promise<void> {
+  async transaction<T>(callback: () => Promise<T>): Promise<T> {
     if (!this.db) throw new Error('Database not initialized');
+
+    const context = this.transactionContext.getStore();
+    if (context) {
+      return this.runInSavepoint(context, callback);
+    }
+
+    const previous = this.transactionQueue;
+    let release!: () => void;
+    this.transactionQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
 
     // Recovery is suspended for the whole transaction: a mid-transaction
     // reconnect would lose the transaction silently, so any failure rolls
     // back and propagates to the caller instead.
     this.inTransaction = true;
     try {
-      await this.run('BEGIN TRANSACTION');
-      await callback();
-      await this.run('COMMIT');
-    } catch (error) {
-      try {
-        await this.run('ROLLBACK');
-      } catch (rollbackError) {
-        logger.error('Rollback failed after transaction error', { error: rollbackError });
-      }
-      logger.error('Transaction rolled back', { error });
-      throw error;
+      return await this.transactionContext.run({ depth: 0 }, async () => {
+        await this.run('BEGIN TRANSACTION');
+        try {
+          const result = await callback();
+          await this.run('COMMIT');
+          return result;
+        } catch (error) {
+          try {
+            await this.run('ROLLBACK');
+          } catch (rollbackError) {
+            logger.error('Rollback failed after transaction error', { error: rollbackError });
+          }
+          logger.error('Transaction rolled back', { error });
+          throw error;
+        }
+      });
     } finally {
       this.inTransaction = false;
+      release();
+    }
+  }
+
+  private async runInSavepoint<T>(
+    context: { depth: number },
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    const name = `sp_${++this.savepointCounter}`;
+    await this.run(`SAVEPOINT ${name}`);
+    try {
+      const result = await this.transactionContext.run({ depth: context.depth + 1 }, callback);
+      await this.run(`RELEASE SAVEPOINT ${name}`);
+      return result;
+    } catch (error) {
+      try {
+        await this.run(`ROLLBACK TO SAVEPOINT ${name}`);
+        await this.run(`RELEASE SAVEPOINT ${name}`);
+      } catch (rollbackError) {
+        logger.error('Savepoint rollback failed', { error: rollbackError, savepoint: name });
+      }
+      throw error;
     }
   }
 

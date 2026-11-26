@@ -66,17 +66,24 @@ describe('critical event claim and completion transitions', () => {
     );
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0][1]).toEqual([
-      'ERROR', sent ? 1 : 0, 'delivery failed', expect.any(String),
+      'event', 'contract', expect.any(String), 20, 'tx', 'contract', sent ? 1 : 0, 'ERROR',
+      'delivery failed',
+      'ERROR', sent ? 1 : 0, 'delivery failed', null, null, expect.any(String),
     ]);
   });
 
-  it('creates a terminal record when a fail-open claim left no row', async () => {
-    run.mockResolvedValueOnce({ changes: 0 }).mockResolvedValueOnce({ changes: 1 });
+  it('creates or finalises the record in a single atomic upsert', async () => {
+    run.mockResolvedValueOnce({ changes: 1 });
     await service.completeEvent('event', 'contract', 20, undefined, 'contract', true, 'PROCESSED');
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0]).toContain('INSERT INTO processed_events');
+    expect(run.mock.calls[0][0]).toContain('ON CONFLICT(fingerprint) DO UPDATE');
+    expect(run.mock.calls[0][1]).toEqual([
+      'event', 'contract', expect.any(String), 20, null, 'contract', 1, 'PROCESSED', null,
     expect(run).toHaveBeenCalledTimes(2);
     expect(run.mock.calls[1][0]).toContain('INSERT INTO processed_events');
     expect(run.mock.calls[1][1]).toEqual([
-      'event', 'contract', expect.any(String), 20, null, 'contract', 1, 'PROCESSED', null,
+      'event', 'contract', expect.any(String), 20, null, 'contract', 1, 'PROCESSED', null, null, null,
     ]);
   });
 

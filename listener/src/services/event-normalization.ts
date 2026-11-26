@@ -17,6 +17,7 @@ import {
   parseEventVersion,
   validateEventPayload,
 } from '../utils/event-utils';
+import { parseEventSchemaVersion } from '../utils/event-schema-version';
 
 /** RPC event types this listener already accepts and passes through unchanged. */
 export const SUPPORTED_RPC_EVENT_TYPES = ['contract', 'system', 'diagnostic'] as const;
@@ -37,6 +38,10 @@ export interface NormalizedEvent {
   value: string;
   txHash: string | null;
   payloadVersion: number | null;
+  /** Event name without a `_v<N>` schema suffix (issue #1122). */
+  baseEventName: string | null;
+  /** Contract event schema version (1 for unsuffixed names). */
+  eventSchemaVersion: number;
 }
 
 export type NormalizationResult =
@@ -108,6 +113,7 @@ export function normalizeSorobanEvent(
   const version = parseEventVersion(raw.value);
   const payloadVersion = version.found && version.version !== undefined ? version.version : null;
   const txHash = typeof raw.txHash === 'string' && raw.txHash.length > 0 ? raw.txHash : null;
+  const schema = parseEventSchemaVersion(eventName);
 
   return {
     ok: true,
@@ -121,6 +127,8 @@ export function normalizeSorobanEvent(
       value,
       txHash,
       payloadVersion,
+      baseEventName: schema.baseEventName,
+      eventSchemaVersion: schema.schemaVersion,
     },
   };
 }

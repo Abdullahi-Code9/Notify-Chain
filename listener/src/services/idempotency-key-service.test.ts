@@ -22,6 +22,7 @@ describe('IdempotencyKeyService', () => {
       getCachedResponse: jest.fn(),
       validateRequestHash: jest.fn(),
       storeResponse: jest.fn(),
+      releaseExpiredKey: jest.fn().mockResolvedValue(0),
       cleanupExpiredKeys: jest.fn(),
       getStats: jest.fn(),
     };
@@ -162,10 +163,27 @@ describe('IdempotencyKeyService', () => {
       expect((logger as any).warn).toHaveBeenCalled();
     });
 
-    it('IdempotencyKeyReuseError also fires on expired-stored records with a different body', async () => {
-      // Key exists in the store but cached response was expired; the repository
-      // still returns the stored hash for validation — body mismatch is still
-      // a hard 409 because the client violated the idempotency contract.
+    it('allows an expired key to be reused with a different body (#1114)', async () => {
+      // The cached response has expired: the key is released before the hash
+      // check, so the new request runs and is stored under the same key.
+      mockRepository.getCachedResponse.mockResolvedValue(null);
+      mockRepository.releaseExpiredKey.mockResolvedValue(1);
+      mockRepository.validateRequestHash.mockResolvedValue(true);
+      mockRepository.storeResponse.mockResolvedValue(1);
+      const processor = jest.fn().mockResolvedValue({ id: 7 });
+
+      const result = await service.processWithIdempotency('k', { b: 2 }, processor);
+
+      expect(mockRepository.releaseExpiredKey).toHaveBeenCalledWith('k');
+      expect(mockRepository.releaseExpiredKey.mock.invocationCallOrder[0]).toBeLessThan(
+        mockRepository.validateRequestHash.mock.invocationCallOrder[0],
+      );
+      expect(processor).toHaveBeenCalledTimes(1);
+      expect(result.isDuplicate).toBe(false);
+      expect(mockRepository.storeResponse).toHaveBeenCalledWith('k', { b: 2 }, 7, { id: 7 }, undefined);
+    });
+
+    it('still rejects a mismatched body when a non-expired record remains', async () => {
       mockRepository.getCachedResponse.mockResolvedValue(null);
       mockRepository.validateRequestHash.mockResolvedValue(false);
 

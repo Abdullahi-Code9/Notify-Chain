@@ -152,6 +152,19 @@ export class IdempotencyKeyRepository {
   }
 
   /**
+   * Release a key whose TTL has passed so it can be reused (issue #1114).
+   * Only expired rows are removed; an active key is never touched.
+   */
+  async releaseExpiredKey(idempotencyKey: string, now: Date = new Date()): Promise<number> {
+    const result = await this.db.run(
+      `DELETE FROM idempotency_keys
+       WHERE idempotency_key = ? AND (status = 'EXPIRED' OR expires_at <= ?)`,
+      [idempotencyKey, now.toISOString()],
+    );
+    return result.changes;
+  }
+
+  /**
    * Clean up expired idempotency keys
    * Should be called periodically to maintain database size
    */
