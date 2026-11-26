@@ -273,12 +273,17 @@ export class Database {
       'ALTER TABLE scheduled_notifications ADD COLUMN next_retry_at DATETIME',
       'ALTER TABLE scheduled_notifications ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)',
       "ALTER TABLE scheduled_notifications ADD COLUMN recovery_state TEXT CHECK (recovery_state IS NULL OR recovery_state = 'AWAITING_INTERVENTION')",
+      'ALTER TABLE processed_events ADD COLUMN tx_metadata TEXT',
+      'ALTER TABLE processed_events ADD COLUMN metadata_status TEXT',
     ];
     for (const sql of migrations) {
       try {
         await this.run(sql);
       } catch (error: any) {
-        if (/duplicate column name/i.test(String(error?.message ?? error))) continue;
+        const message = String(error?.message ?? error);
+        // Tolerate an already-applied column and a table that does not yet
+        // exist (created later by schema.sql on this run).
+        if (/duplicate column name/i.test(message) || /no such table/i.test(message)) continue;
         throw error;
       }
     }

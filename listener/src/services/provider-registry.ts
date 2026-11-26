@@ -1,10 +1,12 @@
 import {
   NotificationProvider,
   ProviderCapability,
+  ProviderMetadata,
   NotificationFormat,
   DeliveryPayload,
   DeliveryResult,
 } from '../types/provider-capabilities';
+import { validatePayloadLimits } from './providers/payload-limits';
 import logger from '../utils/logger';
 
 /**
@@ -103,6 +105,18 @@ export class ProviderRegistry {
   // ---------------------------------------------------------------------------
 
   /**
+   * Returns a provider's declared capabilities, preferring an explicit
+   * `getCapabilities()` implementation and falling back to `metadata`.
+   *
+   * This keeps the orchestrator decoupled from concrete provider classes:
+   * adding a provider only requires the capabilities to be reachable via one
+   * of these two entry points.
+   */
+  private capabilitiesOf(provider: NotificationProvider): ProviderMetadata {
+    return provider.getCapabilities ? provider.getCapabilities() : provider.metadata;
+  }
+
+  /**
    * Deliver a notification through the provider registered for `providerId`.
    *
    * Resolves with a `DeliveryResult` describing whether delivery succeeded
@@ -110,6 +124,9 @@ export class ProviderRegistry {
    *
    * Returns `success: false` with `errorCode: 'UNSUPPORTED_FORMAT'` when the
    * caller requests a format the provider does not support.
+   *
+   * Returns `success: false` with `errorCode: 'PAYLOAD_LIMIT_EXCEEDED'` when the
+   * payload exceeds a limit declared by the provider; the provider is not called.
    *
    * Resolves with `success: false` (no rejection) when no provider is
    * registered for `providerId`.
@@ -167,6 +184,26 @@ export class ProviderRegistry {
           errorCode: 'UNSUPPORTED_FORMAT',
         };
       }
+    }
+
+    // Enforce provider-specific payload limits before dispatch.
+    const { payloadLimits } = this.capabilitiesOf(provider);
+    const limitResult = validatePayloadLimits(payload.payload, payloadLimits);
+    if (!limitResult.valid) {
+      const errorMessage =
+        `Provider "${providerId}" rejected the payload: ` +
+        limitResult.violations.map((violation) => violation.message).join('; ');
+      logger.warn('ProviderRegistry: delivery rejected — payload exceeds provider limits', {
+        requestId: payload.requestId,
+        providerId,
+        violations: limitResult.violations,
+      });
+      return {
+        success: false,
+        degradedCapabilities: [],
+        errorMessage,
+        errorCode: 'PAYLOAD_LIMIT_EXCEEDED',
+      };
     }
 
     logger.debug('ProviderRegistry: dispatching delivery', {
