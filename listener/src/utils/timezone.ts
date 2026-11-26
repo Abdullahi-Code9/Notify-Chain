@@ -158,6 +158,203 @@ function getTimeZoneOffsetMs(utcMillis: number, timeZone: string): number {
   return asUTC - utcMillis;
 }
 
+/**
+ * A recurring delivery window expressed in a named timezone.
+ *
+ * - `days`: days of week the window applies to, using 0 = Sunday .. 6 = Saturday.
+ *   When omitted or empty, the window applies every day.
+ * - `start` / `end`: local wall-clock times in `HH:MM` (24h) format.
+ *   A window whose `end` is <= `start` is treated as crossing midnight
+ *   (e.g. start "22:00", end "06:00").
+ */
+export interface DeliveryWindow {
+  timezone: string;
+  days?: number[];
+  start: string;
+  end: string;
+}
+
+const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+export class InvalidDeliveryWindowError extends Error {
+  readonly code = 'INVALID_DELIVERY_WINDOW';
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidDeliveryWindowError';
+  }
+}
+
+function parseHHMM(value: string, field: string): number {
+  const m = typeof value === 'string' ? value.trim().match(HHMM) : null;
+  if (!m) {
+    throw new InvalidDeliveryWindowError(
+      `Invalid ${field} time "${value}", expected HH:MM (24h)`,
+    );
+  }
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/** Validate a delivery window, returning a normalized copy. */
+export function normalizeDeliveryWindow(window: DeliveryWindow): {
+  timezone: string;
+  days: number[];
+  startMinutes: number;
+  endMinutes: number;
+} {
+  if (!window || typeof window !== 'object') {
+    throw new InvalidDeliveryWindowError('Delivery window must be an object');
+  }
+  const timezone = assertValidTimezone(window.timezone);
+  const startMinutes = parseHHMM(window.start, 'start');
+  const endMinutes = parseHHMM(window.end, 'end');
+  if (startMinutes === endMinutes) {
+    throw new InvalidDeliveryWindowError(
+      'Delivery window start and end must differ',
+    );
+  }
+  let days: number[];
+  if (window.days === undefined || window.days === null) {
+    days = [0, 1, 2, 3, 4, 5, 6];
+  } else {
+    if (!Array.isArray(window.days) || window.days.length === 0) {
+      throw new InvalidDeliveryWindowError(
+        'Delivery window days must be a non-empty array',
+      );
+    }
+    for (const d of window.days) {
+      if (!Number.isInteger(d) || d < 0 || d > 6) {
+        throw new InvalidDeliveryWindowError(
+          `Invalid day of week "${d}", expected 0-6`,
+        );
+      }
+    }
+    days = Array.from(new Set(window.days)).sort((a, b) => a - b);
+  }
+  return { timezone, days, startMinutes, endMinutes };
+}
+
+interface ZonedParts extends LocalParts {
+  weekday: number;
+}
+
+/** Get the wall-clock parts (and weekday) of `utcDate` in `timeZone`. */
+function getZonedParts(utcDate: Date, timeZone: string): ZonedParts {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+    weekday: 'short',
+  });
+  const parts = dtf.formatToParts(utcDate);
+  const map: Record<string, string> = {};
+  for (const p of parts) {
+    if (p.type !== 'literal') map[p.type] = p.value;
+  }
+  const weekdays: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+    weekday: weekdays[map.weekday] ?? 0,
+  };
+}
+
+/**
+ * Returns true if `utcDate` falls inside the given delivery window.
+ * Handles windows that cross midnight and day-of-week restrictions.
+ */
+export function isWithinDeliveryWindow(
+  utcDate: Date,
+  window: DeliveryWindow,
+): boolean {
+  if (isNaN(utcDate.getTime())) return false;
+  const { timezone, days, startMinutes, endMinutes } =
+    normalizeDeliveryWindow(window);
+  const local = getZonedParts(utcDate, timezone);
+  const minutes = local.hour * 60 + local.minute;
+
+  if (startMinutes < endMinutes) {
+    // Same-day window.
+    return days.includes(local.weekday) &&
+      minutes >= startMinutes &&
+      minutes < endMinutes;
+  }
+
+  // Cross-midnight window: [start, 24:00) belongs to the window's start day,
+  // [00:00, end) belongs to the previous day's window.
+  if (minutes >= startMinutes) {
+    return days.includes(local.weekday);
+  }
+  if (minutes < endMinutes) {
+    const prevDay = (local.weekday + 6) % 7;
+    return days.includes(prevDay);
+  }
+  return false;
+}
+
+/**
+ * Compute the next instant (>= `from`) at which the delivery window opens.
+ * Returns `from` itself if it is already inside the window.
+ */
+export function nextDeliveryWindowOpening(
+  from: Date,
+  window: DeliveryWindow,
+): Date {
+  if (isNaN(from.getTime())) {
+    throw new Error('from is not a valid date');
+  }
+  const { timezone, days, startMinutes } = normalizeDeliveryWindow(window);
+  if (isWithinDeliveryWindow(from, window)) {
+    return new Date(from.getTime());
+  }
+
+  const local = getZonedParts(from, timezone);
+  const startHour = Math.floor(startMinutes / 60);
+  const startMinute = startMinutes % 60;
+
+  // Try today and the next 7 days (covers all day-of-week restrictions).
+  for (let offset = 0; offset <= 7; offset++) {
+    const day = new Date(
+      Date.UTC(local.year, local.month - 1, local.day + offset),
+    );
+    const weekday = day.getUTCDay();
+    if (!days.includes(weekday)) continue;
+    const candidate = zonedLocalToUtc(
+      {
+        year: day.getUTCFullYear(),
+        month: day.getUTCMonth() + 1,
+        day: day.getUTCDate(),
+        hour: startHour,
+        minute: startMinute,
+        second: 0,
+      },
+      timezone,
+    );
+    if (candidate.getTime() >= from.getTime()) {
+      return candidate;
+    }
+  }
+
+  // Unreachable for valid windows, but keep a safe fallback.
+  return new Date(from.getTime());
+}
+
 /** Format a UTC Date as local wall time in the given timezone (for display). */
 export function formatInTimezone(utcDate: Date, timezone: string): string {
   const tz = assertValidTimezone(timezone);

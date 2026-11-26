@@ -254,7 +254,13 @@ CREATE TABLE IF NOT EXISTS processed_events (
   -- Status and metadata
   status VARCHAR(20) NOT NULL DEFAULT 'PROCESSED' CHECK (status IN ('PROCESSED', 'SKIPPED', 'ERROR')),
   notification_sent BOOLEAN NOT NULL DEFAULT 0 CHECK (notification_sent IN (0, 1)),
-  error_reason TEXT                         -- If status is ERROR, what went wrong
+  error_reason TEXT,                        -- If status is ERROR, what went wrong
+
+  -- Enriched blockchain transaction metadata (JSON) and its completeness marker.
+  -- metadata_status is one of 'complete' | 'partial' | 'unavailable'; NULL for
+  -- rows recorded before enrichment existed.
+  tx_metadata TEXT,
+  metadata_status TEXT
 );
 
 -- Indexes for efficient lookups
@@ -497,3 +503,54 @@ FOR EACH ROW
 BEGIN
   SELECT RAISE(ABORT, 'Schedule audit records are immutable');
 END;
+
+-- Webhook and notification destinations with explicit account ownership
+CREATE TABLE IF NOT EXISTS destinations (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL CHECK (LENGTH(TRIM(owner_id)) > 0),
+  provider TEXT NOT NULL CHECK (provider IN ('webhook', 'discord', 'email', 'telegram')),
+  display_name TEXT NOT NULL CHECK (LENGTH(TRIM(display_name)) > 0),
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  status TEXT NOT NULL DEFAULT 'not_configured' CHECK (status IN ('connected', 'not_configured', 'error', 'disabled')),
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  secrets_json TEXT NOT NULL DEFAULT '{}',
+  last_error TEXT,
+  last_tested_at INTEGER,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_destinations_owner_id
+  ON destinations(owner_id);
+
+CREATE INDEX IF NOT EXISTS idx_destinations_owner_provider
+  ON destinations(owner_id, provider);
+
+CREATE INDEX IF NOT EXISTS idx_destinations_owner_created
+  ON destinations(owner_id, created_at);
+
+CREATE TRIGGER IF NOT EXISTS update_destinations_timestamp
+AFTER UPDATE ON destinations
+FOR EACH ROW
+BEGIN
+  UPDATE destinations
+  SET updated_at = CURRENT_TIMESTAMP
+  WHERE id = NEW.id;
+END;
+
+-- Explicit ownership binding for scheduled notifications referencing a destination
+CREATE TABLE IF NOT EXISTS scheduled_notification_destinations (
+  scheduled_notification_id INTEGER PRIMARY KEY,
+  destination_id TEXT,
+  owner_id TEXT NOT NULL CHECK (LENGTH(TRIM(owner_id)) > 0),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (scheduled_notification_id) REFERENCES scheduled_notifications(id) ON DELETE CASCADE,
+  FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sched_dest_destination_id
+  ON scheduled_notification_destinations(destination_id)
+  WHERE destination_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_sched_dest_owner_id
+  ON scheduled_notification_destinations(owner_id);

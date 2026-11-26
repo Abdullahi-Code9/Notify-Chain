@@ -2,6 +2,7 @@ import * as sqlite3 from 'sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../utils/logger';
+import { applyDestinationOwnershipMigration } from '../migrations/008-destination-ownership';
 
 /** How long a write waits for a competing connection's lock before failing. */
 export const DATABASE_BUSY_TIMEOUT_MS = 5_000;
@@ -272,13 +273,29 @@ export class Database {
       'ALTER TABLE scheduled_notifications ADD COLUMN next_retry_at DATETIME',
       'ALTER TABLE scheduled_notifications ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1)',
       "ALTER TABLE scheduled_notifications ADD COLUMN recovery_state TEXT CHECK (recovery_state IS NULL OR recovery_state = 'AWAITING_INTERVENTION')",
+      'ALTER TABLE processed_events ADD COLUMN tx_metadata TEXT',
+      'ALTER TABLE processed_events ADD COLUMN metadata_status TEXT',
     ];
     for (const sql of migrations) {
       try {
         await this.run(sql);
       } catch (error: any) {
-        if (/duplicate column name/i.test(String(error?.message ?? error))) continue;
+        const message = String(error?.message ?? error);
+        // Tolerate an already-applied column and a table that does not yet
+        // exist (created later by schema.sql on this run).
+        if (/duplicate column name/i.test(message) || /no such table/i.test(message)) continue;
         throw error;
+      }
+    }
+
+    // Safely upgrade any legacy `destinations` table lacking `owner_id` before
+    // `schema.sql` creates ownership indexes on `destinations(owner_id)`.
+    if (this.db) {
+      const legacyDestTable = await this.get<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'destinations'",
+      );
+      if (legacyDestTable) {
+        await applyDestinationOwnershipMigration(this.db);
       }
     }
   }

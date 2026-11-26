@@ -618,3 +618,19 @@ Map `NotificationPriority` to your alerting system:
 | `Medium` (1) | Dashboard update |
 | `High` (2) | Notify on-call (non-urgent) |
 | `Critical` (3) | Page on-call immediately |
+
+## Operation correlation (issue #1194)
+
+The contract publishes an additional `operation_correlated` event alongside the
+existing lifecycle events for a notification. Its indexed topics are the
+correlation id, category, and priority; its data is the operation name.
+
+Correlation semantics:
+
+- The identifier is the unique 32-byte notification id, so every transition
+  for that notification (scheduled, cancelled, delivered, recalled, revoked,
+  expired, acknowledged) shares one id.
+- Different notifications always have different identifiers.
+- The event is additive: the original events and their topic/data layout are
+  unchanged, so existing consumers keep working. Consumers that need tracing
+  can group by `correlation_id` and sort by operation or ledger sequence.
