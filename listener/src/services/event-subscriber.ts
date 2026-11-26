@@ -21,7 +21,21 @@ import { normalizeSorobanEvent } from './event-normalization';
 import { provenanceDiagnostic, validateEventProvenance } from './event-provenance';
 import { EventQuarantineController } from './event-quarantine';
 import { StellarRpcManager } from './stellar-rpc-manager';
+import {
+  TransactionMetadataResolver,
+  TransactionMetadataSource,
+  extractTransactionContext,
+} from './transaction-metadata-resolver';
 import { safeLedgerRangeValidation } from '../utils/ledger-range-validator';
+
+/** Optional collaborators for {@link EventSubscriber}; primarily used in tests. */
+export interface EventSubscriberOptions {
+  /**
+   * Resolver used to enrich processed events with blockchain transaction
+   * metadata. Defaults to an RPC-backed resolver.
+   */
+  transactionMetadataResolver?: TransactionMetadataResolver;
+}
 
 export class EventSubscriber {
   private config: Config;
@@ -38,8 +52,13 @@ export class EventSubscriber {
   private rpcRateLimiter: RpcRateLimiter | null = null;
   private backfillStartLedger: number | null = null;
   private readonly quarantine = new EventQuarantineController();
+  private readonly transactionMetadataResolver: TransactionMetadataResolver;
 
-  constructor(config: Config, deduplicationService?: EventDeduplicationService) {
+  constructor(
+    config: Config,
+    deduplicationService?: EventDeduplicationService,
+    options: EventSubscriberOptions = {},
+  ) {
     this.config = config;
     this.rpcManager = new StellarRpcManager({
       primaryUrl: config.stellarRpcUrl,
@@ -48,6 +67,7 @@ export class EventSubscriber {
       cooldownMs: config.rpcFallback?.cooldownMs,
       requestTimeoutMs: config.rpcFallback?.requestTimeoutMs,
       maxRetries: config.rpcFallback?.maxRetries,
+      failbackToPrimary: config.rpcFallback?.failbackToPrimary,
     });
     this.deduplicationService = deduplicationService ?? null;
 
@@ -75,6 +95,25 @@ export class EventSubscriber {
         { ...config.eventQueue, retryPolicy: config.retryPolicy },
       );
     }
+
+    this.transactionMetadataResolver =
+      options.transactionMetadataResolver ??
+      new TransactionMetadataResolver({ source: this.createDefaultMetadataSource() });
+  }
+
+  /**
+   * Best-effort RPC-backed source for the transaction context that is not
+   * carried on the event response. Failures are handled by the resolver and
+   * never prevent the event from being processed.
+   */
+  private createDefaultMetadataSource(): TransactionMetadataSource {
+    return {
+      fetchTransactionContext: async (txHash: string) => {
+        const server = this.rpcManager.getActiveServer();
+        const response = await server.getTransaction(txHash);
+        return extractTransactionContext(response);
+      },
+    };
   }
 
   async start(): Promise<void> {
@@ -539,6 +578,22 @@ export class EventSubscriber {
       }
     }
 
+    // Enrich the event with blockchain transaction metadata. The resolver is
+    // best-effort: a failed/timed-out lookup degrades the metadata status but
+    // never blocks processing of the (still valid) event.
+    const txMetadata = await this.transactionMetadataResolver.resolve(event);
+    if (txMetadata.metadataStatus !== 'complete') {
+      logger.warn('Processed event carries incomplete transaction metadata', {
+        requestId: correlationId,
+        correlationId,
+        eventId: event.id,
+        contractAddress: contractConfig.address,
+        metadataStatus: txMetadata.metadataStatus,
+        missingFields: txMetadata.missingFields,
+        reason: txMetadata.reason,
+      });
+    }
+
     const displayEvent = eventRegistry.addFromInput({
       eventId: event.id,
       contractAddress: contractConfig.address,
@@ -548,6 +603,7 @@ export class EventSubscriber {
       topic: event.topic,
       value: event.value,
       txHash: event.txHash,
+      txMetadata,
     });
 
     logger.info('Processing event', {
@@ -615,6 +671,7 @@ export class EventSubscriber {
         notificationSent,
         processingError ? 'ERROR' : 'PROCESSED',
         processingError,
+        txMetadata,
       );
     }
 

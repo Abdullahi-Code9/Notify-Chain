@@ -10,6 +10,7 @@ import {
   validateEventPayload,
 } from '../utils/event-utils';
 import { generateRequestId } from '../utils/request-id';
+import { deriveTransactionMetadata } from './transaction-metadata-resolver';
 import logger from '../utils/logger';
 
 export interface BackfillProgress {
@@ -365,7 +366,11 @@ export class HistoricalBackfillService {
       return;
     }
 
-    // 4. Register in the in-memory event registry.
+    // 4. Register in the in-memory event registry, enriched with the
+    //    transaction metadata carried on the event. The RPC enrichment lookup
+    //    used by the live subscriber is intentionally skipped here: a bulk
+    //    backfill must not issue an extra RPC call per recovered event.
+    const txMetadata = deriveTransactionMetadata(event);
     eventRegistry.addFromInput({
       eventId: event.id,
       contractAddress,
@@ -375,6 +380,7 @@ export class HistoricalBackfillService {
       topic: event.topic,
       value: event.value,
       txHash: event.txHash,
+      txMetadata,
     });
 
     // 5. Discord notification (optional, honour user preferences).
@@ -417,7 +423,8 @@ export class HistoricalBackfillService {
       event.type,
       notificationSent,
       processingError ? 'ERROR' : 'PROCESSED',
-      processingError
+      processingError,
+      txMetadata
     );
 
     if (processingError) {

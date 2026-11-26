@@ -6,6 +6,7 @@
 /// it.  Attempting to reference a non-existent template ID reverts with a clear
 /// error.
 use crate::base::clock::current_time;
+use crate::base::constants::{MAX_EVENT_PAYLOAD_LEN, MAX_TEMPLATE_NAME_LEN};
 use crate::base::errors::Error;
 use crate::base::events::{
     AuthorizationFailure, NotificationCategory, NotificationPriority, TemplateRegistered,
@@ -13,13 +14,6 @@ use crate::base::events::{
 };
 use crate::base::types::NotificationTemplate;
 use soroban_sdk::{contracttype, Address, BytesN, Env, String};
-
-// ============================================================================
-// Limits
-// ============================================================================
-
-/// Maximum allowed byte-length for a template name.
-const MAX_TEMPLATE_NAME_LEN: u32 = 100;
 
 // ============================================================================
 // Storage keys
@@ -71,15 +65,16 @@ pub fn register_template(
 ) -> Result<(), Error> {
     creator.require_auth();
 
+    // Enforce size bounds up front, before any storage access or event emission.
+    validate_name(&name)?;
+    validate_content(&content)?;
+
     let key = TemplateKey::Template(id.clone());
 
     // Prevent overwriting an existing template.
     if env.storage().persistent().has(&key) {
         return Err(Error::AlreadyExists);
     }
-
-    validate_name(&name)?;
-    validate_content(&content)?;
 
     let template = NotificationTemplate {
         id: id.clone(),
@@ -131,6 +126,10 @@ pub fn update_template(
 ) -> Result<(), Error> {
     caller.require_auth();
 
+    // Enforce size bounds up front, before any storage access or event emission.
+    validate_name(&name)?;
+    validate_content(&content)?;
+
     let key = TemplateKey::Template(id.clone());
 
     let mut template: NotificationTemplate = env
@@ -144,9 +143,6 @@ pub fn update_template(
         publish_authorization_failure(&env, &caller, "update_template");
         return Err(Error::Unauthorized);
     }
-
-    validate_name(&name)?;
-    validate_content(&content)?;
 
     template.name = name;
     template.content = content;
@@ -189,6 +185,7 @@ pub fn template_exists(env: Env, id: BytesN<32>) -> bool {
 // Validation helpers
 // ============================================================================
 
+/// Rejects a name that exceeds [`MAX_TEMPLATE_NAME_LEN`] bytes.
 fn validate_name(name: &String) -> Result<(), Error> {
     if name.len() > MAX_TEMPLATE_NAME_LEN {
         return Err(Error::TemplateNameTooLong);
@@ -196,9 +193,13 @@ fn validate_name(name: &String) -> Result<(), Error> {
     Ok(())
 }
 
+/// Rejects empty content, and content exceeding [`MAX_EVENT_PAYLOAD_LEN`] bytes.
 fn validate_content(content: &String) -> Result<(), Error> {
     if content.len() == 0 {
         return Err(Error::TemplateContentEmpty);
+    }
+    if content.len() > MAX_EVENT_PAYLOAD_LEN {
+        return Err(Error::PayloadExceedsMaxLength);
     }
     Ok(())
 }

@@ -6,9 +6,14 @@ interface SidebarProps {
   onSelectTab: (tab: Tab) => void;
   tabListRef: RefObject<HTMLDivElement | null>;
   onTabKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
+  isAdmin?: boolean;
 }
 
-export function Sidebar({ activeTab, onSelectTab, tabListRef, onTabKeyDown }: SidebarProps) {
+export function Sidebar({ activeTab, onSelectTab, tabListRef, onTabKeyDown, isAdmin = false }: SidebarProps) {
+  const navItems = isAdmin
+    ? [...NAV_ITEMS, { id: 'audit' as Tab, label: 'Audit History' }]
+    : NAV_ITEMS;
+
   return (
     <aside className="app-sidebar" aria-label="Sidebar navigation">
       <nav className="app-tabs" aria-label="Primary dashboard navigation">
@@ -19,7 +24,7 @@ export function Sidebar({ activeTab, onSelectTab, tabListRef, onTabKeyDown }: Si
           className="app-tabs__list"
           onKeyDown={onTabKeyDown}
         >
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.id}
               type="button"

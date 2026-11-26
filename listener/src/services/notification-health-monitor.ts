@@ -5,6 +5,7 @@ import { eventRegistry } from '../store/event-registry';
 import { ScheduledNotificationRepository } from './scheduled-notification-repository';
 import { pollingMetrics } from './polling-metrics';
 import { QueueOperationalMetrics } from './notification-stats-cache';
+import { ProviderCircuitBreakerRegistry } from './provider-circuit-breaker';
 
 export type ComponentStatus = 'healthy' | 'degraded' | 'unhealthy';
 
@@ -48,6 +49,23 @@ export interface PollingHealth {
   failedPolls: number;
 }
 
+export type CircuitState = 'closed' | 'open' | 'half-open';
+
+export interface ProviderCircuitHealth {
+  /** Current circuit breaker state for the provider. */
+  state: CircuitState;
+  /** Number of consecutive failures observed while the circuit was closed. */
+  consecutiveFailures: number;
+  /** ISO timestamp of the next allowed recovery probe, or null when not scheduled. */
+  nextProbeAt: string | null;
+  /** ISO timestamp when the circuit last transitioned to open, or null. */
+  openedAt: string | null;
+  /** ISO timestamp of the most recent recorded failure, or null. */
+  lastFailureAt: string | null;
+  /** ISO timestamp of the most recent recorded success, or null. */
+  lastSuccessAt: string | null;
+}
+
 export interface HealthReport {
   status: ComponentStatus;
   timestamp: string;
@@ -58,6 +76,8 @@ export interface HealthReport {
   /** Process uptime in milliseconds since startup. */
   uptimeMs: number;
   polling: PollingHealth;
+  /** Per-provider circuit breaker state, keyed by provider name. */
+  providers: Record<string, ProviderCircuitHealth>;
 }
 
 export interface NotificationHealthMonitorOptions {
@@ -74,6 +94,8 @@ export interface NotificationHealthMonitorOptions {
   getLastSuccessfulPoll?: () => number | null;
   /** Function to calculate uptime in milliseconds. */
   getUptimeMs?: () => number;
+  /** Optional registry of provider circuit breakers to surface in the report. */
+  circuitBreakers?: ProviderCircuitBreakerRegistry | null;
 }
 
 /**
@@ -90,6 +112,7 @@ export class NotificationHealthMonitor {
   private readonly now: () => number;
   private readonly getLastSuccessfulPoll: () => number | null;
   private readonly getUptimeMs: () => number;
+  private readonly circuitBreakers: ProviderCircuitBreakerRegistry | null;
 
   private queue: EventProcessingQueue | null;
   private workerManager: WorkerManager | null;
@@ -117,6 +140,7 @@ export class NotificationHealthMonitor {
     this.now = options.now ?? Date.now;
     this.getLastSuccessfulPoll = options.getLastSuccessfulPoll ?? (() => null);
     this.getUptimeMs = options.getUptimeMs ?? (() => 0);
+    this.circuitBreakers = options.circuitBreakers ?? null;
   }
 
   start(): void {
@@ -156,11 +180,13 @@ export class NotificationHealthMonitor {
     const workerHealth = this.checkWorkers();
     const registryHealth = this.checkRegistry();
     const pollingHealth = this.checkPolling();
+    const providers = this.checkProviders();
 
     const overallStatus = this.deriveOverallStatus(
       queueHealth.status,
       workerHealth.status,
       registryHealth.status,
+      ...Object.values(providers).map((p) => this.deriveProviderStatus(p)),
     );
 
     const lastSuccessfulPollMs = this.getLastSuccessfulPoll();
@@ -176,6 +202,7 @@ export class NotificationHealthMonitor {
       lastSuccessfulPollAt,
       uptimeMs: this.getUptimeMs(),
       polling: pollingHealth,
+      providers,
     };
 
     this.lastReport = report;
@@ -334,6 +361,39 @@ export class NotificationHealthMonitor {
       successfulPolls: snapshot.successfulPolls,
       failedPolls: snapshot.failedPolls,
     };
+  }
+
+  private checkProviders(): Record<string, ProviderCircuitHealth> {
+    const result: Record<string, ProviderCircuitHealth> = {};
+    if (!this.circuitBreakers) {
+      return result;
+    }
+
+    try {
+      const snapshot = this.circuitBreakers.snapshot();
+      for (const [provider, state] of Object.entries(snapshot)) {
+        result[provider] = {
+          state: state.state,
+          consecutiveFailures: state.consecutiveFailures,
+          nextProbeAt: state.nextProbeAt !== null ? new Date(state.nextProbeAt).toISOString() : null,
+          openedAt: state.openedAt !== null ? new Date(state.openedAt).toISOString() : null,
+          lastFailureAt:
+            state.lastFailureAt !== null ? new Date(state.lastFailureAt).toISOString() : null,
+          lastSuccessAt:
+            state.lastSuccessAt !== null ? new Date(state.lastSuccessAt).toISOString() : null,
+        };
+      }
+    } catch (error) {
+      logger.warn('Unable to determine provider circuit breaker state', { error });
+    }
+
+    return result;
+  }
+
+  private deriveProviderStatus(provider: ProviderCircuitHealth): ComponentStatus {
+    if (provider.state === 'open') return 'unhealthy';
+    if (provider.state === 'half-open') return 'degraded';
+    return 'healthy';
   }
 
   private deriveOverallStatus(...statuses: ComponentStatus[]): ComponentStatus {

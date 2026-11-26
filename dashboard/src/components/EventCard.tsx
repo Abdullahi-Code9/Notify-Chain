@@ -1,6 +1,9 @@
 import { memo, type KeyboardEvent } from 'react';
 import type { BlockchainEvent } from '../types/event';
-import { formatRelativeTimestamp, formatTimestamp } from '../utils/formatTime';
+import { formatRelativeTimestamp, formatTimestamp, formatUtcTimestamp } from '../utils/formatTime';
+import { formatNumber } from '../utils/formatNumber';
+import { useActiveTimeZone } from '../store/timezoneStore';
+import { useActiveLocale } from '../store/localeStore';
 import { CopyButton } from './CopyButton';
 
 export type EventCardVariant = 'compact' | 'expanded';
@@ -94,6 +97,8 @@ function IdValue({ value, label }: { value: string; label: string }) {
 }
 
 function CompactCard({ event, onClick }: { event: BlockchainEvent; onClick?: (e: BlockchainEvent) => void }) {
+  const timeZone = useActiveTimeZone();
+  const locale = useActiveLocale();
   const displayName = event.eventName ?? event.type;
   const badgeClass = getEventBadgeClass(event.eventName);
   const Wrapper = onClick ? 'div' : 'article';
@@ -110,21 +115,25 @@ function CompactCard({ event, onClick }: { event: BlockchainEvent; onClick?: (e:
     >
       <div className="event-card__primary">
         <span className={`event-card__badge ${badgeClass}`}>{displayName}</span>
-        <span className="event-card__ledger">Ledger {event.ledger}</span>
+        <span className="event-card__ledger" data-raw={event.ledger}>
+          Ledger {formatNumber(event.ledger, locale)}
+        </span>
       </div>
       <div className="event-card__meta">
         <span className="event-card__address" title={event.contractAddress}>
           {shortenAddress(event.contractAddress)}
         </span>
-        <span className="event-card__time" title={formatTimestamp(event.receivedAt)}>
-          {formatRelativeTimestamp(event.receivedAt)}
+        <span
+          className="event-card__time"
+          data-raw={event.receivedAt}
+          title={`${formatTimestamp(event.receivedAt, timeZone, locale)} (UTC: ${formatUtcTimestamp(event.receivedAt)})`}
+        >
+          {formatRelativeTimestamp(event.receivedAt, Date.now(), timeZone, locale)}
         </span>
       </div>
       <div className="event-card__details">
-        <span>Value: {event.value}</span>
-        {event.txHash && <span title={event.txHash}>Tx: {shortenAddress(event.txHash)}</span>}
-        <span className="event-card__value-preview" title={event.value}>
-          Value: {event.value}
+        <span className="event-card__value-preview" data-raw={event.value} title={event.value}>
+          Value: {formatNumber(event.value, locale)}
         </span>
         {event.txHash && (
           <span title={event.txHash}>
@@ -144,6 +153,8 @@ function ExpandedCard({
   event: BlockchainEvent;
   onClick?: (e: BlockchainEvent) => void;
 }) {
+  const timeZone = useActiveTimeZone();
+  const locale = useActiveLocale();
   const displayName = event.eventName ?? event.type;
   const badgeClass = getEventBadgeClass(event.eventName);
   const Wrapper = onClick ? 'div' : 'article';
@@ -183,12 +194,15 @@ function ExpandedCard({
 
           <div className="event-card__field">
             <dt>Ledger</dt>
-            <dd>{event.ledger.toLocaleString()}</dd>
+            <dd data-raw={event.ledger}>{formatNumber(event.ledger, locale)}</dd>
           </div>
 
           <div className="event-card__field">
             <dt>Value</dt>
-            <dd className="event-card__payload">{event.value}</dd>
+            <dd className="event-card__payload" data-raw={event.value} title={event.value}>
+              {formatNumber(event.value, locale)}
+              <CopyButton value={event.value} label="value" size="xs" />
+            </dd>
           </div>
 
           {event.topic.length > 0 && (
@@ -208,7 +222,14 @@ function ExpandedCard({
 
           <div className="event-card__field">
             <dt>Received</dt>
-            <dd>{formatTimestamp(event.receivedAt)}</dd>
+            <dd data-raw={event.receivedAt}>{formatTimestamp(event.receivedAt, timeZone, locale)}</dd>
+          </div>
+
+          <div className="event-card__field">
+            <dt>Received (UTC)</dt>
+            <dd>
+              <code>{formatUtcTimestamp(event.receivedAt)}</code>
+            </dd>
           </div>
 
           <div className="event-card__field">

@@ -1,7 +1,8 @@
 import { memo, useCallback, type KeyboardEvent } from 'react';
 import type { BlockchainEvent } from '../types/event';
 import type { ContractStatus } from '../services/eventsApi';
-import { formatTimestamp } from '../utils/formatTime';
+import { formatTimestamp, toUtcIsoString } from '../utils/formatTime';
+import { useActiveTimeZone } from '../store/timezoneStore';
 import { getEventKindClass, getEventKindLabel, isKnownEventType } from '../utils/eventTypeMapping';
 import { CopyButton } from './CopyButton';
 
@@ -30,6 +31,8 @@ export const EventExplorerCard = memo(function EventExplorerCard({
   contractStatuses = [],
   onContractClick,
 }: EventExplorerCardProps) {
+  const timeZone = useActiveTimeZone();
+  const receivedAtUtc = toUtcIsoString(event.receivedAt);
   const contractStatus = contractStatuses.find(
     (status) => status.address === event.contractAddress,
   );
@@ -113,8 +116,8 @@ export const EventExplorerCard = memo(function EventExplorerCard({
       </div>
 
       <div className="event-explorer__cell" data-label="Received" role="cell">
-        <time dateTime={new Date(event.receivedAt).toISOString()}>
-          {formatTimestamp(event.receivedAt)}
+        <time dateTime={receivedAtUtc} title={receivedAtUtc ? `UTC: ${receivedAtUtc}` : undefined}>
+          {formatTimestamp(event.receivedAt, timeZone)}
         </time>
       </div>
 

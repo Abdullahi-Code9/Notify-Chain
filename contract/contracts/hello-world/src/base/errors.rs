@@ -90,4 +90,94 @@ pub enum Error {
     TemplateContentEmpty = 40,
     /// Triggered when a duplicate notification delivery request is detected.
     DuplicateDelivery = 41,
+    /// Triggered when a nonce has already been consumed (replay attempt) or is
+    /// lower than the signer's next expected nonce (stale).
+    NonceAlreadyUsed = 42,
+    /// Triggered when a nonce is ahead of the expected sequence, or its
+    /// freshness window is out of bounds.
+    InvalidNonce = 43,
+    /// Triggered when a nonce's `valid_until` deadline has already passed.
+    NonceExpired = 44,
+    /// Triggered when a nonce is bound to a different contract address.
+    NonceContractMismatch = 45,
+    /// Triggered when a variable-length input exceeds its configured maximum
+    /// size (e.g. an over-long collection or string). See
+    /// `base::constants` for the per-input bounds.
+    InputTooLarge = 46,
+    /// Triggered when a notification payload or metadata string exceeds
+    /// `MAX_EVENT_PAYLOAD_LEN` / `MAX_TOPIC_LEN`. See `base::constants`.
+    PayloadExceedsMaxLength = 47,
+    /// Triggered when a paginated enumeration request exceeds the maximum
+    /// supported page size (`MAX_ENUMERATION_PAGE_SIZE`).
+    PageLimitExceeded = 46,
+    /// Triggered when the network identifier supplied during initialization or
+    /// validation does not match the expected deployment network.
+    NetworkMismatch = 47,
+    /// Triggered when the network identifier is an empty string.
+    InvalidNetworkId = 48,
+    /// Triggered when an operation requires `initialize_admin` to have run first.
+    NotInitialized = 46,
+    /// Triggered when `initialize_admin` is called more than once.
+    AlreadyInitialized = 47,
+}
+
+/// Stable numeric code transmitted to off-chain callers on failure.
+pub fn code(error: Error) -> u32 {
+    error as u32
+}
+
+/// Maps a numeric contract error code back to its centralized definition.
+/// Unknown codes return `None`, allowing consumers to recognize future codes
+/// without misclassifying them as an existing failure mode.
+pub fn from_code(code: u32) -> Option<Error> {
+    match code {
+        1 => Some(Error::InvalidInput),
+        2 => Some(Error::AlreadyExists),
+        3 => Some(Error::NotFound),
+        4 => Some(Error::UnsupportedToken),
+        5 => Some(Error::InsufficientPayment),
+        6 => Some(Error::NoUsagesRemaining),
+        7 => Some(Error::InvalidUsageCount),
+        8 => Some(Error::Unauthorized),
+        9 => Some(Error::InsufficientBalance),
+        10 => Some(Error::InvalidAmount),
+        11 => Some(Error::ContractPaused),
+        12 => Some(Error::AlreadyPaused),
+        13 => Some(Error::NotPaused),
+        14 => Some(Error::InvalidTotalPercentage),
+        15 => Some(Error::EmptyMembers),
+        16 => Some(Error::DuplicateMember),
+        17 => Some(Error::GroupInactive),
+        18 => Some(Error::GroupAlreadyActive),
+        19 => Some(Error::GroupAlreadyInactive),
+        20 => Some(Error::InsufficientContractBalance),
+        21 => Some(Error::NameTooLong),
+        22 => Some(Error::TooManyMembers),
+        23 => Some(Error::NotificationExpired),
+        24 => Some(Error::InvalidExpirationDuration),
+        25 => Some(Error::NotificationNotExpired),
+        26 => Some(Error::BatchTooLarge),
+        27 => Some(Error::NotificationRevoked),
+        28 => Some(Error::NotAuthorizedToRevoke),
+        29 => Some(Error::AlreadyRevoked),
+        30 => Some(Error::ZeroAddressTransfer),
+        31 => Some(Error::NoPendingOwnershipTransfer),
+        32 => Some(Error::NotPendingOwner),
+        33 => Some(Error::NotAuthorizedToAcknowledge),
+        34 => Some(Error::InvalidLimit),
+        35 => Some(Error::NotificationDelivered),
+        36 => Some(Error::CategoryNotRegistered),
+        37 => Some(Error::NotificationLifetimeTooLong),
+        38 => Some(Error::TemplateNotFound),
+        39 => Some(Error::TemplateNameTooLong),
+        40 => Some(Error::TemplateContentEmpty),
+        41 => Some(Error::DuplicateDelivery),
+        42 => Some(Error::NonceAlreadyUsed),
+        43 => Some(Error::InvalidNonce),
+        44 => Some(Error::NonceExpired),
+        45 => Some(Error::NonceContractMismatch),
+        46 => Some(Error::NotInitialized),
+        47 => Some(Error::AlreadyInitialized),
+        _ => None,
+    }
 }

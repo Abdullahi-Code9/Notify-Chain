@@ -59,9 +59,11 @@ pub enum ChannelDataKey {
 }
 
 /// Maximum channels allowed in a single `batch_subscribe` call.
-pub const MAX_BATCH_SUBSCRIBE: u32 = 50;
+/// Sourced from the shared limits in [`crate::base::constants`].
+pub const MAX_BATCH_SUBSCRIBE: u32 = crate::base::constants::MAX_BATCH_SUBSCRIBE;
 /// Maximum length for a channel name.
-pub const MAX_CHANNEL_NAME_LENGTH: u32 = 100;
+/// Sourced from the shared limits in [`crate::base::constants`].
+pub const MAX_CHANNEL_NAME_LENGTH: u32 = crate::base::constants::MAX_CHANNEL_NAME_LEN;
 
 // ============================================================================
 // Storage helpers

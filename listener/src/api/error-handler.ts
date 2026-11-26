@@ -1,7 +1,10 @@
 import http from 'http';
 import logger from '../utils/logger';
-import { sendErr, ErrorCode } from '../utils/response';
+import { sendErr, sendJson, ErrorCode } from '../utils/response';
 import { ValidationError } from '../utils/validation';
+import { toPublicError, toInternalDiagnostic } from '../utils/safe-error-serializer';
+import { NotificationAmplificationError } from '../utils/notification-amplification-guard';
+import { redactString, redactValue } from '../utils/redact';
 
 export class ApiError extends Error {
   public readonly statusCode: number;
@@ -87,6 +90,12 @@ export function handleApiError(
     return;
   }
 
+  if (error instanceof NotificationAmplificationError) {
+    logger.warn('Notification amplification blocked', { reason: error.reason, requestId, correlationId });
+    sendErr(res, error.statusCode, error.message, ErrorCode.RATE_LIMITED, undefined, correlationId);
+    return;
+  }
+
   if (error instanceof ValidationError) {
     logger.warn('Validation error', {
       requestId,
@@ -104,13 +113,18 @@ export function handleApiError(
     return;
   }
 
-  const message = error instanceof Error ? error.message : String(error);
+  // Unhandled / unexpected error: log full internal detail but send a safe
+  // generic message to the client (#1141).
   logger.error('Unhandled API error', {
     requestId,
-    correlationId,
-    error,
+    ...toInternalDiagnostic(error, correlationId),
   });
-  sendErr(res, 500, message, ErrorCode.INTERNAL_ERROR, undefined, correlationId);
+  sendJson(res, 500, toPublicError(ErrorCode.INTERNAL_ERROR, correlationId));
+    correlationId,
+    error: redactValue(error),
+  });
+  const safeMessage = process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : redactString(message);
+  sendErr(res, 500, safeMessage, ErrorCode.INTERNAL_ERROR, undefined, correlationId);
 }
 
 export function wrapAsyncHandler(
