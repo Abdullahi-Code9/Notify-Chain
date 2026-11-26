@@ -32,6 +32,10 @@ const PRIORITY_MAX = 10;
 import { buildRetryStatisticsPayload } from './retry-statistics';
 import { canModifyScheduleStatus } from './schedule-state-machine';
 import { DEFAULT_MAX_SCHEDULING_HORIZON_MS, validateScheduleInput } from './schedule-validator';
+import {
+  DestinationOwnershipError,
+  DestinationService,
+} from './destination-service';
 
 export { InvalidTimezoneError };
 
@@ -106,6 +110,11 @@ export class NotificationAPI {
     this.scheduleAudit = audit;
   }
 
+  /** Attach or replace the destination service used to validate destination ownership. */
+  setDestinationService(service: DestinationService | null): void {
+    this.destinationService = service;
+  }
+
   /**
    * Schedule a notification for future delivery
    * Supports idempotent request handling via idempotency keys
@@ -116,6 +125,36 @@ export class NotificationAPI {
     idempotencyKey?: string,
   ): Promise<number> {
     // Validate input
+    let resolvedDestination: Awaited<ReturnType<DestinationService['resolveOwnedDestination']>> | null =
+      null;
+    if (input.destinationId !== undefined) {
+      if (!this.destinationService) {
+        throw new DestinationOwnershipError(
+          'Destination service is unavailable to verify destination ownership.',
+        );
+      }
+      if (!isNonEmptyString(input.ownerId)) {
+        throw new DestinationOwnershipError(
+          'Authenticated ownerId is required when referencing a destination.',
+        );
+      }
+      resolvedDestination = await this.destinationService.resolveOwnedDestination(
+        input.destinationId,
+        input.ownerId,
+      );
+      const mappedType =
+        resolvedDestination.provider === 'discord'
+          ? NotificationType.DISCORD
+          : resolvedDestination.provider === 'email'
+            ? NotificationType.EMAIL
+            : NotificationType.WEBHOOK;
+      input = {
+        ...input,
+        notificationType: input.notificationType ?? mappedType,
+        targetRecipient: resolvedDestination.targetRecipient || input.targetRecipient,
+      };
+    }
+
     input = {
       ...input,
       recurrence: validateScheduleInput(
@@ -219,15 +258,23 @@ export class NotificationAPI {
 
     const createAndAudit = async (): Promise<number> => {
       const id = await this.repository.create(input, requestId);
+      if (resolvedDestination) {
+        await this.repository.bindDestinationOwnership(
+          id,
+          resolvedDestination.id,
+          resolvedDestination.ownerId,
+        );
+      }
       await this.scheduleAudit?.record({
         scheduledNotificationId: id,
         action: 'CREATED',
-        actor: 'api',
+        actor: input.ownerId ?? 'api',
         toStatus: NotificationStatus.PENDING,
         details: {
           notificationType: input.notificationType,
           eventId: input.eventId ?? null,
           contractAddress: input.contractAddress ?? null,
+          destinationId: resolvedDestination?.id ?? null,
           executeAt: input.executeAt.toISOString(),
         },
       });

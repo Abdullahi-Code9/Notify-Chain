@@ -35,8 +35,8 @@ import { NotificationHealthMonitor } from './services/notification-health-monito
 import { getWorkerManager } from './services/worker-manager';
 import { DeliveryReceiptRepository } from './services/delivery-receipt-repository';
 import { ApiCredentialService } from './services/api-credential-service';
-import { installCrashDiagnosticsHandlers, formatCrashDiagnostic } from './utils/crash-diagnostics';
-import { redactValue } from './utils/redact';
+import { DestinationService } from './services/destination-service';
+import { SecurityAuditService } from './services/security-audit';
 
 dotenv.config();
 
@@ -62,6 +62,7 @@ async function main() {
   let metricsStore: NotificationMetricsStore | null = null;
   let deduplicationService: EventDeduplicationService | null = null;
   let deliveryReceiptRepository: DeliveryReceiptRepository | null = null;
+  let destinationService: DestinationService | null = null;
 
   if (config.analytics?.enabled) {
     initNotificationAnalyticsAggregator(config.analytics);
@@ -77,6 +78,10 @@ async function main() {
       config.notificationDefaultTtlSeconds ?? 0,
     );
     deliveryReceiptRepository = new DeliveryReceiptRepository(db);
+    destinationService = new DestinationService({
+      db,
+      auditService: new SecurityAuditService(db),
+    });
 
     healthMonitor = new NotificationHealthMonitor(null, getWorkerManager(), {
       repository,
@@ -135,6 +140,7 @@ async function main() {
         config.scheduler.maxSchedulingHorizonMs,
       );
       notificationAPI.setScheduleAuditTrail(scheduleAudit);
+      notificationAPI.setDestinationService(destinationService);
 
       const legacyTemplateRepo = new TemplateRepository(db);
       legacyTemplateService = new TemplateService(legacyTemplateRepo);
@@ -189,6 +195,7 @@ async function main() {
     webhookSecrets: config.webhookSecrets,
     apiKeys: config.apiKeys,
     credentialService: new ApiCredentialService(),
+    destinationService,
     rateLimit: config.rateLimit,
     archiveStore,
     archiveService,
