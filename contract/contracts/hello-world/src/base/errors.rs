@@ -100,6 +100,13 @@ pub enum Error {
     NonceExpired = 44,
     /// Triggered when a nonce is bound to a different contract address.
     NonceContractMismatch = 45,
+    /// Triggered when a variable-length input exceeds its configured maximum
+    /// size (e.g. an over-long collection or string). See
+    /// `base::constants` for the per-input bounds.
+    InputTooLarge = 46,
+    /// Triggered when a notification payload or metadata string exceeds
+    /// `MAX_EVENT_PAYLOAD_LEN` / `MAX_TOPIC_LEN`. See `base::constants`.
+    PayloadExceedsMaxLength = 47,
     /// Triggered when a paginated enumeration request exceeds the maximum
     /// supported page size (`MAX_ENUMERATION_PAGE_SIZE`).
     PageLimitExceeded = 46,
