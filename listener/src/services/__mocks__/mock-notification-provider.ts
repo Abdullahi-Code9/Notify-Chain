@@ -1,7 +1,7 @@
 // MockNotificationProvider.ts
 // A simple mock implementation of NotificationProvider for unit testing.
 
-import { NotificationProvider, ProviderMetadata, ProviderCapability, NotificationFormat, DeliveryPayload, DeliveryResult } from '../../types/provider-capabilities';
+import { NotificationProvider, ProviderMetadata, ProviderCapability, NotificationFormat, PayloadLimits, DeliveryPayload, DeliveryResult } from '../../types/provider-capabilities';
 
 /**
  * Options to control the mock provider's behavior.
@@ -32,6 +32,11 @@ export interface MockProviderOptions {
    * Default format for this mock. Defaults to `plain_text`.
    */
   defaultFormat?: NotificationFormat;
+  /**
+   * Optional payload limits this mock advertises. Used to exercise the
+   * registry's pre-delivery payload-limit enforcement.
+   */
+  payloadLimits?: PayloadLimits;
 }
 
 export class MockNotificationProvider implements NotificationProvider {
@@ -48,6 +53,7 @@ export class MockNotificationProvider implements NotificationProvider {
       capabilities: options.capabilities ?? new Set(),
       supportedFormats,
       defaultFormat,
+      payloadLimits: options.payloadLimits,
     };
     this.options = options;
   }
@@ -58,6 +64,10 @@ export class MockNotificationProvider implements NotificationProvider {
 
   supportsFormat(format: NotificationFormat): boolean {
     return this.metadata.supportedFormats.has(format);
+  }
+
+  getCapabilities(): ProviderMetadata {
+    return this.metadata;
   }
 
   async deliver(payload: DeliveryPayload): Promise<DeliveryResult> {

@@ -228,6 +228,29 @@ pub struct NotificationTemplate {
     pub updated_at: Option<u64>,
 }
 
+/// Read-only grouped view of related contract configuration and state (issue #1201).
+///
+/// All fields are returned by `get_state_snapshot` in a single call so off-chain
+/// consumers see a consistent view without making independent queries. Fields
+/// that have never been written are represented with their documented default
+/// or `None`; no snapshot field uses a sentinel value.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractStateSnapshot {
+    /// Current admin address. `None` before `initialize_admin` is called.
+    pub admin: Option<Address>,
+    /// Pending admin after a two-step ownership transfer, if one is in progress.
+    pub pending_owner: Option<Address>,
+    /// Whether privileged operations are currently paused. `false` by default.
+    pub paused: bool,
+    /// Active schema version. `0` means no version has been configured.
+    pub schema_version: u32,
+    /// Version of the on-chain notification payload format.
+    pub notification_version: u32,
+    /// Notification limits: payload size, expiration window and batch size.
+    pub limits: NotificationLimits,
+}
+
 /// Protocol-level configurable limits for notifications.
 /// Allows administrators to set boundaries on notification sizes,
 /// expiration periods, and batch operation sizes.

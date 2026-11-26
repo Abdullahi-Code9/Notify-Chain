@@ -8,6 +8,13 @@ import { PreferencesUpdateInput } from '../types/preferences';
 import { NotificationAPI } from '../services/notification-api';
 import { ApiCredentialService } from '../services/api-credential-service';
 import { handleCredentialRoutes } from './credentials-api';
+import {
+  DestinationNotFoundError,
+  DestinationOwnershipError,
+  DestinationService,
+  DestinationValidationError,
+} from '../services/destination-service';
+import { handleDestinationRoutes, resolveDestinationOwnerId } from './destinations-api';
 import { authorizeRequest, type AuthPrincipal } from './api-key-auth';
 import { NotificationType } from '../types/scheduled-notification';
 import { ScheduleValidationError, toScheduleValidationResponse } from '../services/schedule-validator';
@@ -80,6 +87,7 @@ import { ResponseTimeMiddleware } from '../middleware/response-time';
 import { addSecurityHeaders } from '../middleware/security-headers';
 import { DEFAULT_MAX_BODY_BYTES, enforceBodyLimit } from '../middleware/body-limit';
 import { resolveRequestPolicy } from '../middleware/request-policy';
+import { validateRequestFraming } from '../middleware/request-framing';
 import { sanitizeUrl } from '../utils/logger';
 import { sanitizeCredentials } from '../utils/credential-sanitizer';
 import { DiscordNotificationProvider } from '../services/providers/discord-provider';
@@ -87,6 +95,7 @@ import { WebhookNotificationProvider } from '../services/providers/webhook-provi
 import { ProviderHealthResult } from '../types/provider-capabilities';
 import { EVENT_STREAM_PATH, handleEventStream } from './event-stream';
 import { resolveLocalDateTime } from '../services/local-schedule';
+import { redactSensitiveFields } from '../utils/redact';
 
 export interface EventsServerOptions {
   port: number;
@@ -101,6 +110,8 @@ export interface EventsServerOptions {
   apiKeys?: Array<{ key: string; name?: string }>;
   notificationAPI?: NotificationAPI | null;
   credentialService?: ApiCredentialService | null;
+  destinationService?: DestinationService | null;
+  requireDestinationAuth?: boolean;
   /** Idempotency-Key replay protection for mutating endpoints (webhooks, schedule). */
   idempotencyService?: IdempotencyKeyService | null;
   templateService?: NotificationTemplateService | null;
@@ -482,6 +493,10 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     maxEntries: options.webhookReplayCacheMaxEntries ?? 10_000,
   });
   const webhookAuditService = new SecurityAuditService(getDatabase());
+  const destinationService =
+    options.destinationService !== undefined
+      ? options.destinationService
+      : new DestinationService({ db: getDatabase(), auditService: webhookAuditService });
   // Response-time tracking (#491)
   const responseTime =
     options.responseTimeMiddleware !== undefined && options.responseTimeMiddleware !== null
@@ -503,6 +518,22 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     responseTime.start(res);
 
     // Request size and media-type policy (#1138).
+    // Request framing (#1208): reject ambiguous Content-Length /
+    // Transfer-Encoding combinations before any body is read so proxies and
+    // this server always agree on request boundaries.
+    const framing = validateRequestFraming(req, res);
+    if (!framing.allowed) {
+      logger.warn('Rejected ambiguous HTTP request framing', {
+        requestId,
+        correlationId,
+        method: req.method,
+        url: sanitizeUrl(req.url ?? '/'),
+        reason: framing.reason,
+      });
+      return;
+    }
+
+    // Request body size limit.
     //
     // Resolved before the body is read so bulk endpoints get their larger
     // ceiling while ordinary endpoints keep the configured default. Screening
@@ -640,6 +671,17 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       await handleCredentialRoutes(req, res, url, {
         credentialService: options.credentialService,
         apiKeys: options.apiKeys,
+      })
+    ) {
+      return;
+    }
+
+    if (
+      await handleDestinationRoutes(req, res, url, {
+        destinationService,
+        credentialService: options.credentialService,
+        apiKeys: options.apiKeys,
+        requireAuthentication: options.requireDestinationAuth,
       })
     ) {
       return;
@@ -1106,6 +1148,131 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
+    // GET /api/admin/audit — Administrative Audit History Viewer (#1225)
+    //
+    // Returns recorded administrative activity (security audit log entries)
+    // in reverse-chronological order. Supports filtering by action type and
+    // date range, plus limit/offset pagination. Sensitive values are masked
+    // before serialization and only authorized administrators may read it.
+    if (req.method === 'GET' && url.pathname === '/api/admin/audit') {
+      const auth = await authorizeRequest(req, {
+        apiKeys: options.apiKeys,
+        credentialService: options.credentialService,
+      });
+      if (!auth.allowed) {
+        if (auth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+        sendErr(res, auth.status, auth.message, auth.code, auth.details);
+        return;
+      }
+
+      const principal = auth.principal as
+        | (AuthPrincipal & { role?: string; roles?: string[] })
+        | undefined;
+      const roles = [
+        ...(Array.isArray(principal?.roles) ? principal!.roles! : []),
+        ...(typeof principal?.role === 'string' ? [principal.role] : []),
+      ].map((r) => r.toLowerCase());
+      const isAdmin = roles.includes('admin') || roles.includes('administrator');
+
+      if (!isAdmin) {
+        logger.warn('Rejected non-admin access to audit history', {
+          requestId,
+          correlationId,
+          actor: principal?.name ?? principal?.id ?? 'unknown',
+        });
+        sendErr(res, 403, 'Forbidden: administrator role required', ErrorCode.FORBIDDEN);
+        return;
+      }
+
+      const action = url.searchParams.get('action') ?? undefined;
+      const fromParam = url.searchParams.get('from') ?? url.searchParams.get('startDate');
+      const toParam = url.searchParams.get('to') ?? url.searchParams.get('endDate');
+
+      const parseDate = (value: string | null | undefined): Date | undefined => {
+        if (!value) return undefined;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+      };
+
+      const from = parseDate(fromParam);
+      const to = parseDate(toParam);
+      if ((fromParam && !from) || (toParam && !to)) {
+        sendErr(res, 400, 'Invalid date filter', ErrorCode.BAD_REQUEST);
+        return;
+      }
+
+      const limitParam = url.searchParams.get('limit');
+      const offsetParam = url.searchParams.get('offset');
+      const limit = limitParam
+        ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200)
+        : 50;
+      const offset = offsetParam ? Math.max(parseInt(offsetParam, 10) || 0, 0) : 0;
+
+      try {
+        const db = getDatabase();
+        const clauses: string[] = [];
+        const params: unknown[] = [];
+
+        if (action) {
+          clauses.push('action = ?');
+          params.push(action);
+        }
+        if (from) {
+          clauses.push('timestamp >= ?');
+          params.push(from.toISOString());
+        }
+        if (to) {
+          clauses.push('timestamp <= ?');
+          params.push(to.toISOString());
+        }
+
+        const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+
+        const countRow = await db.get<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM security_audit_log ${where}`,
+          params,
+        );
+        const total = Number(countRow?.total ?? 0);
+
+        const rows = await db.all<Record<string, unknown>>(
+          `SELECT * FROM security_audit_log ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset],
+        );
+
+        const records = rows.map((row) => {
+          const redacted = redactSensitiveFields(row) as Record<string, unknown>;
+          const ts = redacted.timestamp;
+          return {
+            ...redacted,
+            timestamp:
+              ts instanceof Date ? ts.toISOString() : typeof ts === 'string' ? ts : null,
+          };
+        });
+
+        logger.info('Handling GET /api/admin/audit', {
+          requestId,
+          correlationId,
+          action,
+          from: from?.toISOString(),
+          to: to?.toISOString(),
+          limit,
+          offset,
+          returned: records.length,
+          total,
+        });
+
+        sendOk(res, 200, { total, limit, offset, records });
+      } catch (error) {
+        logger.error('Failed to load administrative audit history', {
+          error,
+          requestId,
+          correlationId,
+        });
+        sendErr(res, 500, 'Failed to load audit history', ErrorCode.INTERNAL_ERROR);
+      }
+      return;
+    }
+
     // GET & POST /api/admin/export (and /api/export) — Data Export Utility (#850)
     if (
       (req.method === 'GET' || req.method === 'POST') &&
@@ -1242,15 +1409,63 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
         try {
           const hasLocalSchedule = data.timeZone != null || data.localDateTime != null;
-          if ((!data.executeAt && !hasLocalSchedule) || !data.payload || !data.targetRecipient) {
+          const hasDestinationRef = typeof data.destinationId === 'string' && data.destinationId.trim().length > 0;
+          if ((!data.executeAt && !hasLocalSchedule) || !data.payload || (!data.targetRecipient && !hasDestinationRef)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
-                error: 'Missing required fields: executeAt (or timeZone + localDateTime), payload, targetRecipient',
+                error: 'Missing required fields: executeAt (or timeZone + localDateTime), payload, targetRecipient (or destinationId)',
                 code: 'MISSING_FIELDS',
               }),
             );
             return;
+          }
+
+          let scheduleOwnerId: string | undefined;
+          let resolvedTargetRecipient: string = data.targetRecipient;
+          let resolvedNotificationType: NotificationType | undefined = data.notificationType;
+          let validatedDestinationId: string | undefined;
+
+          if (data.destinationId != null) {
+            if (typeof data.destinationId !== 'string' || !data.destinationId.trim()) {
+              sendErr(res, 400, 'destinationId must be a non-empty string', ErrorCode.BAD_REQUEST);
+              return;
+            }
+            const destAuth = await authorizeRequest(req, {
+              apiKeys: options.apiKeys,
+              credentialService: options.credentialService,
+              requiredScopes: ['webhooks:manage'],
+              requireAuthentication: options.requireDestinationAuth,
+            });
+            if (!destAuth.allowed) {
+              if (destAuth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+              sendErr(res, destAuth.status, destAuth.message, destAuth.code, destAuth.details);
+              return;
+            }
+            const resolvedOwner = resolveDestinationOwnerId(destAuth.principal, req);
+            if (!resolvedOwner) {
+              sendErr(res, 401, 'Unable to resolve destination owner', ErrorCode.UNAUTHORIZED);
+              return;
+            }
+            if (!destinationService) {
+              sendErr(res, 503, 'Destination service is not configured', ErrorCode.SERVICE_UNAVAILABLE);
+              return;
+            }
+            const ownedDestination = await destinationService.resolveOwnedDestination(
+              data.destinationId.trim(),
+              resolvedOwner,
+            );
+            scheduleOwnerId = ownedDestination.ownerId;
+            validatedDestinationId = ownedDestination.id;
+            resolvedTargetRecipient = ownedDestination.targetRecipient;
+            if (!resolvedNotificationType) {
+              resolvedNotificationType =
+                ownedDestination.provider === 'discord'
+                  ? NotificationType.DISCORD
+                  : ownedDestination.provider === 'email'
+                    ? NotificationType.EMAIL
+                    : NotificationType.WEBHOOK;
+            }
           }
 
           let executeAt: Date;
@@ -1324,8 +1539,8 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           }> => {
             const notificationId = await options.notificationAPI!.scheduleNotification({
               payload: data.payload,
-              notificationType: data.notificationType || NotificationType.DISCORD,
-              targetRecipient: data.targetRecipient,
+              notificationType: resolvedNotificationType || NotificationType.DISCORD,
+              targetRecipient: resolvedTargetRecipient,
               executeAt,
               timezone,
               expiresAt: data.expiresAt,
@@ -1335,6 +1550,8 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
               contractAddress: data.contractAddress,
               metadata: data.metadata,
               recurrence: data.recurrence,
+              ...(validatedDestinationId ? { destinationId: validatedDestinationId } : {}),
+              ...(scheduleOwnerId ? { ownerId: scheduleOwnerId } : {}),
             });
             logger.info('Notification scheduled via API', {
               requestId,
@@ -1385,6 +1602,18 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(scheduled));
         } catch (error) {
+          if (error instanceof DestinationOwnershipError) {
+            sendErr(res, 403, error.message, ErrorCode.FORBIDDEN);
+            return;
+          }
+          if (error instanceof DestinationNotFoundError) {
+            sendErr(res, 404, error.message, ErrorCode.NOT_FOUND);
+            return;
+          }
+          if (error instanceof DestinationValidationError) {
+            sendErr(res, 422, error.message, ErrorCode.UNPROCESSABLE);
+            return;
+          }
           if (error instanceof ScheduleValidationError) {
             const response = toScheduleValidationResponse(error);
             res.writeHead(response.statusCode, { 'Content-Type': 'application/json' });

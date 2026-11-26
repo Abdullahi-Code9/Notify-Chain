@@ -106,6 +106,8 @@ const STELLAR_SECRET_SEED_RE = /\bS[A-Z2-7]{55}\b/g;
 
 // Prefixed webhook secrets (whsec_...) and hex HMAC signatures (sha256=...).
 const WHSEC_RE = /\bwhsec_[A-Za-z0-9+/=_-]+/g;
+// Scoped API keys: nck_<id>_<secret>.
+const NCK_KEY_RE = /\bnck_[0-9a-f]{16}_[A-Za-z0-9_-]{43}\b/g;
 const HMAC_SIGNATURE_RE = /\bsha(?:1|256|512)=[0-9a-f]{16,}/gi;
 
 /** Guard against deeply nested or cyclic structures in the logging path. */
@@ -145,6 +147,7 @@ export function redactString(value: string): string {
   result = result.replace(BEARER_HEADER_RE, `$1 ${REDACTED_PLACEHOLDER}`);
   result = result.replace(STELLAR_SECRET_SEED_RE, REDACTED_PLACEHOLDER);
   result = result.replace(WHSEC_RE, REDACTED_PLACEHOLDER);
+  result = result.replace(NCK_KEY_RE, REDACTED_PLACEHOLDER);
   result = result.replace(HMAC_SIGNATURE_RE, REDACTED_PLACEHOLDER);
   return result;
 }
@@ -259,4 +262,86 @@ export function redactObject<T extends Record<string, unknown>>(
     return undefined;
   }
   return redactValue(meta) as T;
+}
+
+// IPv4 address (optionally with port) and IPv6 address patterns.
+const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b/g;
+const IPV6_RE = /\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/gi;
+
+/**
+ * Mask IP addresses inside a plain string (used by the audit viewer when
+ * `maskIps` is requested).  Returns the original string if nothing matches.
+ */
+export function maskIpAddresses(value: string): string {
+  return value
+    .replace(IPV4_RE, REDACTED_PLACEHOLDER)
+    .replace(IPV6_RE, REDACTED_PLACEHOLDER);
+}
+
+/**
+ * Redact a single audit-record value for display in the administrative audit
+ * history viewer (#1225).
+ *
+ * Audit records frequently embed request metadata, resource snapshots and
+ * before/after diffs that may contain credentials.  This helper applies the
+ * full redaction policy (`redactValue`) and, when `maskIps` is set, also masks
+ * IP addresses in string leaves so administrators can investigate changes
+ * without exposing client network identifiers.
+ *
+ * The input is never mutated; a redacted copy is returned.
+ */
+export function redactAuditValue(value: unknown, maskIps = false): unknown {
+  const redacted = redactValue(value);
+  if (!maskIps) {
+    return redacted;
+  }
+  return maskIpsInValue(redacted, 0, new WeakSet<object>());
+}
+
+function maskIpsInValue(
+  value: unknown,
+  depth: number,
+  seen: WeakSet<object>,
+): unknown {
+  if (typeof value === 'string') {
+    return maskIpAddresses(value);
+  }
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return value;
+  }
+  if (depth >= MAX_REDACTION_DEPTH) return '[Truncated]';
+  if (seen.has(value)) return '[Circular]';
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => maskIpsInValue(item, depth + 1, seen));
+    }
+    const masked: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      masked[key] = maskIpsInValue(val, depth + 1, seen);
+    }
+    return masked;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+/**
+ * Redact a full audit record for the administrative audit history viewer.
+ *
+ * Masks sensitive values in the record's metadata / details payloads while
+ * preserving the fields the viewer needs (actor, action, resource,
+ * timestamp).  When `maskIps` is set, IP addresses in string values are also
+ * masked.
+ */
+export function redactAuditRecord<T extends Record<string, unknown>>(
+  record: T,
+  options: { maskIps?: boolean } = {},
+): T {
+  const maskIps = options.maskIps === true;
+  const redacted: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(record)) {
+    redacted[key] = redactAuditValue(val, maskIps);
+  }
+  return redacted as T;
 }

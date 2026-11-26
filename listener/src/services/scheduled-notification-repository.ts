@@ -400,21 +400,6 @@ export class ScheduledNotificationRepository {
   /**
    * Mark notification as completed
    */
-  async markAsCompleted(id: number, requestId?: string): Promise<void> {
-    assertScheduleTransition(NotificationStatus.PROCESSING, NotificationStatus.COMPLETED);
-    const sql = `
-      UPDATE scheduled_notifications
-      SET 
-        status = ?,
-        processing_completed_at = ?,
-        updated_at = ?,
-        processor_id = NULL,
-        lock_expires_at = NULL
-      WHERE id = ?
-    `;
-
-    const now = new Date().toISOString();
-    await this.db.run(sql, [NotificationStatus.COMPLETED, now, now, id]);
   async markAsCompleted(
     id: number,
     requestId?: string,
@@ -492,8 +477,6 @@ export class ScheduledNotificationRepository {
   }
 
   /** Mark a notification expired and release its processing lock. */
-  async markAsExpired(id: number): Promise<void> {
-    assertScheduleTransition(NotificationStatus.PROCESSING, NotificationStatus.EXPIRED);
   async markAsExpired(id: number, reason = 'Notification expired before delivery'): Promise<void> {
     const now = new Date().toISOString();
     const errorMessage = reason;
@@ -513,6 +496,123 @@ export class ScheduledNotificationRepository {
       ],
     );
     this.statsCache.invalidate();
+  }
+
+  /**
+   * Defer a notification to a future delivery time because it fell inside a
+   * quiet-hours / restricted delivery window (#1227).
+   *
+   * The underlying event record is preserved: the row stays PENDING, its
+   * payload, event_id, contract_address and metadata are untouched. Only
+   * `execute_at` is pushed forward to the next window opening and
+   * `next_retry_at` is cleared so the scheduler picks it up as soon as the
+   * window opens. The deferral is recorded in `error_details` for observability
+   * without overwriting the payload.
+   *
+   * Returns false when the row is not in a deferrable state (already claimed,
+   * terminal, or missing).
+   */
+  async deferToDeliveryWindow(
+    id: number,
+    resumeAt: Date,
+    reason: string = 'QUIET_HOURS',
+    requestId?: string,
+  ): Promise<boolean> {
+    const now = new Date().toISOString();
+    const details = JSON.stringify({
+      code: 'DEFERRED_DELIVERY_WINDOW',
+      reason,
+      deferredAt: now,
+      resumeAt: resumeAt.toISOString(),
+    });
+
+    const result = await this.db.run(
+      `UPDATE scheduled_notifications
+       SET execute_at = ?, next_retry_at = NULL, error_details = ?, updated_at = ?,
+           processor_id = NULL, lock_expires_at = NULL
+       WHERE id = ? AND status = ?`,
+      [resumeAt.toISOString(), details, now, id, NotificationStatus.PENDING],
+    );
+
+    if (result.changes > 0) {
+      this.statsCache.invalidate();
+      logger.info('Notification deferred to delivery window', {
+        requestId,
+        id,
+        resumeAt: resumeAt.toISOString(),
+        reason,
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Batch variant of {@link deferToDeliveryWindow}. Each entry maps a
+   * notification id to the time its delivery window next opens. Rows that are
+   * no longer deferrable are skipped. Returns the number of rows deferred.
+   */
+  async deferManyToDeliveryWindow(
+    deferrals: Array<{ id: number; resumeAt: Date; reason?: string }>,
+    requestId?: string,
+  ): Promise<number> {
+    if (deferrals.length === 0) return 0;
+
+    let deferred = 0;
+    await this.db.transaction(async () => {
+      for (const entry of deferrals) {
+        const ok = await this.deferToDeliveryWindow(
+          entry.id,
+          entry.resumeAt,
+          entry.reason ?? 'QUIET_HOURS',
+          requestId,
+        );
+        if (ok) deferred += 1;
+      }
+    });
+
+    if (deferred > 0) {
+      logger.info('Batch deferred notifications to delivery windows', {
+        requestId,
+        deferred,
+        total: deferrals.length,
+      });
+    }
+
+    return deferred;
+  }
+
+  /**
+   * Find PENDING notifications whose delivery window has reopened and are due
+   * for delivery. Used by the scheduler to resume notifications that were
+   * deferred during quiet hours without discarding the event record.
+   *
+   * Only rows previously deferred via {@link deferToDeliveryWindow} are
+   * considered (identified by the DEFERRED_DELIVERY_WINDOW marker), so this
+   * never interferes with normal scheduling.
+   */
+  async fetchDeferredDueForDelivery(
+    now: Date = new Date(),
+    limit: number = ScheduledNotificationRepository.MAX_SCHEDULER_BATCH_SIZE,
+  ): Promise<ScheduledNotification[]> {
+    const cappedLimit = Math.min(
+      Math.max(1, Math.floor(limit) || 1),
+      ScheduledNotificationRepository.MAX_SCHEDULER_BATCH_SIZE,
+    );
+
+    const rows = await this.db.all<ScheduledNotificationRow>(
+      `SELECT * FROM scheduled_notifications
+       WHERE status = ?
+         AND recovery_state IS NULL
+         AND execute_at <= ?
+         AND error_details LIKE '%"code":"DEFERRED_DELIVERY_WINDOW"%'
+       ORDER BY priority ASC, execute_at ASC, id ASC
+       LIMIT ?`,
+      [NotificationStatus.PENDING, now.toISOString(), cappedLimit],
+    );
+
+    return rows.map((row) => this.rowToModel(row));
   }
 
   /**
@@ -941,6 +1041,7 @@ export class ScheduledNotificationRepository {
    */
   async updatePending(
     id: number,
+    updates: { executeAt?: Date
     updates: { executeAt?: Date; priority?: number },
   ): Promise<boolean> {
     const sets: string[] = ['updated_at = ?'];
@@ -1336,6 +1437,41 @@ export class ScheduledNotificationRepository {
       successCount: row.success_count,
       failureCount: row.failure_count,
     }));
+  }
+
+  /**
+   * Persist explicit ownership and destination reference for a scheduled notification.
+   */
+  async bindDestinationOwnership(
+    scheduledNotificationId: number,
+    destinationId: string,
+    ownerId: string,
+  ): Promise<void> {
+    await this.db.run(
+      `INSERT OR REPLACE INTO scheduled_notification_destinations (
+        scheduled_notification_id, destination_id, owner_id
+      ) VALUES (?, ?, ?)`,
+      [scheduledNotificationId, destinationId, ownerId],
+    );
+  }
+
+  /**
+   * Look up the destination and owner bound to a scheduled notification, if any.
+   */
+  async getDestinationBinding(
+    scheduledNotificationId: number,
+  ): Promise<{ destinationId: string | null; ownerId: string } | null> {
+    const row = await this.db.get<{ destination_id: string | null; owner_id: string }>(
+      `SELECT destination_id, owner_id
+       FROM scheduled_notification_destinations
+       WHERE scheduled_notification_id = ?`,
+      [scheduledNotificationId],
+    );
+    if (!row) return null;
+    return {
+      destinationId: row.destination_id,
+      ownerId: row.owner_id,
+    };
   }
 
   /**

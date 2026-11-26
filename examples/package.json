@@ -1,0 +1,25 @@
+{
+  "name": "notify-chain-listener-examples",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runnable JavaScript (ESM) and TypeScript integration examples for the NotifyChain listener API.",
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
+  "scripts": {
+    "example:js:01": "node js/01-setup-and-config.mjs",
+    "example:js:02": "node js/02-events-retrieval.mjs",
+    "example:js:03": "node js/03-notifications-consumption.mjs",
+    "example:js:04": "node js/04-error-handling-and-retries.mjs",
+    "example:ts:01": "node ts/01-setup-and-config.ts",
+    "example:ts:02": "node ts/02-events-retrieval.ts",
+    "example:ts:03": "node ts/03-notifications-consumption.ts",
+    "example:ts:04": "node ts/04-error-handling-and-retries.ts",
+    "typecheck": "tsc --noEmit -p ts/tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~5.7.2"
+  }
+}

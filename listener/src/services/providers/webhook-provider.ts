@@ -1,6 +1,7 @@
 import {
   ProviderCapability,
   ProviderMetadata,
+  PayloadLimits,
   NotificationProvider,
   NotificationFormat,
   DeliveryPayload,
@@ -28,6 +29,16 @@ const WEBHOOK_SUPPORTED_FORMATS = new Set<NotificationFormat>([
   NotificationFormat.PLAIN_TEXT,
 ]);
 
+/**
+ * Generic webhooks accept larger payloads than chat channels but still enforce
+ * an upper bound to protect downstream consumers.
+ */
+const WEBHOOK_PAYLOAD_LIMITS: PayloadLimits = {
+  maxBodyLength: 60_000,
+  maxFieldCount: 100,
+  maxPayloadBytes: 65_536,
+};
+
 export class WebhookNotificationProvider implements NotificationProvider {
   readonly metadata: ProviderMetadata = {
     id: 'webhook',
@@ -36,6 +47,7 @@ export class WebhookNotificationProvider implements NotificationProvider {
     capabilities: WEBHOOK_CAPABILITIES,
     supportedFormats: WEBHOOK_SUPPORTED_FORMATS,
     defaultFormat: NotificationFormat.JSON,
+    payloadLimits: WEBHOOK_PAYLOAD_LIMITS,
   };
 
   private readonly config: Required<Omit<WebhookProviderConfig, 'healthCheckUrl'>> & {
@@ -56,6 +68,10 @@ export class WebhookNotificationProvider implements NotificationProvider {
 
   supportsFormat(format: NotificationFormat): boolean {
     return this.metadata.supportedFormats.has(format);
+  }
+
+  getCapabilities(): ProviderMetadata {
+    return this.metadata;
   }
 
   async deliver(payload: DeliveryPayload): Promise<DeliveryResult> {
