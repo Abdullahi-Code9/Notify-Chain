@@ -100,6 +100,7 @@ import { ValidationError, validationErrorBody } from '../utils/validation';
 import { ResponseTimeMiddleware } from '../middleware/response-time';
 import { addSecurityHeaders } from '../middleware/security-headers';
 import { DEFAULT_MAX_BODY_BYTES, enforceBodyLimit } from '../middleware/body-limit';
+import { resolveRequestPolicy } from '../middleware/request-policy';
 import { validateRequestFraming } from '../middleware/request-framing';
 import { sanitizeUrl } from '../utils/logger';
 import { sanitizeCredentials } from '../utils/credential-sanitizer';
@@ -550,6 +551,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     // Start response-time tracking for this request (#491)
     responseTime.start(res);
 
+    // Request size and media-type policy (#1138).
     // Request framing (#1208): reject ambiguous Content-Length /
     // Transfer-Encoding combinations before any body is read so proxies and
     // this server always agree on request boundaries.
@@ -567,10 +569,18 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
     // Request body size limit.
     //
-    // Screened here, before routing, so an oversized payload is answered and
-    // the socket destroyed before any route handler attaches its own `data`
-    // listener and starts accumulating the body in memory.
-    const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+    // Resolved before the body is read so bulk endpoints get their larger
+    // ceiling while ordinary endpoints keep the configured default. Screening
+    // here means an oversized payload is answered and the socket destroyed
+    // before a route handler starts accumulating it in memory.
+    const requestUrl = new URL(req.url ?? '/', 'http://localhost');
+    const requestPolicy = resolveRequestPolicy(
+      req.method ?? 'GET',
+      requestUrl.pathname,
+      options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
+    );
+    const maxBodyBytes = requestPolicy.maxBytes;
+
     const bodyLimit = await enforceBodyLimit(req, res, {
       maxBytes: maxBodyBytes,
       onRejected: (reason, observedBytes) => {
@@ -600,7 +610,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       'X-Request-Id, X-Correlation-Id, X-Response-Time',
     );
 
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const url = requestUrl;
     const pathname = url.pathname;
 
     // ── API Route Versioning (#386, #984) ──────────────────────────────────
@@ -652,6 +662,14 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       res.removeHeader('Content-Type');
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // Reject unsupported media types before any route reads the body (#1138).
+    // validateContentType intentionally leaves safe methods, empty bodies and
+    // requests without a Content-Type header alone for backward compatibility.
+    // Route-level checks remain in place as a second line of defence.
+    if (!validateContentType(req, res, requestPolicy.allowedContentTypes)) {
       return;
     }
 
