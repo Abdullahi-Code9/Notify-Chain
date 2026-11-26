@@ -8,6 +8,7 @@ const DISPUTE_COUNTER: &str = "DISP_CNT";
 const API_KEY_COUNTER: &str = "API_KEY_CNT";
 const DISPUTE_RESOLVER: &str = "DISP_RES";
 const ADMIN: &str = "ADMIN";
+const PAUSED: &str = "PAUSED";
 const DISPUTE_RESOLUTION_PERIOD: &str = "DISP_PERIOD";
 
 // Default resolution period: 7 days in seconds
