@@ -373,10 +373,30 @@ export class ApiCredentialService {
       createdAt: this.now().toISOString(),
       lastUsedAt: null,
       revokedAt: null,
+      ownerId: input.ownerId,
     };
     this.store.save(record);
 
     return { ...toPublic(record), apiKey: `${API_KEY_PREFIX}_${id}_${secret}` };
+  }
+
+  /** Owner identifier used for credential ownership checks. */
+  getOwner(id: string): string | undefined {
+    return this.store.get(id)?.ownerId;
+  }
+
+  /** Update name/scopes after the caller has been authorised. */
+  updateCredential(id: string, input: CreateApiCredentialInput): ApiCredential | null {
+    const record = this.store.get(id);
+    if (!record || record.revokedAt) return null;
+    const validated = validateCreateCredentialInput(input);
+    record.name = validated.name;
+    record.scopes = validated.scopes;
+    this.store.save(record);
+    for (const [key, entry] of this.verifyCache) {
+      if (entry.id === id) this.verifyCache.delete(key);
+    }
+    return toPublic(record);
   }
 
   list(): ApiCredential[] {

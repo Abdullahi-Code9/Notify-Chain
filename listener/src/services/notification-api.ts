@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_PAYLOAD_SIZE_BYTES,
 } from '../utils/payload-size-validator';
 import { validateNotificationMetadata } from '../utils/metadata-validator';
+import { NotificationAmplificationGuard } from '../utils/notification-amplification-guard';
 import { ensureNotificationVersion } from '../utils/notification-version';
 import logger from '../utils/logger';
 import {
@@ -91,7 +92,7 @@ export class NotificationAPI {
     private maxSchedulingHorizonMs: number | null = DEFAULT_MAX_SCHEDULING_HORIZON_MS,
     private clock: () => Date = () => new Date(),
     private scheduleAudit?: ScheduleAuditTrail | null,
-    private destinationService?: DestinationService | null,
+    private amplificationGuard: NotificationAmplificationGuard = new NotificationAmplificationGuard(),
   ) {
     if (typeof maxPayloadSizeBytesOrIdempotency === 'number') {
       this.maxPayloadSizeBytes = maxPayloadSizeBytesOrIdempotency;
@@ -171,6 +172,13 @@ export class NotificationAPI {
     if (!isNonEmptyString(input.targetRecipient)) {
       throw new Error('targetRecipient is required and must be a non-empty string');
     }
+
+    // Apply per-destination limits and equivalent-request protection before
+    // validating or persisting further, so repeated triggers cannot amplify.
+    this.amplificationGuard.check(
+      input.targetRecipient,
+      JSON.stringify([input.targetRecipient, input.notificationType, input.payload]),
+    );
 
     const v = new InputValidator();
     v.check(
