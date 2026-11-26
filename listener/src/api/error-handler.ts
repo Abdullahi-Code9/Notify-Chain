@@ -1,7 +1,8 @@
 import http from 'http';
 import logger from '../utils/logger';
-import { sendErr, ErrorCode } from '../utils/response';
+import { sendErr, sendJson, ErrorCode } from '../utils/response';
 import { ValidationError } from '../utils/validation';
+import { toPublicError, toInternalDiagnostic } from '../utils/safe-error-serializer';
 import { NotificationAmplificationError } from '../utils/notification-amplification-guard';
 import { redactString, redactValue } from '../utils/redact';
 
@@ -112,9 +113,13 @@ export function handleApiError(
     return;
   }
 
-  const message = error instanceof Error ? error.message : String(error);
+  // Unhandled / unexpected error: log full internal detail but send a safe
+  // generic message to the client (#1141).
   logger.error('Unhandled API error', {
     requestId,
+    ...toInternalDiagnostic(error, correlationId),
+  });
+  sendJson(res, 500, toPublicError(ErrorCode.INTERNAL_ERROR, correlationId));
     correlationId,
     error: redactValue(error),
   });
