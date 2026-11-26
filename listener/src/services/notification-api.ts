@@ -26,6 +26,12 @@ import {
 } from '../utils/validation';
 import { ScheduleAuditTrail } from './schedule-audit-trail';
 import { assertValidTimezone, InvalidTimezoneError } from '../utils/timezone';
+import {
+  DeliveryWindow,
+  QuietHours,
+  validateDeliveryWindow,
+  validateQuietHours,
+} from '../utils/delivery-window';
 import { validateNotificationDestinationUrl } from '../utils/ssrf-url-validation';
 
 const PRIORITY_MIN = 1;
@@ -52,6 +58,24 @@ export interface CancelScheduleResult {
   status: string | null;
   message: string;
   notification?: Awaited<ReturnType<ScheduledNotificationRepository['getById']>>;
+}
+
+/**
+ * User notification delivery preferences exposed to the dashboard.
+ * Quiet hours and delivery windows are timezone-aware and never cause
+ * matching events to be discarded — they only delay delivery.
+ */
+export interface NotificationDeliveryPreferences {
+  /** User-specific quiet hours during which delivery is suppressed. */
+  quietHours: QuietHours | null;
+  /** Configurable delivery windows during which notifications may be sent. */
+  deliveryWindow: DeliveryWindow | null;
+}
+
+/** Patch shape accepted by the preference update endpoint. */
+export interface NotificationDeliveryPreferencesPatch {
+  quietHours?: QuietHours | null;
+  deliveryWindow?: DeliveryWindow | null;
 }
 
 function parseExpiresAt(value: Date | string | number): Date | null {
@@ -114,6 +138,55 @@ export class NotificationAPI {
   /** Attach or replace the destination service used to validate destination ownership. */
   setDestinationService(service: DestinationService | null): void {
     this.destinationService = service;
+  }
+
+  /**
+   * Read the current delivery preferences (quiet hours + delivery window).
+   * Returns nulls when no preferences have been configured yet.
+   */
+  async getDeliveryPreferences(): Promise<NotificationDeliveryPreferences> {
+    const stored = await this.repository.getDeliveryPreferences();
+    return {
+      quietHours: stored?.quietHours ?? null,
+      deliveryWindow: stored?.deliveryWindow ?? null,
+    };
+  }
+
+  /**
+   * Update delivery preferences. Both fields are optional; omitted fields are
+   * left unchanged. Passing `null` explicitly clears a preference.
+   * Values are validated (including timezone) before being persisted.
+   */
+  async updateDeliveryPreferences(
+    patch: NotificationDeliveryPreferencesPatch,
+    requestId?: string,
+  ): Promise<NotificationDeliveryPreferences> {
+    if (!isPlainObject(patch)) {
+      throw new Error('preferences must be an object');
+    }
+
+    const update: NotificationDeliveryPreferencesPatch = {};
+
+    if (patch.quietHours !== undefined) {
+      update.quietHours =
+        patch.quietHours === null ? null : validateQuietHours(patch.quietHours);
+    }
+    if (patch.deliveryWindow !== undefined) {
+      update.deliveryWindow =
+        patch.deliveryWindow === null ? null : validateDeliveryWindow(patch.deliveryWindow);
+    }
+
+    logger.info('Updating notification delivery preferences', {
+      requestId,
+      quietHours: update.quietHours !== undefined,
+      deliveryWindow: update.deliveryWindow !== undefined,
+    });
+
+    const stored = await this.repository.updateDeliveryPreferences(update);
+    return {
+      quietHours: stored?.quietHours ?? null,
+      deliveryWindow: stored?.deliveryWindow ?? null,
+    };
   }
 
   /**

@@ -15,6 +15,8 @@ import { ChannelDetailsPage } from './pages/ChannelDetailsPage';
 import { RpcBenchmarkPage } from './pages/RpcBenchmarkPage';
 import { NotificationDestinationsPage } from './pages/NotificationDestinationsPage';
 import { ContractDetailPage } from './pages/ContractDetailPage';
+import { AuditHistoryPage } from './pages/AuditHistoryPage';
+import { AdminRouteGuard } from './components/AdminRouteGuard';
 import { TransactionTracePage } from './pages/TransactionTracePage';
 
 import { ThemeToggle } from './components/ThemeToggle';

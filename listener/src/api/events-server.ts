@@ -94,6 +94,7 @@ import { WebhookNotificationProvider } from '../services/providers/webhook-provi
 import { ProviderHealthResult } from '../types/provider-capabilities';
 import { EVENT_STREAM_PATH, handleEventStream } from './event-stream';
 import { resolveLocalDateTime } from '../services/local-schedule';
+import { redactSensitiveFields } from '../utils/redact';
 
 export interface EventsServerOptions {
   port: number;
@@ -1126,6 +1127,131 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           handleApiError(res, error, requestId, correlationId);
         }
       });
+      return;
+    }
+
+    // GET /api/admin/audit — Administrative Audit History Viewer (#1225)
+    //
+    // Returns recorded administrative activity (security audit log entries)
+    // in reverse-chronological order. Supports filtering by action type and
+    // date range, plus limit/offset pagination. Sensitive values are masked
+    // before serialization and only authorized administrators may read it.
+    if (req.method === 'GET' && url.pathname === '/api/admin/audit') {
+      const auth = await authorizeRequest(req, {
+        apiKeys: options.apiKeys,
+        credentialService: options.credentialService,
+      });
+      if (!auth.allowed) {
+        if (auth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+        sendErr(res, auth.status, auth.message, auth.code, auth.details);
+        return;
+      }
+
+      const principal = auth.principal as
+        | (AuthPrincipal & { role?: string; roles?: string[] })
+        | undefined;
+      const roles = [
+        ...(Array.isArray(principal?.roles) ? principal!.roles! : []),
+        ...(typeof principal?.role === 'string' ? [principal.role] : []),
+      ].map((r) => r.toLowerCase());
+      const isAdmin = roles.includes('admin') || roles.includes('administrator');
+
+      if (!isAdmin) {
+        logger.warn('Rejected non-admin access to audit history', {
+          requestId,
+          correlationId,
+          actor: principal?.name ?? principal?.id ?? 'unknown',
+        });
+        sendErr(res, 403, 'Forbidden: administrator role required', ErrorCode.FORBIDDEN);
+        return;
+      }
+
+      const action = url.searchParams.get('action') ?? undefined;
+      const fromParam = url.searchParams.get('from') ?? url.searchParams.get('startDate');
+      const toParam = url.searchParams.get('to') ?? url.searchParams.get('endDate');
+
+      const parseDate = (value: string | null | undefined): Date | undefined => {
+        if (!value) return undefined;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+      };
+
+      const from = parseDate(fromParam);
+      const to = parseDate(toParam);
+      if ((fromParam && !from) || (toParam && !to)) {
+        sendErr(res, 400, 'Invalid date filter', ErrorCode.BAD_REQUEST);
+        return;
+      }
+
+      const limitParam = url.searchParams.get('limit');
+      const offsetParam = url.searchParams.get('offset');
+      const limit = limitParam
+        ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200)
+        : 50;
+      const offset = offsetParam ? Math.max(parseInt(offsetParam, 10) || 0, 0) : 0;
+
+      try {
+        const db = getDatabase();
+        const clauses: string[] = [];
+        const params: unknown[] = [];
+
+        if (action) {
+          clauses.push('action = ?');
+          params.push(action);
+        }
+        if (from) {
+          clauses.push('timestamp >= ?');
+          params.push(from.toISOString());
+        }
+        if (to) {
+          clauses.push('timestamp <= ?');
+          params.push(to.toISOString());
+        }
+
+        const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+
+        const countRow = await db.get<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM security_audit_log ${where}`,
+          params,
+        );
+        const total = Number(countRow?.total ?? 0);
+
+        const rows = await db.all<Record<string, unknown>>(
+          `SELECT * FROM security_audit_log ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset],
+        );
+
+        const records = rows.map((row) => {
+          const redacted = redactSensitiveFields(row) as Record<string, unknown>;
+          const ts = redacted.timestamp;
+          return {
+            ...redacted,
+            timestamp:
+              ts instanceof Date ? ts.toISOString() : typeof ts === 'string' ? ts : null,
+          };
+        });
+
+        logger.info('Handling GET /api/admin/audit', {
+          requestId,
+          correlationId,
+          action,
+          from: from?.toISOString(),
+          to: to?.toISOString(),
+          limit,
+          offset,
+          returned: records.length,
+          total,
+        });
+
+        sendOk(res, 200, { total, limit, offset, records });
+      } catch (error) {
+        logger.error('Failed to load administrative audit history', {
+          error,
+          requestId,
+          correlationId,
+        });
+        sendErr(res, 500, 'Failed to load audit history', ErrorCode.INTERNAL_ERROR);
+      }
       return;
     }
 
