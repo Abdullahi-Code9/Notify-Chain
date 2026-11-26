@@ -15,7 +15,19 @@ export interface WalletState {
 const WALLET_ID_KEY = 'notify-chain:wallet-id';
 const WALLET_ADDRESS_KEY = 'notify-chain:wallet-address';
 
+/**
+ * Security guard (#1207): browser web storage is only for non-sensitive UI
+ * state. API keys, bearer tokens and secrets must never be persisted where
+ * scripts (or a later page load) can read them.
+ */
+const SENSITIVE_KEY_PATTERN = /(?:token|secret|api[_-]?key|password|credential|auth|nck)/i;
+
+export function isSensitiveStorageKey(key: string): boolean {
+  return SENSITIVE_KEY_PATTERN.test(key);
+}
+
 function readStorage(key: string): string | null {
+  if (isSensitiveStorageKey(key)) return null;
   try {
     return localStorage.getItem(key);
   } catch {
@@ -24,6 +36,7 @@ function readStorage(key: string): string | null {
 }
 
 function writeStorage(key: string, value: string | null): void {
+  if (isSensitiveStorageKey(key)) return;
   try {
     if (value) {
       localStorage.setItem(key, value);

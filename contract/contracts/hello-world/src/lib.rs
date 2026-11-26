@@ -49,13 +49,49 @@ impl AutoShareContract {
         VERSION
     }
 
+    /// Returns a consistent, read-only snapshot of related contract state.
+    ///
+    /// See `docs/CONTRACT_STATE_SNAPSHOT.md` for the meaning of every field.
+    /// This function performs no storage writes and emits no events.
+    pub fn get_state_snapshot(env: Env) -> base::types::ContractStateSnapshot {
+        base::types::ContractStateSnapshot {
+            admin: autoshare_logic::get_admin(env.clone()).ok(),
+            pending_owner: autoshare_logic::get_pending_owner(env.clone()),
+            paused: autoshare_logic::get_paused_status(&env),
+            schema_version: autoshare_logic::get_schema_version(env.clone()),
+            notification_version: autoshare_logic::get_notification_version(env.clone()),
+            limits: autoshare_logic::get_notification_limits(env),
+        }
+    }
+
     // ============================================================================
     // Admin Management
     // ============================================================================
 
     /// Initializes the contract admin. Can only be called once.
     pub fn initialize_admin(env: Env, admin: Address) {
-        autoshare_logic::initialize_admin(env, admin);
+        autoshare_logic::initialize_admin(env, admin).unwrap();
+    }
+
+    /// Explicitly locks in and validates the expected Stellar network.
+    ///
+    /// Pass the SHA-256 hash of the network passphrase (the value returned by
+    /// `env.ledger().network_id()` on the target network).  Returns
+    /// `NetworkMismatch` if `expected_network_id` does not match the live
+    /// ledger value, preventing mis-deployment across networks.
+    /// Emits `NetworkConfigInitialized` on success.
+    pub fn initialize_with_network(
+        env: Env,
+        admin: Address,
+        expected_network_id: BytesN<32>,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::initialize_with_network(env, admin, expected_network_id)
+    }
+
+    /// Returns the network identifier (SHA-256 of the network passphrase) that
+    /// was locked in during initialization, or `None` before first init.
+    pub fn get_network_id(env: Env) -> Option<BytesN<32>> {
+        autoshare_logic::get_network_id(env)
     }
 
     /// Pauses the contract. Only admin can call.
@@ -881,6 +917,33 @@ impl AutoShareContract {
     }
 
     // ============================================================================
+    // Storage Migration  (Issue #1197)
+    // ============================================================================
+
+    /// Returns the persistent storage format version (0 before the first migration).
+    pub fn get_storage_version(env: Env) -> u32 {
+        autoshare_logic::get_storage_version(env)
+    }
+
+    /// Returns `true` if the migration to `target_version` has already been executed.
+    pub fn is_migration_executed(env: Env, target_version: u32) -> bool {
+        autoshare_logic::is_migration_executed(env, target_version)
+    }
+
+    /// Runs the storage migration from the current version to `target_version`.
+    ///
+    /// Only the contract admin may call this. Reverts if the migration has
+    /// already been executed (idempotency guard) or if no migration path is
+    /// defined between the two versions.
+    pub fn run_migration(
+        env: Env,
+        admin: Address,
+        target_version: u32,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::run_migration(env, admin, target_version)
+    }
+
+    // ============================================================================
     // Access Logging  (Issue #312)
     // ============================================================================
 
@@ -1011,6 +1074,40 @@ impl AutoShareContract {
         nonce: u64,
     ) -> Option<base::nonce::NonceRecord> {
         nonce_logic::get_nonce_record(&env, &signer, operation, nonce)
+    }
+
+    /// Returns `true` when a persisted authorization record has expired.
+    ///
+    /// Missing records fail with `NotFound` instead of being treated as valid.
+    pub fn is_authorization_expired(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        nonce: u64,
+    ) -> Result<bool, base::errors::Error> {
+        let record = nonce_logic::require_valid_authorization(
+            &env,
+            &signer,
+            operation,
+            nonce,
+        );
+        match record {
+            Ok(_) => Ok(false),
+            Err(base::errors::Error::NonceExpired) => Ok(true),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Removes only expired authorization records up to `max_nonce`.
+    ///
+    /// Active records and the next-nonce counter are never modified.
+    pub fn prune_expired_authorizations(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        max_nonce: u64,
+    ) -> u32 {
+        nonce_logic::prune_expired_authorizations(&env, &signer, operation, max_nonce)
     }
 
     /// Replay-protected variant of [`Self::pause`].
@@ -1156,6 +1253,7 @@ pub mod test_utils;
 #[cfg(test)]
 mod tests {
     mod access_control_test;
+    mod event_payload_consistency_test;
     mod access_log_test;
     mod archive_notification_test;
     mod audit_log_test;
@@ -1167,16 +1265,20 @@ mod tests {
     mod channel_metadata_test;
     mod channel_subscription_test;
     mod clock_test;
+    mod event_compatibility_test;
     mod event_regression_test;
+    mod expired_authorization_test;
     mod expiration_test;
     mod extended_coverage_test;
     mod fuzz_test;
+    mod initialization_state_test;
     mod metadata_validation_test;
     mod mock_token_test;
     mod notification_lifetime_test;
     mod notification_test;
     mod notification_validation_test;
     mod notification_version_test;
+    mod network_config_test;
     mod nonce_replay_test;
     mod ownership_transfer_test;
     mod pause_test;
@@ -1184,7 +1286,9 @@ mod tests {
     mod preferences_test;
     mod revocation_test;
     mod schema_version_test;
+    mod state_snapshot_test;
     mod storage_optimization_test;
+    mod structured_error_codes_test;
     mod subscription_cancellation_test;
     mod enumeration_limit_test;
     mod network_config_test;

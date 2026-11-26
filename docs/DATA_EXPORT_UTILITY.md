@@ -37,7 +37,7 @@ ts-node src/scripts/export-data.ts [options]
 | `--to` | `ISO Date` | - | Records created/processed on or before this timestamp |
 | `--limit` | `number` | `1000` | Maximum records per category (1-10,000) |
 | `--offset` | `number` | `0` | Pagination offset |
-| `--output` | `path` | stdout | File destination path |
+| `--output` | `path` | stdout | File destination path, relative to `EXPORT_OUTPUT_DIR` (default: working directory); traversal, absolute paths and symlinks are rejected |
 | `--include-sensitive` | `boolean` | `false` | Disable redaction and export raw credentials |
 | `--db-path` | `path` | `DATABASE_PATH` | Path to SQLite database |
 
