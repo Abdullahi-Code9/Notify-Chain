@@ -34,6 +34,8 @@ export interface ApiCredentialRecord {
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+  /** Owner credential id (or `admin` for static keys); never returned publicly. */
+  ownerId?: string;
 }
 
 /** Public view returned by list / get endpoints — no secret material. */
@@ -46,6 +48,7 @@ export interface ApiCredential {
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+  expiresAt?: string | null;
 }
 
 /** Returned exactly once, by the create call. `apiKey` is not recoverable afterwards. */
@@ -56,4 +59,8 @@ export interface CreatedApiCredential extends ApiCredential {
 export interface CreateApiCredentialInput {
   name: string;
   scopes: ApiScope[];
+  /** Optional ISO expiry; omitted keys never expire. */
+  expiresAt?: string | null;
+  /** Set by the server from the authenticated principal, never from the body. */
+  ownerId?: string;
 }

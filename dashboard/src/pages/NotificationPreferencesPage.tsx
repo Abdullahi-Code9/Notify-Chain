@@ -6,6 +6,68 @@ type CategoryKey = 'security' | 'governance' | 'system' | 'custom';
 type PreferencesRow = Record<ChannelKey, boolean>;
 type PreferencesMatrix = Record<CategoryKey, PreferencesRow>;
 
+type WeekdayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+type QuietHoursConfig = {
+  enabled: boolean;
+  start: string;
+  end: string;
+};
+
+type DeliveryWindowConfig = {
+  enabled: boolean;
+  days: WeekdayKey[];
+  start: string;
+  end: string;
+  timezone: string;
+};
+
+type DeliverySchedule = {
+  quietHours: QuietHoursConfig;
+  deliveryWindow: DeliveryWindowConfig;
+};
+
+const weekdayDefinitions: { key: WeekdayKey; label: string }[] = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' },
+];
+
+const timezoneOptions = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Asia/Tokyo',
+  'Asia/Singapore',
+  'Australia/Sydney',
+];
+
+const defaultDeliverySchedule: DeliverySchedule = {
+  quietHours: { enabled: false, start: '22:00', end: '07:00' },
+  deliveryWindow: {
+    enabled: false,
+    days: ['mon', 'tue', 'wed', 'thu', 'fri'],
+    start: '09:00',
+    end: '18:00',
+    timezone: 'UTC',
+  },
+};
+
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function isValidTime(value: string) {
+  return TIME_PATTERN.test(value.trim());
+}
+
 const channelDefinitions = [
   { key: 'inApp' as const, label: 'In-App' },
   { key: 'email' as const, label: 'Email' },
@@ -62,6 +124,8 @@ export function NotificationPreferencesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [deliverySchedule, setDeliverySchedule] =
+    useState<DeliverySchedule>(defaultDeliverySchedule);
 
   const errorCategories = useMemo(
     () =>
@@ -91,10 +155,45 @@ export function NotificationPreferencesPage() {
     [telegramHandle, telegramSelected],
   );
 
+  const quietHoursInvalid = useMemo(
+    () =>
+      deliverySchedule.quietHours.enabled &&
+      (!isValidTime(deliverySchedule.quietHours.start) ||
+        !isValidTime(deliverySchedule.quietHours.end)),
+    [deliverySchedule.quietHours],
+  );
+
+  const deliveryWindowInvalid = useMemo(() => {
+    const window = deliverySchedule.deliveryWindow;
+    if (!window.enabled) {
+      return false;
+    }
+    return (
+      window.days.length === 0 ||
+      !isValidTime(window.start) ||
+      !isValidTime(window.end) ||
+      window.timezone.trim().length === 0
+    );
+  }, [deliverySchedule.deliveryWindow]);
+
   const canSave = useMemo(
     () =>
-      !isLoading && !loadError && !emailInvalid && !telegramInvalid && errorCategories.length === 0,
-    [emailInvalid, errorCategories.length, isLoading, loadError, telegramInvalid],
+      !isLoading &&
+      !loadError &&
+      !emailInvalid &&
+      !telegramInvalid &&
+      !quietHoursInvalid &&
+      !deliveryWindowInvalid &&
+      errorCategories.length === 0,
+    [
+      deliveryWindowInvalid,
+      emailInvalid,
+      errorCategories.length,
+      isLoading,
+      loadError,
+      quietHoursInvalid,
+      telegramInvalid,
+    ],
   );
 
   const summaryText = useMemo(() => {
@@ -126,6 +225,7 @@ export function NotificationPreferencesPage() {
       }
 
       setPreferences(defaultPreferences);
+      setDeliverySchedule(defaultDeliverySchedule);
       setLoadError(null);
       setIsLoading(false);
     }, 780);
@@ -146,6 +246,57 @@ export function NotificationPreferencesPage() {
     }));
     setSaveState('idle');
   }, []);
+
+  const handleToggleQuietHours = useCallback((enabled: boolean) => {
+    setDeliverySchedule((current) => ({
+      ...current,
+      quietHours: { ...current.quietHours, enabled },
+    }));
+    setSaveState('idle');
+  }, []);
+
+  const handleQuietHoursTimeChange = useCallback(
+    (field: 'start' | 'end', value: string) => {
+      setDeliverySchedule((current) => ({
+        ...current,
+        quietHours: { ...current.quietHours, [field]: value },
+      }));
+      setSaveState('idle');
+    },
+    [],
+  );
+
+  const handleToggleDeliveryWindow = useCallback((enabled: boolean) => {
+    setDeliverySchedule((current) => ({
+      ...current,
+      deliveryWindow: { ...current.deliveryWindow, enabled },
+    }));
+    setSaveState('idle');
+  }, []);
+
+  const handleToggleDeliveryDay = useCallback((day: WeekdayKey) => {
+    setDeliverySchedule((current) => {
+      const days = current.deliveryWindow.days.includes(day)
+        ? current.deliveryWindow.days.filter((entry) => entry !== day)
+        : [...current.deliveryWindow.days, day];
+      return {
+        ...current,
+        deliveryWindow: { ...current.deliveryWindow, days },
+      };
+    });
+    setSaveState('idle');
+  }, []);
+
+  const handleDeliveryWindowChange = useCallback(
+    (field: 'start' | 'end' | 'timezone', value: string) => {
+      setDeliverySchedule((current) => ({
+        ...current,
+        deliveryWindow: { ...current.deliveryWindow, [field]: value },
+      }));
+      setSaveState('idle');
+    },
+    [],
+  );
 
   const handleSave = useCallback(() => {
     if (!canSave) {
@@ -338,6 +489,179 @@ export function NotificationPreferencesPage() {
                     : null
                 }
               />
+            </FormField>
+
+            <div className="notification-preferences__panel-block">
+              <h2>Quiet hours</h2>
+              <p>
+                Pause notification delivery during a recurring time range. Events received during
+                quiet hours are preserved and delivered once the window closes.
+              </p>
+            </div>
+
+            <label className="notification-preferences__switch" htmlFor="quiet-hours-enabled">
+              <input
+                id="quiet-hours-enabled"
+                type="checkbox"
+                checked={deliverySchedule.quietHours.enabled}
+                onChange={(event) => handleToggleQuietHours(event.target.checked)}
+              />
+              <span>Enable quiet hours</span>
+            </label>
+
+            <FormField
+              id="quiet-hours-start"
+              label="Quiet hours start"
+              error={
+                quietHoursInvalid
+                  ? 'Quiet hours: enter valid times in 24-hour HH:MM format.'
+                  : null
+              }
+            >
+              <FormInput
+                fieldId="quiet-hours-start"
+                type="time"
+                value={deliverySchedule.quietHours.start}
+                onChange={(event) => handleQuietHoursTimeChange('start', event.target.value)}
+                disabled={!deliverySchedule.quietHours.enabled}
+                error={
+                  quietHoursInvalid
+                    ? 'Quiet hours: enter valid times in 24-hour HH:MM format.'
+                    : null
+                }
+              />
+            </FormField>
+
+            <FormField
+              id="quiet-hours-end"
+              label="Quiet hours end"
+              error={
+                quietHoursInvalid
+                  ? 'Quiet hours: enter valid times in 24-hour HH:MM format.'
+                  : null
+              }
+            >
+              <FormInput
+                fieldId="quiet-hours-end"
+                type="time"
+                value={deliverySchedule.quietHours.end}
+                onChange={(event) => handleQuietHoursTimeChange('end', event.target.value)}
+                disabled={!deliverySchedule.quietHours.enabled}
+                error={
+                  quietHoursInvalid
+                    ? 'Quiet hours: enter valid times in 24-hour HH:MM format.'
+                    : null
+                }
+              />
+            </FormField>
+
+            <div className="notification-preferences__panel-block">
+              <h2>Delivery window</h2>
+              <p>
+                Restrict notifications to specific days and hours in your timezone. Notifications
+                resume automatically when the delivery window opens.
+              </p>
+            </div>
+
+            <label className="notification-preferences__switch" htmlFor="delivery-window-enabled">
+              <input
+                id="delivery-window-enabled"
+                type="checkbox"
+                checked={deliverySchedule.deliveryWindow.enabled}
+                onChange={(event) => handleToggleDeliveryWindow(event.target.checked)}
+              />
+              <span>Enable delivery window</span>
+            </label>
+
+            <fieldset
+              className="notification-preferences__weekdays"
+              disabled={!deliverySchedule.deliveryWindow.enabled}
+            >
+              <legend>Delivery days</legend>
+              {weekdayDefinitions.map((day) => {
+                const dayId = `delivery-day-${day.key}`;
+                return (
+                  <label key={day.key} htmlFor={dayId} className="notification-preferences__weekday">
+                    <input
+                      id={dayId}
+                      type="checkbox"
+                      checked={deliverySchedule.deliveryWindow.days.includes(day.key)}
+                      onChange={() => handleToggleDeliveryDay(day.key)}
+                    />
+                    <span>{day.label}</span>
+                  </label>
+                );
+              })}
+            </fieldset>
+
+            <FormField
+              id="delivery-window-start"
+              label="Delivery window start"
+              error={
+                deliveryWindowInvalid
+                  ? 'Delivery window: select at least one day and enter valid times.'
+                  : null
+              }
+            >
+              <FormInput
+                fieldId="delivery-window-start"
+                type="time"
+                value={deliverySchedule.deliveryWindow.start}
+                onChange={(event) => handleDeliveryWindowChange('start', event.target.value)}
+                disabled={!deliverySchedule.deliveryWindow.enabled}
+                error={
+                  deliveryWindowInvalid
+                    ? 'Delivery window: select at least one day and enter valid times.'
+                    : null
+                }
+              />
+            </FormField>
+
+            <FormField
+              id="delivery-window-end"
+              label="Delivery window end"
+              error={
+                deliveryWindowInvalid
+                  ? 'Delivery window: select at least one day and enter valid times.'
+                  : null
+              }
+            >
+              <FormInput
+                fieldId="delivery-window-end"
+                type="time"
+                value={deliverySchedule.deliveryWindow.end}
+                onChange={(event) => handleDeliveryWindowChange('end', event.target.value)}
+                disabled={!deliverySchedule.deliveryWindow.enabled}
+                error={
+                  deliveryWindowInvalid
+                    ? 'Delivery window: select at least one day and enter valid times.'
+                    : null
+                }
+              />
+            </FormField>
+
+            <FormField
+              id="delivery-window-timezone"
+              label="Timezone"
+              error={
+                deliveryWindowInvalid
+                  ? 'Delivery window: select a timezone for the delivery window.'
+                  : null
+              }
+            >
+              <select
+                id="delivery-window-timezone"
+                className="form-input"
+                value={deliverySchedule.deliveryWindow.timezone}
+                onChange={(event) => handleDeliveryWindowChange('timezone', event.target.value)}
+                disabled={!deliverySchedule.deliveryWindow.enabled}
+              >
+                {timezoneOptions.map((timezone) => (
+                  <option key={timezone} value={timezone}>
+                    {timezone}
+                  </option>
+                ))}
+              </select>
             </FormField>
 
             {errorCategories.length > 0 && (

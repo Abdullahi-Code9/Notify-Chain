@@ -168,9 +168,18 @@ function respondTooLarge(res: http.ServerResponse, maxBytes: number, observedByt
     res.setHeader('X-API-Version', 'v1');
   }
 
+  // The envelope fields make this consistent with every other API error while
+  // the flat fields stay for clients that already parse them.
+  const message = `Request body exceeds the maximum allowed size of ${maxBytes} bytes.`;
   const payload = JSON.stringify({
-    error: 'Payload Too Large',
+    success: false,
+    error: {
+      code: 'PAYLOAD_TOO_LARGE',
+      message,
+      details: [],
+    },
     code: 'PAYLOAD_TOO_LARGE',
+    message,
     maxBytes,
     // The observed size is the client's own number or our count of their
     // bytes — echoing it back leaks nothing they did not send.

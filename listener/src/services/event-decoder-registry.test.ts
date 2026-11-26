@@ -40,6 +40,8 @@ function makeNormalized(overrides: Partial<NormalizedEvent> = {}): NormalizedEve
     value: '{"notification_id":"abc","payload_version":1}',
     txHash: 'tx-hash-001',
     payloadVersion: 1,
+    baseEventName: 'notification_scheduled',
+    eventSchemaVersion: 1,
     ...overrides,
   };
 }

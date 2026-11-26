@@ -23,6 +23,7 @@ import logger from '../utils/logger';
  * │      (isDuplicate=true, 200/202 — callers can detect the shortcut).    │
  * │    • Same key + DIFFERENT body within TTL → 409 Conflict +             │
  * │      IdempotencyKeyMismatch error code.                                 │
+ * │    • After the TTL the key is released and may be reused freely.       │
  * │                                                                         │
  * │  This defeats "double-click" bugs, network retries that bypass the     │
  * │  transport layer, and re-submissions captured by packet-capture tools.  │
@@ -144,13 +145,22 @@ export class IdempotencyKeyService {
       };
     }
 
+    // Expiration policy (issue #1114): once a key's TTL has passed it is
+    // released and may be reused with any body. Without this the expired row
+    // would make a new body look like a mismatch and its INSERT would collide
+    // with the UNIQUE key.
+    const released = await this.repository.releaseExpiredKey(idempotencyKey);
+    if (released > 0) {
+      logger.info('Expired idempotency key released for reuse', logMeta);
+    }
+
     const isValidRequest = await this.repository.validateRequestHash(
       idempotencyKey,
       requestBody
     );
 
     if (!isValidRequest) {
-      logger.warn('Idempotency key reused with different request body (expired-stored record)', logMeta);
+      logger.warn('Idempotency key reused with different request body', logMeta);
       throw new IdempotencyKeyReuseError();
     }
 

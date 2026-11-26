@@ -39,6 +39,7 @@ export function sendUnsupportedMediaType(
     error: {
       code: ErrorCode.UNSUPPORTED_MEDIA_TYPE,
       message,
+      details: [],
     },
     code: ErrorCode.UNSUPPORTED_MEDIA_TYPE,
     message,

@@ -8,6 +8,13 @@ import { PreferencesUpdateInput } from '../types/preferences';
 import { NotificationAPI } from '../services/notification-api';
 import { ApiCredentialService } from '../services/api-credential-service';
 import { handleCredentialRoutes } from './credentials-api';
+import {
+  DestinationNotFoundError,
+  DestinationOwnershipError,
+  DestinationService,
+  DestinationValidationError,
+} from '../services/destination-service';
+import { handleDestinationRoutes, resolveDestinationOwnerId } from './destinations-api';
 import { authorizeRequest, type AuthPrincipal } from './api-key-auth';
 import { NotificationType } from '../types/scheduled-notification';
 import { ScheduleValidationError, toScheduleValidationResponse } from '../services/schedule-validator';
@@ -45,6 +52,20 @@ import {
 } from './api-version-registry';
 import { getDatabase } from '../database/database';
 import {
+  ApiIdempotencyService,
+  InMemoryApiIdempotencyStore,
+  idempotencyScopeFor,
+  type StoredApiResponse,
+} from '../services/api-idempotency-service';
+import {
+  EVENT_LATENCY_DIAGNOSTICS_PATH,
+  getEventLatencyDiagnostics,
+  writeDiagnostics,
+  type PersistedTimingsReader,
+} from './event-latency-diagnostics';
+import { eventLatencyStore } from '../services/event-latency-tracker';
+import { ok, err as errEnvelope } from '../utils/response';
+import {
   getNotificationAnalyticsAggregator,
   NotificationAnalyticsAggregator,
 } from '../services/notification-analytics-aggregator';
@@ -79,6 +100,8 @@ import { ValidationError, validationErrorBody } from '../utils/validation';
 import { ResponseTimeMiddleware } from '../middleware/response-time';
 import { addSecurityHeaders } from '../middleware/security-headers';
 import { DEFAULT_MAX_BODY_BYTES, enforceBodyLimit } from '../middleware/body-limit';
+import { resolveRequestPolicy } from '../middleware/request-policy';
+import { validateRequestFraming } from '../middleware/request-framing';
 import { sanitizeUrl } from '../utils/logger';
 import { sanitizeCredentials } from '../utils/credential-sanitizer';
 import { DiscordNotificationProvider } from '../services/providers/discord-provider';
@@ -86,6 +109,7 @@ import { WebhookNotificationProvider } from '../services/providers/webhook-provi
 import { ProviderHealthResult } from '../types/provider-capabilities';
 import { EVENT_STREAM_PATH, handleEventStream } from './event-stream';
 import { resolveLocalDateTime } from '../services/local-schedule';
+import { redactSensitiveFields } from '../utils/redact';
 
 export interface EventsServerOptions {
   port: number;
@@ -100,8 +124,17 @@ export interface EventsServerOptions {
   apiKeys?: Array<{ key: string; name?: string }>;
   notificationAPI?: NotificationAPI | null;
   credentialService?: ApiCredentialService | null;
+  destinationService?: DestinationService | null;
+  requireDestinationAuth?: boolean;
   /** Idempotency-Key replay protection for mutating endpoints (webhooks, schedule). */
   idempotencyService?: IdempotencyKeyService | null;
+  /**
+   * Generic Idempotency-Key handling for event-management mutations such as
+   * schedule cancellation (issue #1114). Defaults to a process-local store.
+   */
+  apiIdempotencyService?: ApiIdempotencyService | null;
+  /** Reads persisted stage timings for the latency diagnostics endpoint (#1120). */
+  eventTimingsReader?: PersistedTimingsReader | null;
   templateService?: NotificationTemplateService | null;
   /** Scheduler-scoped template service, used to render templates for scheduled notifications. */
   schedulerTemplateService?: TemplateService | null;
@@ -481,6 +514,23 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     maxEntries: options.webhookReplayCacheMaxEntries ?? 10_000,
   });
   const webhookAuditService = new SecurityAuditService(getDatabase());
+  // Idempotency-Key handling for event-management mutations (#1114). Callers
+  // that wire a database pass a SQLite-backed service; otherwise retries are
+  // still deduplicated within this process.
+  const apiIdempotency =
+    options.apiIdempotencyService ?? new ApiIdempotencyService(new InMemoryApiIdempotencyStore());
+  const writeStoredResponse = (
+    res: http.ServerResponse,
+    response: StoredApiResponse,
+    headers: Record<string, string>,
+  ): void => {
+    for (const [name, value] of Object.entries(headers)) res.setHeader(name, value);
+    sendJson(res, response.statusCode, response.body);
+  };
+  const destinationService =
+    options.destinationService !== undefined
+      ? options.destinationService
+      : new DestinationService({ db: getDatabase(), auditService: webhookAuditService });
   // Response-time tracking (#491)
   const responseTime =
     options.responseTimeMiddleware !== undefined && options.responseTimeMiddleware !== null
@@ -501,12 +551,36 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     // Start response-time tracking for this request (#491)
     responseTime.start(res);
 
+    // Request size and media-type policy (#1138).
+    // Request framing (#1208): reject ambiguous Content-Length /
+    // Transfer-Encoding combinations before any body is read so proxies and
+    // this server always agree on request boundaries.
+    const framing = validateRequestFraming(req, res);
+    if (!framing.allowed) {
+      logger.warn('Rejected ambiguous HTTP request framing', {
+        requestId,
+        correlationId,
+        method: req.method,
+        url: sanitizeUrl(req.url ?? '/'),
+        reason: framing.reason,
+      });
+      return;
+    }
+
     // Request body size limit.
     //
-    // Screened here, before routing, so an oversized payload is answered and
-    // the socket destroyed before any route handler attaches its own `data`
-    // listener and starts accumulating the body in memory.
-    const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+    // Resolved before the body is read so bulk endpoints get their larger
+    // ceiling while ordinary endpoints keep the configured default. Screening
+    // here means an oversized payload is answered and the socket destroyed
+    // before a route handler starts accumulating it in memory.
+    const requestUrl = new URL(req.url ?? '/', 'http://localhost');
+    const requestPolicy = resolveRequestPolicy(
+      req.method ?? 'GET',
+      requestUrl.pathname,
+      options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
+    );
+    const maxBodyBytes = requestPolicy.maxBytes;
+
     const bodyLimit = await enforceBodyLimit(req, res, {
       maxBytes: maxBodyBytes,
       onRejected: (reason, observedBytes) => {
@@ -536,7 +610,7 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       'X-Request-Id, X-Correlation-Id, X-Response-Time',
     );
 
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const url = requestUrl;
     const pathname = url.pathname;
 
     // ── API Route Versioning (#386, #984) ──────────────────────────────────
@@ -591,6 +665,14 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
+    // Reject unsupported media types before any route reads the body (#1138).
+    // validateContentType intentionally leaves safe methods, empty bodies and
+    // requests without a Content-Type header alone for backward compatibility.
+    // Route-level checks remain in place as a second line of defence.
+    if (!validateContentType(req, res, requestPolicy.allowedContentTypes)) {
+      return;
+    }
+
     // Template API routes (handled first for priority)
     // Note: route matching is handled inline below for NotificationTemplateService compatibility.
     // url.pathname is already rewritten from /api/v1/* → /api/* above
@@ -628,6 +710,17 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       return;
     }
 
+    if (
+      await handleDestinationRoutes(req, res, url, {
+        destinationService,
+        credentialService: options.credentialService,
+        apiKeys: options.apiKeys,
+        requireAuthentication: options.requireDestinationAuth,
+      })
+    ) {
+      return;
+    }
+
     // GET /health
     if (req.method === 'GET' && url.pathname === '/health') {
       buildHealthResponse(options)
@@ -659,6 +752,20 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
             correlationId,
           });
           sendErr(res, 500, 'Internal status check failure', ErrorCode.INTERNAL_ERROR);
+        });
+      return;
+    }
+
+    // GET /api/internal/diagnostics/event-latency — per-stage processing
+    // latency (issue #1120). Internal: requires an API key when keys are
+    // configured; responses carry identifiers and durations only.
+    if (req.method === 'GET' && url.pathname === EVENT_LATENCY_DIAGNOSTICS_PATH) {
+      if (!requireApiKey()) return;
+      getEventLatencyDiagnostics(url, eventLatencyStore, options.eventTimingsReader)
+        .then((result) => writeDiagnostics(res, result))
+        .catch((error) => {
+          logger.error('Event latency diagnostics failed', { error, requestId, correlationId });
+          sendErr(res, 500, 'Diagnostics unavailable', ErrorCode.INTERNAL_ERROR);
         });
       return;
     }
@@ -939,24 +1046,53 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
               return { status: 'accepted', verified: true };
             };
 
-            if (options.idempotencyService && idempotencyKey) {
-              const outcome = await options.idempotencyService.processWithIdempotency(
-                idempotencyKey,
-                rawBody,
-                acceptWebhook,
-                { requestId, correlationId },
+            if (idempotencyKey) {
+              // Webhooks create no notification row, so they use the generic
+              // idempotency store (#1114) rather than idempotency_keys, whose
+              // FK to scheduled_notifications they cannot satisfy. Response
+              // shapes are unchanged: 202 first, 200 + replay:true on retry,
+              // flat { error, code } bodies for rejections.
+              const outcome = await apiIdempotency.execute(
+                {
+                  key: idempotencyKey,
+                  scope: `webhook:${auth.keyId ?? 'unknown'}`,
+                  method: 'POST',
+                  path: url.pathname,
+                  body: rawBody,
+                },
+                async () => ({ statusCode: 202, body: await acceptWebhook() }),
               );
-              const statusCode = outcome.isDuplicate ? 200 : 202;
-              res.writeHead(statusCode, {
-                'Content-Type': 'application/json',
-                'X-Idempotent-Replay': outcome.isDuplicate ? 'true' : 'false',
-              });
-              res.end(
-                JSON.stringify({
-                  ...(outcome.result as object),
-                  replay: outcome.isDuplicate,
-                }),
-              );
+              if (outcome.response.statusCode === 202) {
+                res.writeHead(outcome.replayed ? 200 : 202, {
+                  'Content-Type': 'application/json',
+                  'X-Idempotent-Replay': outcome.replayed ? 'true' : 'false',
+                });
+                res.end(
+                  JSON.stringify({
+                    ...(outcome.response.body as object),
+                    replay: outcome.replayed,
+                  }),
+                );
+              } else {
+                const rejection = (outcome.response.body as {
+                  error?: { code?: string; message?: string };
+                }).error;
+                if (rejection?.code === 'IDEMPOTENCY_KEY_MISMATCH') {
+                  logger.warn('Webhook rejected: idempotency key reused with different body', {
+                    requestId,
+                    correlationId,
+                    idempotencyKey,
+                  });
+                }
+                for (const [name, value] of Object.entries(outcome.headers)) {
+                  res.setHeader(name, value);
+                }
+                writeAuthFailure(
+                  outcome.response.statusCode,
+                  rejection?.message ?? 'Idempotency check failed',
+                  rejection?.code ?? 'IDEMPOTENCY_ERROR',
+                );
+              }
             } else {
               const result = await acceptWebhook();
               res.writeHead(202, { 'Content-Type': 'application/json' });
@@ -1086,6 +1222,131 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           handleApiError(res, error, requestId, correlationId);
         }
       });
+      return;
+    }
+
+    // GET /api/admin/audit — Administrative Audit History Viewer (#1225)
+    //
+    // Returns recorded administrative activity (security audit log entries)
+    // in reverse-chronological order. Supports filtering by action type and
+    // date range, plus limit/offset pagination. Sensitive values are masked
+    // before serialization and only authorized administrators may read it.
+    if (req.method === 'GET' && url.pathname === '/api/admin/audit') {
+      const auth = await authorizeRequest(req, {
+        apiKeys: options.apiKeys,
+        credentialService: options.credentialService,
+      });
+      if (!auth.allowed) {
+        if (auth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+        sendErr(res, auth.status, auth.message, auth.code, auth.details);
+        return;
+      }
+
+      const principal = auth.principal as
+        | (AuthPrincipal & { role?: string; roles?: string[] })
+        | undefined;
+      const roles = [
+        ...(Array.isArray(principal?.roles) ? principal!.roles! : []),
+        ...(typeof principal?.role === 'string' ? [principal.role] : []),
+      ].map((r) => r.toLowerCase());
+      const isAdmin = roles.includes('admin') || roles.includes('administrator');
+
+      if (!isAdmin) {
+        logger.warn('Rejected non-admin access to audit history', {
+          requestId,
+          correlationId,
+          actor: principal?.name ?? principal?.id ?? 'unknown',
+        });
+        sendErr(res, 403, 'Forbidden: administrator role required', ErrorCode.FORBIDDEN);
+        return;
+      }
+
+      const action = url.searchParams.get('action') ?? undefined;
+      const fromParam = url.searchParams.get('from') ?? url.searchParams.get('startDate');
+      const toParam = url.searchParams.get('to') ?? url.searchParams.get('endDate');
+
+      const parseDate = (value: string | null | undefined): Date | undefined => {
+        if (!value) return undefined;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+      };
+
+      const from = parseDate(fromParam);
+      const to = parseDate(toParam);
+      if ((fromParam && !from) || (toParam && !to)) {
+        sendErr(res, 400, 'Invalid date filter', ErrorCode.BAD_REQUEST);
+        return;
+      }
+
+      const limitParam = url.searchParams.get('limit');
+      const offsetParam = url.searchParams.get('offset');
+      const limit = limitParam
+        ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200)
+        : 50;
+      const offset = offsetParam ? Math.max(parseInt(offsetParam, 10) || 0, 0) : 0;
+
+      try {
+        const db = getDatabase();
+        const clauses: string[] = [];
+        const params: unknown[] = [];
+
+        if (action) {
+          clauses.push('action = ?');
+          params.push(action);
+        }
+        if (from) {
+          clauses.push('timestamp >= ?');
+          params.push(from.toISOString());
+        }
+        if (to) {
+          clauses.push('timestamp <= ?');
+          params.push(to.toISOString());
+        }
+
+        const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+
+        const countRow = await db.get<{ total: number }>(
+          `SELECT COUNT(*) AS total FROM security_audit_log ${where}`,
+          params,
+        );
+        const total = Number(countRow?.total ?? 0);
+
+        const rows = await db.all<Record<string, unknown>>(
+          `SELECT * FROM security_audit_log ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset],
+        );
+
+        const records = rows.map((row) => {
+          const redacted = redactSensitiveFields(row) as Record<string, unknown>;
+          const ts = redacted.timestamp;
+          return {
+            ...redacted,
+            timestamp:
+              ts instanceof Date ? ts.toISOString() : typeof ts === 'string' ? ts : null,
+          };
+        });
+
+        logger.info('Handling GET /api/admin/audit', {
+          requestId,
+          correlationId,
+          action,
+          from: from?.toISOString(),
+          to: to?.toISOString(),
+          limit,
+          offset,
+          returned: records.length,
+          total,
+        });
+
+        sendOk(res, 200, { total, limit, offset, records });
+      } catch (error) {
+        logger.error('Failed to load administrative audit history', {
+          error,
+          requestId,
+          correlationId,
+        });
+        sendErr(res, 500, 'Failed to load audit history', ErrorCode.INTERNAL_ERROR);
+      }
       return;
     }
 
@@ -1225,15 +1486,63 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
         try {
           const hasLocalSchedule = data.timeZone != null || data.localDateTime != null;
-          if ((!data.executeAt && !hasLocalSchedule) || !data.payload || !data.targetRecipient) {
+          const hasDestinationRef = typeof data.destinationId === 'string' && data.destinationId.trim().length > 0;
+          if ((!data.executeAt && !hasLocalSchedule) || !data.payload || (!data.targetRecipient && !hasDestinationRef)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
-                error: 'Missing required fields: executeAt (or timeZone + localDateTime), payload, targetRecipient',
+                error: 'Missing required fields: executeAt (or timeZone + localDateTime), payload, targetRecipient (or destinationId)',
                 code: 'MISSING_FIELDS',
               }),
             );
             return;
+          }
+
+          let scheduleOwnerId: string | undefined;
+          let resolvedTargetRecipient: string = data.targetRecipient;
+          let resolvedNotificationType: NotificationType | undefined = data.notificationType;
+          let validatedDestinationId: string | undefined;
+
+          if (data.destinationId != null) {
+            if (typeof data.destinationId !== 'string' || !data.destinationId.trim()) {
+              sendErr(res, 400, 'destinationId must be a non-empty string', ErrorCode.BAD_REQUEST);
+              return;
+            }
+            const destAuth = await authorizeRequest(req, {
+              apiKeys: options.apiKeys,
+              credentialService: options.credentialService,
+              requiredScopes: ['webhooks:manage'],
+              requireAuthentication: options.requireDestinationAuth,
+            });
+            if (!destAuth.allowed) {
+              if (destAuth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+              sendErr(res, destAuth.status, destAuth.message, destAuth.code, destAuth.details);
+              return;
+            }
+            const resolvedOwner = resolveDestinationOwnerId(destAuth.principal, req);
+            if (!resolvedOwner) {
+              sendErr(res, 401, 'Unable to resolve destination owner', ErrorCode.UNAUTHORIZED);
+              return;
+            }
+            if (!destinationService) {
+              sendErr(res, 503, 'Destination service is not configured', ErrorCode.SERVICE_UNAVAILABLE);
+              return;
+            }
+            const ownedDestination = await destinationService.resolveOwnedDestination(
+              data.destinationId.trim(),
+              resolvedOwner,
+            );
+            scheduleOwnerId = ownedDestination.ownerId;
+            validatedDestinationId = ownedDestination.id;
+            resolvedTargetRecipient = ownedDestination.targetRecipient;
+            if (!resolvedNotificationType) {
+              resolvedNotificationType =
+                ownedDestination.provider === 'discord'
+                  ? NotificationType.DISCORD
+                  : ownedDestination.provider === 'email'
+                    ? NotificationType.EMAIL
+                    : NotificationType.WEBHOOK;
+            }
           }
 
           let executeAt: Date;
@@ -1307,8 +1616,8 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           }> => {
             const notificationId = await options.notificationAPI!.scheduleNotification({
               payload: data.payload,
-              notificationType: data.notificationType || NotificationType.DISCORD,
-              targetRecipient: data.targetRecipient,
+              notificationType: resolvedNotificationType || NotificationType.DISCORD,
+              targetRecipient: resolvedTargetRecipient,
               executeAt,
               timezone,
               expiresAt: data.expiresAt,
@@ -1318,6 +1627,8 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
               contractAddress: data.contractAddress,
               metadata: data.metadata,
               recurrence: data.recurrence,
+              ...(validatedDestinationId ? { destinationId: validatedDestinationId } : {}),
+              ...(scheduleOwnerId ? { ownerId: scheduleOwnerId } : {}),
             });
             logger.info('Notification scheduled via API', {
               requestId,
@@ -1368,6 +1679,18 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(scheduled));
         } catch (error) {
+          if (error instanceof DestinationOwnershipError) {
+            sendErr(res, 403, error.message, ErrorCode.FORBIDDEN);
+            return;
+          }
+          if (error instanceof DestinationNotFoundError) {
+            sendErr(res, 404, error.message, ErrorCode.NOT_FOUND);
+            return;
+          }
+          if (error instanceof DestinationValidationError) {
+            sendErr(res, 422, error.message, ErrorCode.UNPROCESSABLE);
+            return;
+          }
           if (error instanceof ScheduleValidationError) {
             const response = toScheduleValidationResponse(error);
             res.writeHead(response.statusCode, { 'Content-Type': 'application/json' });
@@ -1675,8 +1998,20 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       });
       req.on('end', () => {
         void (async () => {
+          // Parse before the idempotent section: malformed input changes no
+          // state, so it is rejected without consuming the key.
+          let parsed: { reason?: string };
           try {
-            const parsed = body ? (JSON.parse(body) as { reason?: string }) : {};
+            parsed = body ? (JSON.parse(body) as { reason?: string }) : {};
+          } catch {
+            sendErr(res, 400, 'Invalid JSON', ErrorCode.PARSE_ERROR);
+            return;
+          }
+
+          // Responses are built as values so the idempotency layer (#1114)
+          // can store and replay them exactly. Clients without an
+          // Idempotency-Key header get the same responses as before.
+          const cancel = async (): Promise<StoredApiResponse> => {
             const result = await options.notificationAPI!.cancelSchedule(
               id,
               parsed.reason,
@@ -1684,35 +2019,49 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
             );
 
             if (result.state === 'not_found') {
-              sendErr(res, 404, result.message, ErrorCode.NOT_FOUND);
-              return;
+              return { statusCode: 404, body: errEnvelope(result.message, ErrorCode.NOT_FOUND) };
             }
 
             if (result.state === 'already_final') {
               // Completed / failed / processing — do not silently undo.
-              sendJson(res, 409, {
-                cancelled: false,
+              return {
+                statusCode: 409,
+                body: {
+                  cancelled: false,
+                  state: result.state,
+                  status: result.status,
+                  message: result.message,
+                  notification: result.notification ?? null,
+                },
+              };
+            }
+
+            // Fresh cancel and idempotent already_cancelled both return 200.
+            return {
+              statusCode: 200,
+              body: ok({
+                cancelled: result.cancelled,
                 state: result.state,
                 status: result.status,
                 message: result.message,
                 notification: result.notification ?? null,
-              });
-              return;
-            }
+              }),
+            };
+          };
 
-            // Fresh cancel and idempotent already_cancelled both return 200.
-            sendOk(res, 200, {
-              cancelled: result.cancelled,
-              state: result.state,
-              status: result.status,
-              message: result.message,
-              notification: result.notification ?? null,
-            });
+          try {
+            const outcome = await apiIdempotency.execute(
+              {
+                key: IdempotencyKeyService.extractKey(req.headers),
+                scope: idempotencyScopeFor(req.headers['x-api-key']),
+                method: 'POST',
+                path: url.pathname,
+                body: parsed,
+              },
+              cancel,
+            );
+            writeStoredResponse(res, outcome.response, outcome.headers);
           } catch (error) {
-            if (error instanceof SyntaxError) {
-              sendErr(res, 400, 'Invalid JSON', ErrorCode.PARSE_ERROR);
-              return;
-            }
             logger.error('Failed to cancel notification', { error, requestId, correlationId, id });
             sendErr(res, 500, (error as Error).message, ErrorCode.INTERNAL_ERROR);
           }

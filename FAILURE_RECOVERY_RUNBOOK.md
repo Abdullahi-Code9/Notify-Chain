@@ -602,101 +602,28 @@ SQL
 # 2. Compare with the current tip ledger from the RPC
 curl -s -X POST https://soroban-testnet.stellar.org:443 \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger","params":{}}' \
-  | grep -o '"sequence":[0-9]*'
+  -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' \
+  | jq -r '.result.latestLedger'
 
-# Gap = (current tip ledger) - (last processed ledger)
+# This estimates polling lag, not missing event count. Compare event IDs using
+# the Data Recovery and Event Reconciliation Guide before declaring a gap.
 ```
 
-### 6.3 Reset the Cursor for Full Backfill
+### 6.3 Safe Event Reconciliation
 
-> **Warning:** Resetting the cursor causes the listener to replay all historical events from
-> ledger 1. This will re-trigger notifications for every event ever emitted by the contract.
-> Use deduplication records to suppress duplicate Discord messages (see step 6.4).
+Do not clear or manually update `polling_cursors`, insert directly into
+`processed_events`, or dispatch notifications manually as a generic backfill
+procedure. These actions can skip events, corrupt deduplication state, or
+repeat external side effects. The cursor column is non-null and opaque; it is
+not a ledger number.
 
-```bash
-# 1. Stop the listener
-# 2. Reset the cursor for a specific contract (or all contracts)
-sqlite3 listener/data/notifications.db <<'SQL'
-UPDATE polling_cursors
-SET cursor          = NULL,
-    ledger_number   = 0,
-    updated_at      = CURRENT_TIMESTAMP
-WHERE contract_address = '<CONTRACT_ADDRESS>';
--- Remove the WHERE clause to reset ALL contracts
-SQL
-
-# 3. Restart the listener — it will poll from startLedger: 1
-npm run start
-```
-
-### 6.4 Selective Backfill (Specific Ledger Range)
-
-If you need to backfill only a specific ledger window without replaying everything:
-
-```bash
-# Query the RPC directly for events in a specific ledger range
-curl -s -X POST https://soroban-testnet.stellar.org:443 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":1,
-    "method":"getEvents",
-    "params":{
-      "startLedger": "<START_LEDGER>",
-      "filters":[{
-        "type":"contract",
-        "contractIds":["<CONTRACT_ADDRESS>"]
-      }],
-      "pagination":{"limit":100}
-    }
-  }' | jq '.result.events'
-```
-
-Process the returned events through the listener's Events API or insert them directly into
-the `processed_events` table, then dispatch notifications manually.
-
-### 6.5 Mark Already-Processed Events to Avoid Duplicate Notifications
-
-Before starting a backfill, confirm which events are already recorded to prevent duplicate
-Discord messages:
-
-```sql
--- Count events already in the deduplication table for the affected contract
-SELECT COUNT(*) AS already_processed
-FROM processed_events
-WHERE contract_address = '<CONTRACT_ADDRESS>'
-  AND ledger_number BETWEEN <START_LEDGER> AND <END_LEDGER>;
-```
-
-The `EventDeduplicationService` automatically skips events whose `fingerprint`
-(`contract_address:event_id`) is already in `processed_events`. No extra action is needed
-if the deduplication table is intact.
-
-### 6.6 Verify Backfill Completion
-
-```bash
-# 1. Confirm cursor has advanced past the backfill range
-sqlite3 listener/data/notifications.db <<'SQL'
-SELECT contract_address, ledger_number, updated_at
-FROM polling_cursors;
-SQL
-
-# 2. Confirm events were stored
-curl "http://localhost:8787/api/events" | jq 'length'
-
-# 3. Confirm no new ERROR rows appeared during backfill
-sqlite3 listener/data/notifications.db <<'SQL'
-SELECT error_reason, COUNT(*) AS count
-FROM processed_events
-WHERE status = 'ERROR'
-  AND processed_at > datetime('now', '-1 hour')
-GROUP BY error_reason;
-SQL
-
-# 4. Check listener logs are clean
-tail -50 listener.log | grep -v "Received events" | grep -iE "(error|warn|fail)"
-```
+For read-only diagnosis, historical RPC retrieval, safe ID comparison,
+duplicate handling, and recovery limitations, follow the
+[Data Recovery and Event Reconciliation Guide](DATA_RECOVERY_EVENT_RECONCILIATION.md).
+The listener's in-process `/api/events` feed is bounded and is not a historical
+archive. If a checkpoint has advanced past an event missing from
+`processed_events`, preserve the evidence and use a reviewed recovery path;
+restarting the listener alone may not revisit that event.
 
 ---
 

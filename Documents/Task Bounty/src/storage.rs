@@ -1,50 +1,54 @@
 use crate::types::{ApiCredential, ApiCredentialRotation, Dispute, Submission, Task};
-use crate::types::{Dispute, Submission, Task};
 use soroban_sdk::{Address, Env, Vec};
 
-// Storage keys
+// Storage keys (instance-level, string slices)
 const TASK_COUNTER: &str = "TASK_CNT";
 const SUBMISSION_COUNTER: &str = "SUB_CNT";
 const DISPUTE_COUNTER: &str = "DISP_CNT";
 const API_KEY_COUNTER: &str = "API_KEY_CNT";
 const DISPUTE_RESOLVER: &str = "DISP_RES";
 const ADMIN: &str = "ADMIN";
+const PAUSED: &str = "PAUSED";
+const DISPUTE_RESOLUTION_PERIOD: &str = "DISP_PERIOD";
+
+// Default resolution period: 7 days in seconds
+pub const DEFAULT_RESOLUTION_PERIOD: u64 = 7 * 24 * 3600;
 
 // Task storage
 pub fn get_task(env: &Env, task_id: u64) -> Task {
-    let key = (b"TASK", task_id);
+    let key = (TASK_COUNTER, task_id);
     env.storage().persistent().get(&key).unwrap()
 }
 
 pub fn set_task(env: &Env, task: &Task) {
-    let key = (b"TASK", task.id);
+    let key = (TASK_COUNTER, task.id);
     env.storage().persistent().set(&key, task);
 }
 
 pub fn task_exists(env: &Env, task_id: u64) -> bool {
-    let key = (b"TASK", task_id);
+    let key = (TASK_COUNTER, task_id);
     env.storage().persistent().has(&key)
 }
 
 // Submission storage
 pub fn get_submission(env: &Env, submission_id: u64) -> Submission {
-    let key = (b"SUB", submission_id);
+    let key = (SUBMISSION_COUNTER, submission_id);
     env.storage().persistent().get(&key).unwrap()
 }
 
 pub fn set_submission(env: &Env, submission: &Submission) {
-    let key = (b"SUB", submission.id);
+    let key = (SUBMISSION_COUNTER, submission.id);
     env.storage().persistent().set(&key, submission);
 }
 
 pub fn submission_exists(env: &Env, submission_id: u64) -> bool {
-    let key = (b"SUB", submission_id);
+    let key = (SUBMISSION_COUNTER, submission_id);
     env.storage().persistent().has(&key)
 }
 
 // Task submissions mapping
 pub fn get_task_submissions(env: &Env, task_id: u64) -> Vec<u64> {
-    let key = (b"TASK_SUBS", task_id);
+    let key = ("TASK_SUBS", task_id);
     env.storage()
         .persistent()
         .get(&key)
@@ -52,7 +56,7 @@ pub fn get_task_submissions(env: &Env, task_id: u64) -> Vec<u64> {
 }
 
 pub fn add_task_submission(env: &Env, task_id: u64, submission_id: u64) {
-    let key = (b"TASK_SUBS", task_id);
+    let key = ("TASK_SUBS", task_id);
     let mut submissions = get_task_submissions(env, task_id);
     submissions.push_back(submission_id);
     env.storage().persistent().set(&key, &submissions);
@@ -60,33 +64,43 @@ pub fn add_task_submission(env: &Env, task_id: u64, submission_id: u64) {
 
 // Contributor submission tracking
 pub fn has_contributor_submitted(env: &Env, task_id: u64, contributor: &Address) -> bool {
-    let key = (b"HAS_SUB", task_id, contributor);
+    let key = ("HAS_SUB", task_id, contributor);
     env.storage().persistent().has(&key)
 }
 
 pub fn mark_contributor_submitted(env: &Env, task_id: u64, contributor: &Address) {
-    let key = (b"HAS_SUB", task_id, contributor);
+    let key = ("HAS_SUB", task_id, contributor);
     env.storage().persistent().set(&key, &true);
 }
 
 // Dispute storage
 pub fn get_dispute(env: &Env, dispute_id: u64) -> Dispute {
-    let key = (b"DISP", dispute_id);
+    let key = (DISPUTE_COUNTER, dispute_id);
     env.storage().persistent().get(&key).unwrap()
 }
 
 pub fn set_dispute(env: &Env, dispute: &Dispute) {
-    let key = (b"DISP", dispute.id);
+    let key = (DISPUTE_COUNTER, dispute.id);
     env.storage().persistent().set(&key, dispute);
 }
 
-pub fn has_active_dispute(env: &Env, task_id: u64, submission_id: u64) -> bool {
-    let key = (b"DISP_ACT", task_id, submission_id);
+pub fn dispute_exists(env: &Env, dispute_id: u64) -> bool {
+    let key = (DISPUTE_COUNTER, dispute_id);
     env.storage().persistent().has(&key)
 }
 
+pub fn has_active_dispute(env: &Env, task_id: u64, submission_id: u64) -> bool {
+    let key = ("DISP_ACT", task_id, submission_id);
+    env.storage().persistent().has(&key)
+}
+
+pub fn get_active_dispute_id(env: &Env, task_id: u64, submission_id: u64) -> u64 {
+    let key = ("DISP_ACT", task_id, submission_id);
+    env.storage().persistent().get(&key).unwrap()
+}
+
 pub fn set_active_dispute(env: &Env, task_id: u64, submission_id: u64, dispute_id: u64) {
-    let key = (b"DISP_ACT", task_id, submission_id);
+    let key = ("DISP_ACT", task_id, submission_id);
     env.storage().persistent().set(&key, &dispute_id);
 }
 
@@ -123,7 +137,10 @@ pub fn increment_submission_counter(env: &Env) -> u64 {
 }
 
 pub fn get_dispute_counter(env: &Env) -> u64 {
-    env.storage().instance().get(&DISPUTE_COUNTER).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&DISPUTE_COUNTER)
+        .unwrap_or(0)
 }
 
 pub fn increment_dispute_counter(env: &Env) -> u64 {
@@ -149,9 +166,41 @@ pub fn set_admin(env: &Env, address: &Address) {
     env.storage().instance().set(&ADMIN, address);
 }
 
+
+/// Returns the configurable dispute resolution period in seconds.
+pub fn get_resolution_period(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DISPUTE_RESOLUTION_PERIOD)
+        .unwrap_or(DEFAULT_RESOLUTION_PERIOD)
+}
+
+/// Sets the dispute resolution period (admin-only enforcement is in the caller).
+pub fn set_resolution_period(env: &Env, period: u64) {
+    env.storage()
+        .instance()
+        .set(&DISPUTE_RESOLUTION_PERIOD, &period);
+}
+
+// Pending admin transfer
+pub fn get_pending_admin(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&"PENDING_ADMIN")
+}
+
+pub fn set_pending_admin(env: &Env, address: &Address) {
+    env.storage().instance().set(&"PENDING_ADMIN", address);
+}
+
+pub fn clear_pending_admin(env: &Env) {
+    env.storage().instance().remove(&"PENDING_ADMIN");
+}
+
+
+}
+
 // API credential storage
 pub fn get_api_credentials(env: &Env, organization: &Address) -> Vec<ApiCredential> {
-    let key = (b"API_KEYS", organization);
+    let key = ("API_KEYS", organization);
     env.storage()
         .persistent()
         .get(&key)
@@ -159,12 +208,12 @@ pub fn get_api_credentials(env: &Env, organization: &Address) -> Vec<ApiCredenti
 }
 
 pub fn set_api_credentials(env: &Env, organization: &Address, credentials: &Vec<ApiCredential>) {
-    let key = (b"API_KEYS", organization);
+    let key = ("API_KEYS", organization);
     env.storage().persistent().set(&key, credentials);
 }
 
 pub fn get_api_rotation_history(env: &Env, organization: &Address) -> Vec<ApiCredentialRotation> {
-    let key = (b"API_ROT", organization);
+    let key = ("API_ROT", organization);
     env.storage()
         .persistent()
         .get(&key)
@@ -176,7 +225,7 @@ pub fn set_api_rotation_history(
     organization: &Address,
     history: &Vec<ApiCredentialRotation>,
 ) {
-    let key = (b"API_ROT", organization);
+    let key = ("API_ROT", organization);
     env.storage().persistent().set(&key, history);
 }
 

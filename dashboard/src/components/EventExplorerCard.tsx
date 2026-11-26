@@ -1,7 +1,8 @@
 import { memo, useCallback, type KeyboardEvent } from 'react';
 import type { BlockchainEvent } from '../types/event';
 import type { ContractStatus } from '../services/eventsApi';
-import { formatTimestamp } from '../utils/formatTime';
+import { formatTimestamp, toUtcIsoString } from '../utils/formatTime';
+import { useActiveTimeZone } from '../store/timezoneStore';
 import { getEventKindClass, getEventKindLabel, isKnownEventType } from '../utils/eventTypeMapping';
 import { CopyButton } from './CopyButton';
 import type { DashboardColumnId } from '../utils/dashboardPreferences';
@@ -33,6 +34,8 @@ export const EventExplorerCard = memo(function EventExplorerCard({
   onContractClick,
   visibleColumns = ['contract', 'event', 'kind', 'received', 'ledger', 'transaction'],
 }: EventExplorerCardProps) {
+  const timeZone = useActiveTimeZone();
+  const receivedAtUtc = toUtcIsoString(event.receivedAt);
   const contractStatus = contractStatuses.find(
     (status) => status.address === event.contractAddress,
   );
@@ -121,6 +124,11 @@ export const EventExplorerCard = memo(function EventExplorerCard({
           </span>
         </div>
       )}
+      <div className="event-explorer__cell" data-label="Received" role="cell">
+        <time dateTime={receivedAtUtc} title={receivedAtUtc ? `UTC: ${receivedAtUtc}` : undefined}>
+          {formatTimestamp(event.receivedAt, timeZone)}
+        </time>
+      </div>
 
       {isVisible('received') && (
         <div className="event-explorer__cell" data-label="Received" role="cell">
