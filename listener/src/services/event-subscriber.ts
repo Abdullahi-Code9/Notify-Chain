@@ -27,6 +27,10 @@ import {
   extractTransactionContext,
 } from './transaction-metadata-resolver';
 import { safeLedgerRangeValidation } from '../utils/ledger-range-validator';
+import { eventLatencyStore, StageTimer, type EventLatencyRecord } from './event-latency-tracker';
+import { isSupportedEventSchemaVersion } from '../utils/event-schema-version';
+
+type RpcEvent = StellarSDK.rpc.Api.EventResponse;
 
 /** Optional collaborators for {@link EventSubscriber}; primarily used in tests. */
 export interface EventSubscriberOptions {
@@ -52,6 +56,16 @@ export class EventSubscriber {
   private rpcRateLimiter: RpcRateLimiter | null = null;
   private backfillStartLedger: number | null = null;
   private readonly quarantine = new EventQuarantineController();
+  /**
+   * Stage timings measured before `processEvent` runs (batch retrieval and
+   * pre-filter validation), keyed by the RPC event object so they survive
+   * the hop through the processing queue (issue #1120). WeakMap entries are
+   * released with the event, so missing timings are simply reported absent.
+   */
+  private readonly preProcessTimings = new WeakMap<
+    object,
+    { retrievalMs?: number; validationMs?: number }
+  >();
   private readonly transactionMetadataResolver: TransactionMetadataResolver;
 
   constructor(
@@ -221,7 +235,11 @@ export class EventSubscriber {
 
     for (const contractConfig of this.config.contractAddresses) {
       try {
+        const retrievalTimer = new StageTimer();
+        retrievalTimer.start('retrieval');
         const response = await this.getContractEvents(contractConfig);
+        retrievalTimer.end('retrieval');
+        const retrievalMs = retrievalTimer.snapshot().retrieval;
 
         const responseValidation = validateRpcResponse(response);
         if (!responseValidation.valid) {
@@ -269,7 +287,22 @@ export class EventSubscriber {
             continue;
           }
           try {
-            if (this.shouldProcessEvent(event, contractConfig, requestId, correlationId)) {
+            const validationTimer = new StageTimer();
+            validationTimer.start('decodeValidation');
+            const shouldProcess = this.shouldProcessEvent(
+              event,
+              contractConfig,
+              requestId,
+              correlationId,
+            );
+            validationTimer.end('decodeValidation');
+            if (shouldProcess) {
+              if (event && typeof event === 'object') {
+                this.preProcessTimings.set(event, {
+                  retrievalMs,
+                  validationMs: validationTimer.snapshot().decodeValidation,
+                });
+              }
               processableEvents.push({ event, correlationId });
             }
           } catch (error) {
@@ -515,18 +548,76 @@ export class EventSubscriber {
     });
   }
 
+  /**
+   * Processes one event and records its per-stage latency breakdown
+   * (issue #1120). The record is written in `finally`, so it is produced for
+   * every outcome; recording itself can never fail the event.
+   */
   private async processEvent(
-    event: StellarSDK.rpc.Api.EventResponse,
+    event: RpcEvent,
     contractConfig: ContractConfig,
     requestId: string = '',
     correlationId: string = '',
   ): Promise<boolean> {
+    const timer = new StageTimer();
+    const pre = event && typeof event === 'object' ? this.preProcessTimings.get(event) : undefined;
+    timer.add('retrieval', pre?.retrievalMs);
+    timer.add('decodeValidation', pre?.validationMs);
+    const outcome: { value: EventLatencyRecord['outcome'] } = { value: 'error' };
+
+    try {
+      return await this.runEventStages(
+        event,
+        contractConfig,
+        requestId,
+        correlationId,
+        timer,
+        outcome,
+      );
+    } finally {
+      try {
+        const record = eventLatencyStore.record({
+          eventId: event?.id,
+          contractAddress: contractConfig?.address,
+          outcome: outcome.value,
+          stages: timer.snapshot(),
+        });
+        // Associate the breakdown with the persisted processed_events row.
+        // recordStageTimings never rejects and is a no-op without a row.
+        if (this.deduplicationService && this.config.dryRun !== true && record.eventId) {
+          void this.deduplicationService.recordStageTimings(record.eventId, record.contractAddress, {
+            retrievalMs: record.stages.retrieval,
+            decodeValidationMs: record.stages.decodeValidation,
+            persistenceMs: record.stages.persistence,
+            notificationPrepMs: record.stages.notificationPrep,
+            totalMs: record.totalMs,
+            outcome: record.outcome,
+          });
+        }
+      } catch {
+        // Diagnostics are best-effort and must never interrupt processing.
+      }
+      if (event && typeof event === 'object') this.preProcessTimings.delete(event);
+    }
+  }
+
+  private async runEventStages(
+    event: RpcEvent,
+    contractConfig: ContractConfig,
+    requestId: string,
+    correlationId: string,
+    timer: StageTimer,
+    outcome: { value: EventLatencyRecord['outcome'] },
+  ): Promise<boolean> {
     correlationId = correlationId || requestId || generateCorrelationId();
     const eventStart = Date.now();
+    timer.start('decodeValidation');
     const normalized = normalizeSorobanEvent(event, {
       contractAddress: contractConfig.address,
     });
     if (!normalized.ok) {
+      timer.end('decodeValidation');
+      outcome.value = 'skipped';
       logger.warn('Skipping event that failed normalization', {
         requestId: correlationId,
         correlationId,
@@ -537,6 +628,26 @@ export class EventSubscriber {
       return false;
     }
     const eventName = normalized.event.eventName;
+
+    // Event schema versioning (issue #1122): a version this listener does not
+    // understand is skipped rather than mis-decoded. It is not claimed in the
+    // deduplication store, so a re-scan after upgrading the listener still
+    // processes it. Returning true stops pointless retries of the same event.
+    if (!isSupportedEventSchemaVersion(normalized.event.eventSchemaVersion)) {
+      timer.end('decodeValidation');
+      outcome.value = 'skipped';
+      logger.warn('Skipping event with unsupported event schema version', {
+        requestId: correlationId,
+        correlationId,
+        contractAddress: contractConfig.address,
+        eventId: event.id,
+        eventName,
+        baseEventName: normalized.event.baseEventName,
+        eventSchemaVersion: normalized.event.eventSchemaVersion,
+      });
+      return true;
+    }
+
     const provenance = validateEventProvenance({
       network: this.config.stellarNetwork,
       contract: normalized.event.contractAddress,
@@ -551,7 +662,11 @@ export class EventSubscriber {
         ...provenanceDiagnostic(provenance.provenance),
       });
     }
+    timer.end('decodeValidation');
     const isDryRun = this.config.dryRun === true;
+
+    // Persistence stage, part 1: deduplication lookup + registry write.
+    timer.start('persistence');
 
     // Check persistent deduplication first (to catch reorg duplicates)
     if (this.deduplicationService && !isDryRun) {
@@ -574,6 +689,8 @@ export class EventSubscriber {
           event.ledger,
         );
 
+        timer.end('persistence');
+        outcome.value = 'duplicate';
         return true;
       }
     }
@@ -605,6 +722,7 @@ export class EventSubscriber {
       txHash: event.txHash,
       txMetadata,
     });
+    timer.end('persistence');
 
     logger.info('Processing event', {
       requestId: correlationId,
@@ -622,6 +740,9 @@ export class EventSubscriber {
     let notificationSent = false;
     let processingError: string | undefined;
 
+    // Notification preparation: preference checks, building/sending the
+    // notification and the retry-queue hand-off.
+    timer.start('notificationPrep');
     if (this.discordService && !isDryRun) {
       const userId = contractConfig.userId ?? 'global';
       if (!preferenceStore.isCategoryEnabled(userId, 'discord')) {
@@ -660,8 +781,12 @@ export class EventSubscriber {
       }
     }
 
-    // Finalise the claim with the processing outcome.
+    timer.end('notificationPrep');
+    outcome.value = processingError ? 'error' : 'processed';
+
+    // Persistence stage, part 2: finalise the claim with the outcome.
     if (this.deduplicationService) {
+      timer.start('persistence');
       await this.deduplicationService.completeEvent(
         event.id,
         contractConfig.address,
@@ -673,6 +798,7 @@ export class EventSubscriber {
         processingError,
         txMetadata,
       );
+      timer.end('persistence');
     }
 
     logger.info('Event processing complete', {

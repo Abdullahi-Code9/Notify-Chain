@@ -52,6 +52,20 @@ import {
 } from './api-version-registry';
 import { getDatabase } from '../database/database';
 import {
+  ApiIdempotencyService,
+  InMemoryApiIdempotencyStore,
+  idempotencyScopeFor,
+  type StoredApiResponse,
+} from '../services/api-idempotency-service';
+import {
+  EVENT_LATENCY_DIAGNOSTICS_PATH,
+  getEventLatencyDiagnostics,
+  writeDiagnostics,
+  type PersistedTimingsReader,
+} from './event-latency-diagnostics';
+import { eventLatencyStore } from '../services/event-latency-tracker';
+import { ok, err as errEnvelope } from '../utils/response';
+import {
   getNotificationAnalyticsAggregator,
   NotificationAnalyticsAggregator,
 } from '../services/notification-analytics-aggregator';
@@ -113,6 +127,13 @@ export interface EventsServerOptions {
   requireDestinationAuth?: boolean;
   /** Idempotency-Key replay protection for mutating endpoints (webhooks, schedule). */
   idempotencyService?: IdempotencyKeyService | null;
+  /**
+   * Generic Idempotency-Key handling for event-management mutations such as
+   * schedule cancellation (issue #1114). Defaults to a process-local store.
+   */
+  apiIdempotencyService?: ApiIdempotencyService | null;
+  /** Reads persisted stage timings for the latency diagnostics endpoint (#1120). */
+  eventTimingsReader?: PersistedTimingsReader | null;
   templateService?: NotificationTemplateService | null;
   /** Scheduler-scoped template service, used to render templates for scheduled notifications. */
   schedulerTemplateService?: TemplateService | null;
@@ -492,6 +513,19 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     maxEntries: options.webhookReplayCacheMaxEntries ?? 10_000,
   });
   const webhookAuditService = new SecurityAuditService(getDatabase());
+  // Idempotency-Key handling for event-management mutations (#1114). Callers
+  // that wire a database pass a SQLite-backed service; otherwise retries are
+  // still deduplicated within this process.
+  const apiIdempotency =
+    options.apiIdempotencyService ?? new ApiIdempotencyService(new InMemoryApiIdempotencyStore());
+  const writeStoredResponse = (
+    res: http.ServerResponse,
+    response: StoredApiResponse,
+    headers: Record<string, string>,
+  ): void => {
+    for (const [name, value] of Object.entries(headers)) res.setHeader(name, value);
+    sendJson(res, response.statusCode, response.body);
+  };
   const destinationService =
     options.destinationService !== undefined
       ? options.destinationService
@@ -700,6 +734,20 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
             correlationId,
           });
           sendErr(res, 500, 'Internal status check failure', ErrorCode.INTERNAL_ERROR);
+        });
+      return;
+    }
+
+    // GET /api/internal/diagnostics/event-latency — per-stage processing
+    // latency (issue #1120). Internal: requires an API key when keys are
+    // configured; responses carry identifiers and durations only.
+    if (req.method === 'GET' && url.pathname === EVENT_LATENCY_DIAGNOSTICS_PATH) {
+      if (!requireApiKey()) return;
+      getEventLatencyDiagnostics(url, eventLatencyStore, options.eventTimingsReader)
+        .then((result) => writeDiagnostics(res, result))
+        .catch((error) => {
+          logger.error('Event latency diagnostics failed', { error, requestId, correlationId });
+          sendErr(res, 500, 'Diagnostics unavailable', ErrorCode.INTERNAL_ERROR);
         });
       return;
     }
@@ -980,24 +1028,53 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
               return { status: 'accepted', verified: true };
             };
 
-            if (options.idempotencyService && idempotencyKey) {
-              const outcome = await options.idempotencyService.processWithIdempotency(
-                idempotencyKey,
-                rawBody,
-                acceptWebhook,
-                { requestId, correlationId },
+            if (idempotencyKey) {
+              // Webhooks create no notification row, so they use the generic
+              // idempotency store (#1114) rather than idempotency_keys, whose
+              // FK to scheduled_notifications they cannot satisfy. Response
+              // shapes are unchanged: 202 first, 200 + replay:true on retry,
+              // flat { error, code } bodies for rejections.
+              const outcome = await apiIdempotency.execute(
+                {
+                  key: idempotencyKey,
+                  scope: `webhook:${auth.keyId ?? 'unknown'}`,
+                  method: 'POST',
+                  path: url.pathname,
+                  body: rawBody,
+                },
+                async () => ({ statusCode: 202, body: await acceptWebhook() }),
               );
-              const statusCode = outcome.isDuplicate ? 200 : 202;
-              res.writeHead(statusCode, {
-                'Content-Type': 'application/json',
-                'X-Idempotent-Replay': outcome.isDuplicate ? 'true' : 'false',
-              });
-              res.end(
-                JSON.stringify({
-                  ...(outcome.result as object),
-                  replay: outcome.isDuplicate,
-                }),
-              );
+              if (outcome.response.statusCode === 202) {
+                res.writeHead(outcome.replayed ? 200 : 202, {
+                  'Content-Type': 'application/json',
+                  'X-Idempotent-Replay': outcome.replayed ? 'true' : 'false',
+                });
+                res.end(
+                  JSON.stringify({
+                    ...(outcome.response.body as object),
+                    replay: outcome.replayed,
+                  }),
+                );
+              } else {
+                const rejection = (outcome.response.body as {
+                  error?: { code?: string; message?: string };
+                }).error;
+                if (rejection?.code === 'IDEMPOTENCY_KEY_MISMATCH') {
+                  logger.warn('Webhook rejected: idempotency key reused with different body', {
+                    requestId,
+                    correlationId,
+                    idempotencyKey,
+                  });
+                }
+                for (const [name, value] of Object.entries(outcome.headers)) {
+                  res.setHeader(name, value);
+                }
+                writeAuthFailure(
+                  outcome.response.statusCode,
+                  rejection?.message ?? 'Idempotency check failed',
+                  rejection?.code ?? 'IDEMPOTENCY_ERROR',
+                );
+              }
             } else {
               const result = await acceptWebhook();
               res.writeHead(202, { 'Content-Type': 'application/json' });
@@ -1903,8 +1980,20 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       });
       req.on('end', () => {
         void (async () => {
+          // Parse before the idempotent section: malformed input changes no
+          // state, so it is rejected without consuming the key.
+          let parsed: { reason?: string };
           try {
-            const parsed = body ? (JSON.parse(body) as { reason?: string }) : {};
+            parsed = body ? (JSON.parse(body) as { reason?: string }) : {};
+          } catch {
+            sendErr(res, 400, 'Invalid JSON', ErrorCode.PARSE_ERROR);
+            return;
+          }
+
+          // Responses are built as values so the idempotency layer (#1114)
+          // can store and replay them exactly. Clients without an
+          // Idempotency-Key header get the same responses as before.
+          const cancel = async (): Promise<StoredApiResponse> => {
             const result = await options.notificationAPI!.cancelSchedule(
               id,
               parsed.reason,
@@ -1912,35 +2001,49 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
             );
 
             if (result.state === 'not_found') {
-              sendErr(res, 404, result.message, ErrorCode.NOT_FOUND);
-              return;
+              return { statusCode: 404, body: errEnvelope(result.message, ErrorCode.NOT_FOUND) };
             }
 
             if (result.state === 'already_final') {
               // Completed / failed / processing — do not silently undo.
-              sendJson(res, 409, {
-                cancelled: false,
+              return {
+                statusCode: 409,
+                body: {
+                  cancelled: false,
+                  state: result.state,
+                  status: result.status,
+                  message: result.message,
+                  notification: result.notification ?? null,
+                },
+              };
+            }
+
+            // Fresh cancel and idempotent already_cancelled both return 200.
+            return {
+              statusCode: 200,
+              body: ok({
+                cancelled: result.cancelled,
                 state: result.state,
                 status: result.status,
                 message: result.message,
                 notification: result.notification ?? null,
-              });
-              return;
-            }
+              }),
+            };
+          };
 
-            // Fresh cancel and idempotent already_cancelled both return 200.
-            sendOk(res, 200, {
-              cancelled: result.cancelled,
-              state: result.state,
-              status: result.status,
-              message: result.message,
-              notification: result.notification ?? null,
-            });
+          try {
+            const outcome = await apiIdempotency.execute(
+              {
+                key: IdempotencyKeyService.extractKey(req.headers),
+                scope: idempotencyScopeFor(req.headers['x-api-key']),
+                method: 'POST',
+                path: url.pathname,
+                body: parsed,
+              },
+              cancel,
+            );
+            writeStoredResponse(res, outcome.response, outcome.headers);
           } catch (error) {
-            if (error instanceof SyntaxError) {
-              sendErr(res, 400, 'Invalid JSON', ErrorCode.PARSE_ERROR);
-              return;
-            }
             logger.error('Failed to cancel notification', { error, requestId, correlationId, id });
             sendErr(res, 500, (error as Error).message, ErrorCode.INTERNAL_ERROR);
           }

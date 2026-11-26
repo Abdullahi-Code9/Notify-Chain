@@ -35,6 +35,12 @@ import { NotificationHealthMonitor } from './services/notification-health-monito
 import { getWorkerManager } from './services/worker-manager';
 import { DeliveryReceiptRepository } from './services/delivery-receipt-repository';
 import { ApiCredentialService } from './services/api-credential-service';
+import { IdempotencyKeyService } from './services/idempotency-key-service';
+import { IdempotencyKeyRepository } from './services/idempotency-key-repository';
+import {
+  ApiIdempotencyService,
+  SqliteApiIdempotencyStore,
+} from './services/api-idempotency-service';
 import { DestinationService } from './services/destination-service';
 import { SecurityAuditService } from './services/security-audit';
 
@@ -62,6 +68,8 @@ async function main() {
   let metricsStore: NotificationMetricsStore | null = null;
   let deduplicationService: EventDeduplicationService | null = null;
   let deliveryReceiptRepository: DeliveryReceiptRepository | null = null;
+  let idempotencyService: IdempotencyKeyService | null = null;
+  let apiIdempotencyService: ApiIdempotencyService | null = null;
   let destinationService: DestinationService | null = null;
 
   if (config.analytics?.enabled) {
@@ -82,6 +90,27 @@ async function main() {
       db,
       auditService: new SecurityAuditService(db),
     });
+
+    // Idempotency-Key support for API mutations (#1114). TTL defaults to 24h
+    // and is configurable via IDEMPOTENCY_KEY_TTL_SECONDS.
+    const idempotencyTtlSeconds = Number(process.env.IDEMPOTENCY_KEY_TTL_SECONDS);
+    const idempotencyTtlMs =
+      Number.isFinite(idempotencyTtlSeconds) && idempotencyTtlSeconds > 0
+        ? idempotencyTtlSeconds * 1000
+        : undefined;
+    idempotencyService = new IdempotencyKeyService(new IdempotencyKeyRepository(db));
+    apiIdempotencyService = new ApiIdempotencyService(new SqliteApiIdempotencyStore(db), {
+      ttlMs: idempotencyTtlMs,
+    });
+    // Purge expired idempotency records hourly; unref() keeps this timer from
+    // holding the process open during shutdown.
+    const purgeIdempotencyKeys = (): void => {
+      void Promise.all([
+        apiIdempotencyService?.purgeExpired(),
+        idempotencyService?.cleanupExpiredKeys(),
+      ]).catch((error) => logger.warn('Idempotency key purge failed', { error }));
+    };
+    setInterval(purgeIdempotencyKeys, 60 * 60 * 1000).unref();
 
     healthMonitor = new NotificationHealthMonitor(null, getWorkerManager(), {
       repository,
@@ -202,6 +231,12 @@ async function main() {
     metricsStore,
     healthMonitor,
     deliveryReceiptRepository,
+    idempotencyService,
+    apiIdempotencyService,
+    eventTimingsReader: deduplicationService
+      ? (eventId: string, contractAddress: string) =>
+          deduplicationService!.getStageTimings(eventId, contractAddress)
+      : null,
     eventStream: {
       enabled: process.env.EVENT_STREAM_ENABLED === 'true',
       heartbeatMs: Number(process.env.EVENT_STREAM_HEARTBEAT_MS || 15_000),

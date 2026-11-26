@@ -6,6 +6,12 @@
 > explains their parameters and data types, provides practical examples, and
 > offers usage recommendations for indexers and listeners.
 
+> **Event schema version:** every event documented here is schema **v1**
+> (unsuffixed name). Breaking changes ship as `<name>_v<N>` events; query
+> `get_event_schema_version()` for the current version. See
+> [docs/EVENT_SCHEMA_VERSIONING.md](docs/EVENT_SCHEMA_VERSIONING.md) for the
+> versioning rules and compatibility guarantees (#1122).
+
 ---
 
 ## Table of Contents
