@@ -1,4 +1,5 @@
 import { guardWebhookUrl, DnsResolver } from './dns-rebinding-guard';
+import { validateNotificationDestinationUrl } from '../utils/ssrf-url-validation';
 import logger from '../utils/logger';
 
 export interface WebhookSendOptions {
@@ -16,6 +17,9 @@ export interface WebhookSendOptions {
    */
   skipDnsGuard?: boolean;
 }
+
+/** Maximum number of redirects followed for a single outbound webhook. */
+export const MAX_WEBHOOK_REDIRECTS = 5;
 
 /**
  * Classification of an outbound webhook failure.
@@ -49,10 +53,11 @@ export function isWebhookTimeoutError(error: unknown): boolean {
 /**
  * Sends a single outbound POST webhook to `url`.
  *
- * Before the HTTP request is made the destination is validated against the
- * DNS rebinding guard (issue #994). If the resolved address falls within any
- * blocked range (RFC 1918, loopback, link-local, etc.) the request is
- * rejected with a `DnsRebindingError` before a single byte leaves the process.
+ * Before every hop the destination is validated against the DNS rebinding
+ * guard (issue #994) and the URL policy (issue #1205). Redirects are followed
+ * manually so a 3xx response cannot bypass either check. If any resolved
+ * address falls within a blocked range (RFC 1918, loopback, link-local, etc.)
+ * the request is rejected before a single byte leaves the process.
  */
 export async function sendWebhook(
   url: string,
@@ -60,41 +65,64 @@ export async function sendWebhook(
   opts: WebhookSendOptions = {},
 ): Promise<Response> {
   const timeoutMs = opts.timeoutMs ?? 5000;
+  validateNotificationDestinationUrl(url);
 
-  // ── DNS rebinding guard ────────────────────────────────────────────────────
-  if (!opts.skipDnsGuard) {
-    const guardResult = await guardWebhookUrl(url, opts.dnsResolver);
-    if (!guardResult.safe) {
-      logger.warn('Webhook delivery blocked by DNS rebinding guard', {
-        url,
-        hostname: guardResult.hostname,
-        blockedAddress: guardResult.blockedAddress,
-        reason: guardResult.reason,
-      });
-      const err = new DnsRebindingError(
-        guardResult.reason ?? `Webhook destination blocked: ${url}`,
-        guardResult.hostname,
-        guardResult.blockedAddress,
-      );
-      throw err;
-    }
-  }
-
-  // ── Outbound HTTP POST ─────────────────────────────────────────────────────
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let currentUrl = url;
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(opts.headers ?? {}),
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal as any,
-    });
-    return response;
+    for (let hop = 0; ; hop += 1) {
+      // ── DNS rebinding guard (revalidated for every redirect hop) ───────────
+      if (!opts.skipDnsGuard) {
+        const guardResult = await guardWebhookUrl(currentUrl, opts.dnsResolver);
+        if (!guardResult.safe) {
+          logger.warn('Webhook delivery blocked by DNS rebinding guard', {
+            url: currentUrl,
+            hostname: guardResult.hostname,
+            blockedAddress: guardResult.blockedAddress,
+            reason: guardResult.reason,
+          });
+          const err = new DnsRebindingError(
+            guardResult.reason ?? `Webhook destination blocked: ${currentUrl}`,
+            guardResult.hostname,
+            guardResult.blockedAddress,
+          );
+          throw err;
+        }
+      }
+
+      // ── Outbound HTTP POST ─────────────────────────────────────────────────
+      const response = await fetch(currentUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(opts.headers ?? {}),
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal as any,
+        redirect: 'manual',
+      });
+
+      const location = response.headers?.get?.('location');
+      if (
+        location &&
+        response.status >= 300 &&
+        response.status < 400
+      ) {
+        if (hop >= MAX_WEBHOOK_REDIRECTS) {
+          throw new Error('Too many webhook redirects; refusing unsafe destination chain');
+        }
+        // Reject non-HTTP schemes and local targets in the redirect before the
+        // next DNS validation and fetch iteration.
+        currentUrl = validateNotificationDestinationUrl(
+          new URL(location, currentUrl).toString(),
+        );
+        continue;
+      }
+
+      return response;
+    }
   } finally {
     clearTimeout(timeoutId);
   }
