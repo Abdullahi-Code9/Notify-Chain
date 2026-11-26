@@ -1339,6 +1339,41 @@ export class ScheduledNotificationRepository {
   }
 
   /**
+   * Persist explicit ownership and destination reference for a scheduled notification.
+   */
+  async bindDestinationOwnership(
+    scheduledNotificationId: number,
+    destinationId: string,
+    ownerId: string,
+  ): Promise<void> {
+    await this.db.run(
+      `INSERT OR REPLACE INTO scheduled_notification_destinations (
+        scheduled_notification_id, destination_id, owner_id
+      ) VALUES (?, ?, ?)`,
+      [scheduledNotificationId, destinationId, ownerId],
+    );
+  }
+
+  /**
+   * Look up the destination and owner bound to a scheduled notification, if any.
+   */
+  async getDestinationBinding(
+    scheduledNotificationId: number,
+  ): Promise<{ destinationId: string | null; ownerId: string } | null> {
+    const row = await this.db.get<{ destination_id: string | null; owner_id: string }>(
+      `SELECT destination_id, owner_id
+       FROM scheduled_notification_destinations
+       WHERE scheduled_notification_id = ?`,
+      [scheduledNotificationId],
+    );
+    if (!row) return null;
+    return {
+      destinationId: row.destination_id,
+      ownerId: row.owner_id,
+    };
+  }
+
+  /**
    * Convert database row to model
    */
   private rowToModel(row: ScheduledNotificationRow): ScheduledNotification {
