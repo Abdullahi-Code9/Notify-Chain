@@ -1,7 +1,7 @@
 use crate::events;
 use crate::storage;
 use crate::types::{Error, Submission, SubmissionStatus, TaskStatus};
-use soroban_sdk::{token, Address, Env, String};
+use soroban_sdk::{panic_with_error, token, Address, Env, String};
 
 /// Submit work for a task
 pub fn submit_work(

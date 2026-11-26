@@ -1,7 +1,7 @@
 use crate::events;
 use crate::storage;
 use crate::types::{Error, Task, TaskStatus};
-use soroban_sdk::{token, Address, Env, String};
+use soroban_sdk::{panic_with_error, token, Address, Env, String};
 
 const MIN_REWARD: i128 = 1_000_000; // 0.1 XLM (7 decimals)
 const MAX_DEADLINE: u64 = 31_536_000; // 365 days in seconds

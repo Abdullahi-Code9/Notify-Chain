@@ -6,6 +6,8 @@
  * data never reaches storage.
  */
 
+import { validateExternalReference } from './reference-validator';
+
 /** Maximum length for a single metadata string value. */
 export const MAX_METADATA_STRING_LENGTH = 256;
 
@@ -95,6 +97,16 @@ export function validateNotificationMetadata(
       throw new MetadataValidationError(
         `metadata.${key} exceeds ${MAX_METADATA_STRING_LENGTH} characters`
       );
+    }
+
+    if (key === 'dataUri' && typeof value === 'string') {
+      try {
+        validateExternalReference(value, 'metadata.dataUri');
+      } catch {
+        throw new MetadataValidationError(
+          'metadata.dataUri must be a valid IPFS or Arweave reference',
+        );
+      }
     }
 
     if (
