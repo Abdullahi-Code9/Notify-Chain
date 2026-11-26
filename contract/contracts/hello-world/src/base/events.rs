@@ -633,6 +633,20 @@ pub struct TemplateUpdated {
 }
 
 // ============================================================================
+// Storage Migration  (Issue #1197)
+// ============================================================================
+
+/// Emitted when the admin initiates a storage schema migration.
+///
+/// Off-chain consumers should pause indexing until `StorageMigrationCompleted`
+/// is received for the same `to_version` to avoid reading partially-migrated
+/// state.
+#[contractevent]
+#[derive(Clone)]
+pub struct StorageMigrationStarted {
+    /// Admin address that triggered the migration.
+    #[topic]
+    pub admin: Address,
 // Operation correlation (issue #1194)
 // ============================================================================
 

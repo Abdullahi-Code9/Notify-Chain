@@ -773,6 +773,33 @@ impl AutoShareContract {
     }
 
     // ============================================================================
+    // Storage Migration  (Issue #1197)
+    // ============================================================================
+
+    /// Returns the persistent storage format version (0 before the first migration).
+    pub fn get_storage_version(env: Env) -> u32 {
+        autoshare_logic::get_storage_version(env)
+    }
+
+    /// Returns `true` if the migration to `target_version` has already been executed.
+    pub fn is_migration_executed(env: Env, target_version: u32) -> bool {
+        autoshare_logic::is_migration_executed(env, target_version)
+    }
+
+    /// Runs the storage migration from the current version to `target_version`.
+    ///
+    /// Only the contract admin may call this. Reverts if the migration has
+    /// already been executed (idempotency guard) or if no migration path is
+    /// defined between the two versions.
+    pub fn run_migration(
+        env: Env,
+        admin: Address,
+        target_version: u32,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::run_migration(env, admin, target_version)
+    }
+
+    // ============================================================================
     // Access Logging  (Issue #312)
     // ============================================================================
 
