@@ -1,4 +1,4 @@
-use soroban_sdk::{contractevent, contracttype, Address, BytesN, String, Vec};
+use soroban_sdk::{contractevent, contracttype, Address, BytesN, Env, String, Vec};
 
 /// High-level notification category attached to every emitted event.
 ///
@@ -633,34 +633,64 @@ pub struct TemplateUpdated {
 }
 
 // ============================================================================
-// Network Configuration  (Issue #1196)
+// Storage Migration  (Issue #1197)
 // ============================================================================
 
-/// Emitted once during contract initialization when the expected Stellar
-/// network is locked in.
+/// Emitted when the admin initiates a storage schema migration.
 ///
-/// `network_id` is the SHA-256 hash of the Stellar network passphrase
-/// (returned by `env.ledger().network_id()`).  Off-chain tools can read
-/// this event to confirm which network the contract was deployed for without
-/// having to inspect raw storage.
-///
-/// # Examples of well-known `network_id` values
-///
-/// | Network     | Passphrase                                             |
-/// |-------------|--------------------------------------------------------|
-/// | Mainnet     | `Public Global Stellar Network ; September 2015`       |
-/// | Testnet     | `Test SDF Network ; September 2015`                    |
-/// | Futurenet   | `Test SDF Future Network ; October 2022`               |
-#[contractevent(data_format = "single-value")]
+/// Off-chain consumers should pause indexing until `StorageMigrationCompleted`
+/// is received for the same `to_version` to avoid reading partially-migrated
+/// state.
+#[contractevent]
 #[derive(Clone)]
-pub struct NetworkConfigInitialized {
-    /// The admin that initialized the contract.
+pub struct StorageMigrationStarted {
+    /// Admin address that triggered the migration.
     #[topic]
     pub admin: Address,
+// Operation correlation (issue #1194)
+// ============================================================================
+
+/// Published alongside an entity's lifecycle events. All state transitions for
+/// the same entity share the entity's unique 32-byte identifier as their
+/// `correlation_id`, while different entities can never share one by accident.
+///
+/// This is a separate event type: existing event consumers continue to see the
+/// original events unchanged. Consumers that need end-to-end tracing can group
+/// by `correlation_id` and read `operation` for the transition name.
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct OperationCorrelated {
+    /// Identifier shared by all events in one entity's operation chain.
+    #[topic]
+    pub correlation_id: BytesN<32>,
     #[topic]
     pub category: NotificationCategory,
     #[topic]
     pub priority: NotificationPriority,
     /// The locked-in network identifier (SHA-256 of network passphrase).
     pub network_id: BytesN<32>,
+    /// Name of the lifecycle transition (e.g. `notification_scheduled`).
+    pub operation: String,
+}
+
+/// Derives the stable correlation identifier for an entity's event chain.
+pub fn correlation_id_for(entity_id: &BytesN<32>) -> BytesN<32> {
+    entity_id.clone()
+}
+
+/// Emits the correlation metadata for a lifecycle transition.
+pub fn publish_operation_correlation(
+    env: &Env,
+    entity_id: &BytesN<32>,
+    operation: &str,
+    category: NotificationCategory,
+    priority: NotificationPriority,
+) {
+    OperationCorrelated {
+        correlation_id: correlation_id_for(entity_id),
+        category,
+        priority,
+        operation: String::from_str(env, operation),
+    }
+    .publish(env);
 }

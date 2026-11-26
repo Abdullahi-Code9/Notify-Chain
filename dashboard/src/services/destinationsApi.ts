@@ -2,24 +2,26 @@
  * Notification destination API client (issue #1107).
  *
  * Endpoints (served by the listener's events API):
- *   GET  /api/destinations                 → { destinations: NotificationDestination[] }
- *   PUT  /api/destinations/:id             → NotificationDestination
- *   POST /api/destinations/:id/test        → TestNotificationResult
+ *   GET    /api/destinations               → { destinations: NotificationDestination[] }
+ *   POST   /api/destinations               → NotificationDestination
+ *   GET    /api/destinations/:id           → NotificationDestination
+ *   PUT    /api/destinations/:id           → NotificationDestination
+ *   DELETE /api/destinations/:id           → { deleted: true; id: string }
+ *   POST   /api/destinations/:id/test      → TestNotificationResult
  *
  * Errors are normalized into {@link DestinationApiError} so the page can
  * surface field-level validation messages returned by the server.
  */
 import type {
+  CreateDestinationInput,
   DestinationUpdate,
   DestinationValidationErrors,
   NotificationDestination,
   TestNotificationResult,
 } from '../types/destination';
+import { getEventsApiBaseUrl } from '../config/eventsApiUrl';
 
-const BASE_URL =
-  (typeof import.meta !== 'undefined' &&
-    (import.meta as { env?: Record<string, string> }).env?.VITE_EVENTS_API_URL) ||
-  'http://localhost:8787';
+const BASE_URL = getEventsApiBaseUrl();
 
 export class DestinationApiError extends Error {
   constructor(
@@ -34,8 +36,16 @@ export class DestinationApiError extends Error {
 
 export interface DestinationsClient {
   list(): Promise<NotificationDestination[]>;
+  get?(id: string): Promise<NotificationDestination>;
+  create?(input: CreateDestinationInput): Promise<NotificationDestination>;
   update(id: string, update: DestinationUpdate): Promise<NotificationDestination>;
+  remove?(id: string): Promise<{ deleted: boolean; id: string }>;
   sendTest(id: string): Promise<TestNotificationResult>;
+}
+
+export interface HttpDestinationsClientOptions {
+  /** Optional API key sent as `X-API-Key` for multi-user authentication. */
+  apiKey?: string;
 }
 
 async function parseError(response: Response): Promise<DestinationApiError> {
@@ -63,13 +73,21 @@ async function parseError(response: Response): Promise<DestinationApiError> {
 export function createHttpDestinationsClient(
   baseUrl: string = BASE_URL,
   fetchImpl: typeof fetch = (...args) => fetch(...args),
+  options: HttpDestinationsClientOptions = {},
 ): DestinationsClient {
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     let response: Response;
+    const authHeaders: Record<string, string> = options.apiKey
+      ? { 'X-API-Key': options.apiKey }
+      : {};
     try {
       response = await fetchImpl(`${baseUrl}${path}`, {
         ...init,
-        headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...(init?.headers ?? {}),
+        },
       });
     } catch {
       throw new DestinationApiError('Unable to reach the listener API. Check that it is running.');
@@ -83,10 +101,24 @@ export function createHttpDestinationsClient(
       const body = await request<{ destinations: NotificationDestination[] }>('/api/destinations');
       return Array.isArray(body.destinations) ? body.destinations : [];
     },
+    get(id) {
+      return request<NotificationDestination>(`/api/destinations/${encodeURIComponent(id)}`);
+    },
+    create(input) {
+      return request<NotificationDestination>('/api/destinations', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+    },
     update(id, update) {
       return request<NotificationDestination>(`/api/destinations/${encodeURIComponent(id)}`, {
         method: 'PUT',
         body: JSON.stringify(update),
+      });
+    },
+    remove(id) {
+      return request<{ deleted: boolean; id: string }>(`/api/destinations/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
       });
     },
     sendTest(id) {

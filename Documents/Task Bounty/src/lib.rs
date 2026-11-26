@@ -3,18 +3,10 @@
 //! # TaskBounty - Decentralized Task & Reward Board
 //!
 //! A Soroban smart contract for trustless task management and bounty payments on Stellar.
-//!
-//! ## Features
-//! - Task creation with escrowed rewards
-//! - Work submission with IPFS/Arweave links
-//! - Approval/rejection system
-//! - Automatic payouts
-//! - Dispute resolution
-//! - Multi-token support (XLM and SAC tokens)
 
+mod api_keys;
 mod dispute;
 mod events;
-mod api_keys;
 mod storage;
 mod submission;
 mod task;
@@ -23,26 +15,39 @@ mod types;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
-use types::{Task, Submission, TaskStatus, SubmissionStatus};
-use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
-use types::{Submission, SubmissionStatus, Task, TaskStatus};
+use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, String, Vec};
+use types::{Dispute, Submission, Task};
 
 #[contract]
 pub struct TaskBountyContract;
 
 #[contractimpl]
 impl TaskBountyContract {
-    /// Initialize the contract with a dispute resolver address
-    ///
-    /// # Arguments
-    /// * `dispute_resolver` - Address of the dispute resolver contract
-    /// * `admin` - Address of the contract administrator
+    /// Initialize the contract with a dispute resolver address.
     pub fn initialize(env: Env, dispute_resolver: Address, admin: Address) {
         storage::set_dispute_resolver(&env, &dispute_resolver);
         storage::set_admin(&env, &admin);
         storage::set_task_counter(&env, 0);
         storage::set_submission_counter(&env, 0);
+    }
+
+
+    /// Set the dispute resolution period (seconds). Admin only.
+    pub fn set_resolution_period(env: Env, admin: Address, period: u64) {
+        admin.require_auth();
+        let stored_admin = storage::get_admin(&env);
+        if admin != stored_admin {
+            panic_with_error!(&env, types::Error::Unauthorized);
+        }
+        if period == 0 {
+            panic_with_error!(&env, types::Error::InvalidResolutionPeriod);
+        }
+        storage::set_resolution_period(&env, period);
+    }
+
+    /// Returns the current dispute resolution period in seconds.
+    pub fn get_resolution_period(env: Env) -> u64 {
+        storage::get_resolution_period(&env)
     }
 
     // ========================================================================
@@ -54,10 +59,6 @@ impl TaskBountyContract {
     /// The transfer is not effective until the proposed address calls
     /// `accept_admin_transfer`. Only the current administrator may call this.
     /// Replaces any previously pending proposal.
-    ///
-    /// # Arguments
-    /// * `admin` - Current administrator address
-    /// * `proposed` - Address being nominated as the next administrator
     pub fn propose_admin_transfer(env: Env, admin: Address, proposed: Address) {
         admin.require_auth();
         let stored_admin = storage::get_admin(&env);
@@ -69,13 +70,6 @@ impl TaskBountyContract {
     }
 
     /// Accept a pending administrator transfer.
-    ///
-    /// Only the address nominated by the current administrator via
-    /// `propose_admin_transfer` may call this. On success the caller
-    /// becomes the new administrator and the pending proposal is cleared.
-    ///
-    /// # Arguments
-    /// * `proposed` - The nominated address accepting the role
     pub fn accept_admin_transfer(env: Env, proposed: Address) {
         proposed.require_auth();
         let pending = storage::get_pending_admin(&env);
@@ -93,12 +87,6 @@ impl TaskBountyContract {
     }
 
     /// Cancel a pending administrator transfer.
-    ///
-    /// Only the current administrator may call this. The pending proposal
-    /// is cleared; the existing administrator remains unchanged.
-    ///
-    /// # Arguments
-    /// * `admin` - Current administrator address
     pub fn cancel_admin_transfer(env: Env, admin: Address) {
         admin.require_auth();
         let stored_admin = storage::get_admin(&env);
@@ -113,26 +101,14 @@ impl TaskBountyContract {
     }
 
     /// Return the currently pending administrator address, if any.
-    ///
-    /// Returns `None` when no transfer has been proposed. This function
-    /// does not modify contract state.
     pub fn get_pending_admin(env: Env) -> Option<Address> {
         storage::get_pending_admin(&env)
     }
 
-    /// Create a new task with escrowed reward
-    ///
-    /// # Arguments
-    /// * `poster` - Address of the task poster
-    /// * `title` - Task title
-    /// * `description` - Detailed task description
-    /// * `token` - Token address for reward (XLM or SAC token)
-    /// * `reward` - Reward amount in token's smallest unit
-    /// * `deadline` - Unix timestamp for task deadline
-    /// * `max_submissions` - Maximum number of submissions allowed
-    ///
-    /// # Returns
-    /// Task ID
+    // ========================================================================
+    // Task management
+    // ========================================================================
+
     pub fn create_task(
         env: Env,
         poster: Address,
@@ -144,29 +120,26 @@ impl TaskBountyContract {
         max_submissions: u32,
     ) -> u64 {
         poster.require_auth();
-
-        task::create_task(
-            &env,
-            poster,
-            title,
-            description,
-            token,
-            reward,
-            deadline,
-            max_submissions,
-        )
+        task::create_task(&env, poster, title, description, token, reward, deadline, max_submissions)
     }
 
-    /// Submit work for a task
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task
-    /// * `contributor` - Address of the contributor
-    /// * `work_url` - URL to the work (IPFS, Arweave, GitHub, etc.)
-    /// * `description` - Description of the work done
-    ///
-    /// # Returns
-    /// Submission ID
+    pub fn cancel_task(env: Env, task_id: u64, poster: Address) {
+        poster.require_auth();
+        task::cancel_task(&env, task_id, poster)
+    }
+
+    pub fn get_task(env: Env, task_id: u64) -> Task {
+        storage::get_task(&env, task_id)
+    }
+
+    pub fn get_total_tasks(env: Env) -> u64 {
+        storage::get_task_counter(&env)
+    }
+
+    // ========================================================================
+    // Submission management
+    // ========================================================================
+
     pub fn submit_work(
         env: Env,
         task_id: u64,
@@ -175,29 +148,14 @@ impl TaskBountyContract {
         description: String,
     ) -> u64 {
         contributor.require_auth();
-
         submission::submit_work(&env, task_id, contributor, work_url, description)
     }
 
-    /// Approve a submission and release payment
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task
-    /// * `submission_id` - ID of the submission to approve
-    /// * `poster` - Address of the task poster (for auth)
     pub fn approve_submission(env: Env, task_id: u64, submission_id: u64, poster: Address) {
         poster.require_auth();
-
         submission::approve_submission(&env, task_id, submission_id, poster)
     }
 
-    /// Reject a submission
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task
-    /// * `submission_id` - ID of the submission to reject
-    /// * `poster` - Address of the task poster (for auth)
-    /// * `reason` - Reason for rejection
     pub fn reject_submission(
         env: Env,
         task_id: u64,
@@ -206,28 +164,31 @@ impl TaskBountyContract {
         reason: String,
     ) {
         poster.require_auth();
-
         submission::reject_submission(&env, task_id, submission_id, poster, reason)
     }
 
-    /// Cancel a task and refund the poster
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task to cancel
-    /// * `poster` - Address of the task poster (for auth)
-    pub fn cancel_task(env: Env, task_id: u64, poster: Address) {
-        poster.require_auth();
-
-        task::cancel_task(&env, task_id, poster)
+    pub fn get_submission(env: Env, submission_id: u64) -> Submission {
+        storage::get_submission(&env, submission_id)
     }
 
-    /// Raise a dispute for a submission
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task
-    /// * `submission_id` - ID of the submission
-    /// * `raiser` - Address raising the dispute
-    /// * `reason` - Reason for the dispute
+    pub fn get_task_submissions(env: Env, task_id: u64) -> Vec<u64> {
+        storage::get_task_submissions(&env, task_id)
+    }
+
+    pub fn get_total_submissions(env: Env) -> u64 {
+        storage::get_submission_counter(&env)
+    }
+
+    pub fn has_submitted(env: Env, task_id: u64, contributor: Address) -> bool {
+        storage::has_contributor_submitted(&env, task_id, &contributor)
+    }
+
+    // ========================================================================
+    // Dispute management
+    // ========================================================================
+
+    /// Raise a dispute for a submission. Caller must be the task poster or
+    /// the submission contributor.
     pub fn raise_dispute(
         env: Env,
         task_id: u64,
@@ -236,69 +197,36 @@ impl TaskBountyContract {
         reason: String,
     ) {
         raiser.require_auth();
-
         dispute::raise_dispute(&env, task_id, submission_id, raiser, reason)
     }
 
-    /// Get task details
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task
-    ///
-    /// # Returns
-    /// Task struct
-    pub fn get_task(env: Env, task_id: u64) -> Task {
-        storage::get_task(&env, task_id)
+    /// Resolve an open dispute. Only the dispute resolver set during
+    /// `initialize` may call this.
+    pub fn resolve_dispute(
+        env: Env,
+        dispute_id: u64,
+        resolver: Address,
+        ruling: String,
+    ) {
+        resolver.require_auth();
+        dispute::resolve_dispute(&env, dispute_id, resolver, ruling)
     }
 
-    /// Get submission details
-    ///
-    /// # Arguments
-    /// * `submission_id` - ID of the submission
-    ///
-    /// # Returns
-    /// Submission struct
-    pub fn get_submission(env: Env, submission_id: u64) -> Submission {
-        storage::get_submission(&env, submission_id)
+    /// Escalate a dispute whose resolution deadline has elapsed.
+    /// Anyone may trigger escalation once the deadline has passed.
+    pub fn escalate_dispute(env: Env, dispute_id: u64, escalated_by: Address) {
+        escalated_by.require_auth();
+        dispute::escalate_dispute(&env, dispute_id, escalated_by)
     }
 
-    /// Get all submission IDs for a task
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task
-    ///
-    /// # Returns
-    /// Vector of submission IDs
-    pub fn get_task_submissions(env: Env, task_id: u64) -> Vec<u64> {
-        storage::get_task_submissions(&env, task_id)
+    /// Returns the dispute record for the given dispute id.
+    pub fn get_dispute(env: Env, dispute_id: u64) -> Dispute {
+        dispute::get_dispute(&env, dispute_id)
     }
 
-    /// Get total number of tasks created
-    ///
-    /// # Returns
-    /// Total task count
-    pub fn get_total_tasks(env: Env) -> u64 {
-        storage::get_task_counter(&env)
-    }
-
-    /// Get total number of submissions
-    ///
-    /// # Returns
-    /// Total submission count
-    pub fn get_total_submissions(env: Env) -> u64 {
-        storage::get_submission_counter(&env)
-    }
-
-    /// Check if a contributor has submitted for a task
-    ///
-    /// # Arguments
-    /// * `task_id` - ID of the task
-    /// * `contributor` - Address of the contributor
-    ///
-    /// # Returns
-    /// True if contributor has submitted
-    pub fn has_submitted(env: Env, task_id: u64, contributor: Address) -> bool {
-        storage::has_contributor_submitted(&env, task_id, &contributor)
+    /// Returns true if the resolution deadline for the given dispute has elapsed.
+    pub fn is_dispute_expired(env: Env, dispute_id: u64) -> bool {
+        dispute::is_dispute_expired(&env, dispute_id)
     }
 
     // ========================================================================

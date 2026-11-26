@@ -2,6 +2,7 @@ import * as sqlite3 from 'sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../utils/logger';
+import { applyDestinationOwnershipMigration } from '../migrations/008-destination-ownership';
 
 /** How long a write waits for a competing connection's lock before failing. */
 export const DATABASE_BUSY_TIMEOUT_MS = 5_000;
@@ -279,6 +280,17 @@ export class Database {
       } catch (error: any) {
         if (/duplicate column name/i.test(String(error?.message ?? error))) continue;
         throw error;
+      }
+    }
+
+    // Safely upgrade any legacy `destinations` table lacking `owner_id` before
+    // `schema.sql` creates ownership indexes on `destinations(owner_id)`.
+    if (this.db) {
+      const legacyDestTable = await this.get<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'destinations'",
+      );
+      if (legacyDestTable) {
+        await applyDestinationOwnershipMigration(this.db);
       }
     }
   }

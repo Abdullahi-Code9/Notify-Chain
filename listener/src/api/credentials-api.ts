@@ -30,6 +30,7 @@ import {
   principalHasScopes,
   INVALID_PERMISSIONS_MESSAGE,
   type ApiKeyEntry,
+  type AuthPrincipal,
 } from './api-key-auth';
 import {
   CredentialValidationError,
@@ -37,10 +38,12 @@ import {
   type ApiCredentialService,
 } from '../services/api-credential-service';
 import type { ApiScope, CreateApiCredentialInput } from '../types/api-credential';
+import type { SecurityAuditService } from '../services/security-audit';
 
 export interface CredentialRoutesDeps {
   credentialService: ApiCredentialService | null | undefined;
   apiKeys?: ApiKeyEntry[];
+  securityAudit?: SecurityAuditService | null;
 }
 
 /**
@@ -69,10 +72,40 @@ export const CREDENTIAL_ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   'GET /api/credentials': { level: 'read', scope: CREDENTIAL_SCOPES.read },
   'GET /api/credentials/:id': { level: 'read', scope: CREDENTIAL_SCOPES.read },
   'DELETE /api/credentials/:id': { level: 'admin', scope: CREDENTIAL_SCOPES.admin },
+  'PATCH /api/credentials/:id': { level: 'admin', scope: CREDENTIAL_SCOPES.admin },
 };
 
 const COLLECTION_PATH = '/api/credentials';
 const ITEM_PATTERN = /^\/api\/credentials\/([0-9a-f]{16})$/;
+
+/** A caller may only grant scopes it already holds. */
+export function canGrantScopes(principal: AuthPrincipal, requested: readonly ApiScope[]): boolean {
+  return principalHasScopes(principal, requested);
+}
+
+/** Scoped credentials may only manage credentials they created. */
+export function isCredentialOwner(principal: AuthPrincipal, ownerId?: string): boolean {
+  if (principal.type === 'credential') return ownerId === principal.credentialId;
+  return true;
+}
+
+async function auditCredentialChange(
+  deps: CredentialRoutesDeps,
+  action: string,
+  actor: string,
+  credentialId: string,
+  details: Record<string, unknown>,
+): Promise<void> {
+  logger.info(action, { credentialId, actor, ...details });
+  await deps.securityAudit?.record({
+    action,
+    actor,
+    outcome: 'success',
+    details: { credentialId, ...details },
+  }).catch((error: unknown) => {
+    logger.warn('Credential audit write failed', { error: String(error) });
+  });
+}
 
 function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -161,19 +194,17 @@ export async function handleCredentialRoutes(
     }
 
     // No privilege escalation: a scoped key cannot mint a broader key.
-    if (!principalHasScopes(auth.principal, input.scopes)) {
+    if (!canGrantScopes(auth.principal, input.scopes)) {
       sendErr(res, 403, INVALID_PERMISSIONS_MESSAGE, ErrorCode.INVALID_PERMISSIONS, [
         { reason: 'Cannot grant scopes the calling credential does not hold' },
       ]);
       return true;
     }
 
-    const created = await service.create(input);
-    logger.info('API credential created', {
-      credentialId: created.id,
-      name: created.name,
-      scopes: created.scopes,
-      createdBy: auth.principal.type,
+    const ownerId = auth.principal.type === 'credential' ? auth.principal.credentialId : 'admin';
+    const created = await service.create({ ...input, ownerId });
+    await auditCredentialChange(deps, 'credential_created', ownerId, created.id, {
+      name: created.name, scopes: created.scopes,
     });
     sendJson(res, 201, ok(created));
     return true;
@@ -195,13 +226,74 @@ export async function handleCredentialRoutes(
     return true;
   }
 
+  if (itemMatch && req.method === 'PATCH') {
+    const existing = service.get(itemMatch[1]);
+    if (!existing) {
+      sendErr(res, 404, 'Credential not found', ErrorCode.NOT_FOUND);
+      return true;
+    }
+    if (!isCredentialOwner(auth.principal, service.getOwner(itemMatch[1]))) {
+      sendErr(res, 403, INVALID_PERMISSIONS_MESSAGE, ErrorCode.INVALID_PERMISSIONS, [
+        { reason: 'Cannot modify a credential owned by another principal' },
+      ]);
+      return true;
+    }
+    let body: Record<string, unknown>;
+    try {
+      const parsed = await readJsonBody(req);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('invalid body');
+      body = parsed as Record<string, unknown>;
+    } catch {
+      sendErr(res, 400, 'Request body must be valid JSON.', ErrorCode.PARSE_ERROR);
+      return true;
+    }
+    let updateInput: CreateApiCredentialInput;
+    try {
+      updateInput = validateCreateCredentialInput({
+        name: body.name === undefined ? existing.name : body.name,
+        scopes: body.scopes,
+      });
+    } catch (error) {
+      if (error instanceof CredentialValidationError) {
+        sendErr(res, 400, error.message, ErrorCode.VALIDATION_ERROR, error.issues);
+      } else {
+        sendErr(res, 400, 'Invalid credential update', ErrorCode.VALIDATION_ERROR);
+      }
+      return true;
+    }
+    if (!canGrantScopes(auth.principal, updateInput.scopes)) {
+      sendErr(res, 403, INVALID_PERMISSIONS_MESSAGE, ErrorCode.INVALID_PERMISSIONS, [
+        { reason: 'Cannot grant scopes the calling credential does not hold' },
+      ]);
+      return true;
+    }
+    const updated = service.updateCredential(itemMatch[1], updateInput);
+    if (!updated) {
+      sendErr(res, 404, 'Credential not found', ErrorCode.NOT_FOUND);
+      return true;
+    }
+    const owner = auth.principal.type === 'credential' ? auth.principal.credentialId : 'admin';
+    await auditCredentialChange(deps, 'credential_updated', owner, updated.id, {
+      name: updated.name, scopes: updated.scopes,
+    });
+    sendOk(res, 200, updated);
+    return true;
+  }
+
   if (itemMatch && req.method === 'DELETE') {
+    if (!isCredentialOwner(auth.principal, service.getOwner(itemMatch[1]))) {
+      sendErr(res, 403, INVALID_PERMISSIONS_MESSAGE, ErrorCode.INVALID_PERMISSIONS, [
+        { reason: 'Cannot revoke a credential owned by another principal' },
+      ]);
+      return true;
+    }
     const revoked = service.revoke(itemMatch[1]);
     if (!revoked) {
       sendErr(res, 404, 'Credential not found', ErrorCode.NOT_FOUND);
       return true;
     }
-    logger.info('API credential revoked', { credentialId: revoked.id });
+    const owner = auth.principal.type === 'credential' ? auth.principal.credentialId : 'admin';
+    await auditCredentialChange(deps, 'credential_revoked', owner, revoked.id, {});
     sendOk(res, 200, revoked);
     return true;
   }
@@ -211,7 +303,7 @@ export async function handleCredentialRoutes(
     return true;
   }
 
-  res.setHeader('Allow', path === COLLECTION_PATH ? 'GET, POST' : 'GET, DELETE');
+  res.setHeader('Allow', path === COLLECTION_PATH ? 'GET, POST' : 'GET, PATCH, DELETE');
   sendErr(res, 405, `Method ${req.method} not allowed`, ErrorCode.METHOD_NOT_ALLOWED);
   return true;
 }

@@ -300,7 +300,18 @@ function toPublic(record: ApiCredentialRecord): ApiCredential {
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     revokedAt: record.revokedAt,
+    expiresAt: record.expiresAt ?? null,
   };
+}
+
+/** True when a credential has been revoked or its lifetime has elapsed. */
+function isInactive(record: ApiCredentialRecord, nowMs: number): boolean {
+  if (record.revokedAt) return true;
+  return (
+    typeof record.expiresAt === 'string' &&
+    record.expiresAt.length > 0 &&
+    Date.parse(record.expiresAt) <= nowMs
+  );
 }
 
 export function validateCreateCredentialInput(input: unknown): CreateApiCredentialInput {
@@ -330,10 +341,21 @@ export function validateCreateCredentialInput(input: unknown): CreateApiCredenti
     }
   }
 
+  let expiresAt: string | undefined;
+  if (body.expiresAt !== undefined && body.expiresAt !== null) {
+    if (typeof body.expiresAt !== 'string' || !Number.isFinite(Date.parse(body.expiresAt))) {
+      issues.push({ field: 'expiresAt', message: 'expiresAt must be a valid ISO timestamp' });
+    } else if (Date.parse(body.expiresAt) <= Date.now()) {
+      issues.push({ field: 'expiresAt', message: 'expiresAt must be in the future' });
+    } else {
+      expiresAt = new Date(body.expiresAt).toISOString();
+    }
+  }
+
   if (issues.length > 0) {
     throw new CredentialValidationError('Invalid credential request', issues);
   }
-  return { name, scopes };
+  return expiresAt ? { name, scopes, expiresAt } : { name, scopes };
 }
 
 export class ApiCredentialService {
@@ -360,7 +382,7 @@ export class ApiCredentialService {
 
   /** Issues a new credential. The returned `apiKey` is never retrievable again. */
   async create(input: CreateApiCredentialInput): Promise<CreatedApiCredential> {
-    const { name, scopes } = validateCreateCredentialInput(input);
+    const { name, scopes, expiresAt } = validateCreateCredentialInput(input);
     let id = crypto.randomBytes(8).toString('hex');
     while (this.store.get(id)) id = crypto.randomBytes(8).toString('hex');
     const secret = crypto.randomBytes(32).toString('base64url');
@@ -373,10 +395,30 @@ export class ApiCredentialService {
       createdAt: this.now().toISOString(),
       lastUsedAt: null,
       revokedAt: null,
+      ownerId: input.ownerId,
     };
     this.store.save(record);
 
     return { ...toPublic(record), apiKey: `${API_KEY_PREFIX}_${id}_${secret}` };
+  }
+
+  /** Owner identifier used for credential ownership checks. */
+  getOwner(id: string): string | undefined {
+    return this.store.get(id)?.ownerId;
+  }
+
+  /** Update name/scopes after the caller has been authorised. */
+  updateCredential(id: string, input: CreateApiCredentialInput): ApiCredential | null {
+    const record = this.store.get(id);
+    if (!record || record.revokedAt) return null;
+    const validated = validateCreateCredentialInput(input);
+    record.name = validated.name;
+    record.scopes = validated.scopes;
+    this.store.save(record);
+    for (const [key, entry] of this.verifyCache) {
+      if (entry.id === id) this.verifyCache.delete(key);
+    }
+    return toPublic(record);
   }
 
   list(): ApiCredential[] {
@@ -404,7 +446,8 @@ export class ApiCredentialService {
 
   /** True when at least one non-revoked credential exists. */
   hasActiveCredentials(): boolean {
-    return this.store.list().some((r) => !r.revokedAt);
+    const nowMs = this.now().getTime();
+    return this.store.list().some((r) => !isInactive(r, nowMs));
   }
 
   /**
@@ -419,7 +462,14 @@ export class ApiCredentialService {
     const cached = this.verifyCache.get(cacheKey);
     const nowMs = this.now().getTime();
     if (cached && cached.expiresAt > nowMs && cached.id === parsed.id) {
-      return this.touch(parsed.id, route);
+      // Re-check the store on cache hits: expiry or revocation must take effect
+      // immediately, not after the short-lived verification cache expires.
+      const cachedRecord = this.store.get(parsed.id);
+      if (cachedRecord && !isInactive(cachedRecord, nowMs)) {
+        return this.touch(parsed.id, route);
+      }
+      this.verifyCache.delete(cacheKey);
+      return null;
     }
     if (cached) this.verifyCache.delete(cacheKey);
 
@@ -429,9 +479,10 @@ export class ApiCredentialService {
       await secretMatches(parsed.secret, await this.dummyHash);
       return null;
     }
+    if (isInactive(record, nowMs)) return null;
 
     const matches = await secretMatches(parsed.secret, record.secretHash);
-    if (!matches || record.revokedAt) return null;
+    if (!matches) return null;
 
     this.verifyCache.set(cacheKey, { id: record.id, expiresAt: nowMs + this.verifyCacheTtlMs });
     return this.touch(record.id, route);

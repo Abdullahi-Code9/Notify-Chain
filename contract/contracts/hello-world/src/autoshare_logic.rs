@@ -9,6 +9,7 @@ use crate::base::events::{
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
     NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
     ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
+    publish_operation_correlation,
 };
 use crate::base::metadata_validation::{validate_metadata, NotificationMetadata};
 use crate::base::types::{
@@ -74,6 +75,14 @@ pub enum DataKey {
     /// caller-supplied idempotency key. Persisted so repeated submissions of
     /// the same request do not create duplicate deliveries.
     DeliveryIdempotency(BytesN<32>),
+    /// Persistent storage format version.  Set to `0` before the first
+    /// explicit migration, then advanced by each `run_migration` call.
+    StorageVersion,
+    /// Guard key for a completed migration.  `MigrationExecuted(to_version)`
+    /// is set to `true` once the migration to `to_version` finishes, so
+    /// re-running the same migration returns an error rather than corrupting
+    /// state.
+    MigrationExecuted(u32),
 }
 
 // ============================================================================
@@ -110,6 +119,7 @@ pub fn create_autoshare(
     payment_token: Address,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
 
     // Check if contract is paused
     if get_paused_status(&env) {
@@ -335,21 +345,30 @@ pub fn add_group_member(
 // Admin Management
 // ============================================================================
 
-pub fn initialize_admin(env: Env, admin: Address) {
+pub fn initialize_admin(env: Env, admin: Address) -> Result<(), Error> {
     admin.require_auth();
 
-    // Only set if not already initialized (instance storage)
-    if !env.storage().instance().has(&INSTANCE_ADMIN) {
-        env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    // Initialization is a one-time, authorized workflow. A repeat by the same
+    // admin is a safe no-op; any attempt to replace that admin must fail
+    // explicitly before touching state.
+    if let Some(current_admin) = env.storage().instance().get::<_, Address>(&INSTANCE_ADMIN) {
+        if current_admin == admin {
+            return Ok(());
+        }
+        return Err(Error::AlreadyInitialized);
+    }
 
-        // Initialize default usage fee (10 tokens per usage) in instance storage
-        env.storage().instance().set(&INSTANCE_FEE, &10u32);
+    env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    env.storage().instance().set(&INSTANCE_FEE, &10u32);
 
-        // Initialize empty supported tokens list in instance storage
-        let empty_tokens: Vec<Address> = Vec::new(&env);
-        env.storage()
-            .instance()
-            .set(&INSTANCE_TOKENS, &empty_tokens);
+    let empty_tokens: Vec<Address> = Vec::new(&env);
+    env.storage()
+        .instance()
+        .set(&INSTANCE_TOKENS, &empty_tokens);
+
+    seed_default_categories(&env);
+    Ok(())
+}
 
         // Lock in the network identifier at first initialization so callers
         // from a different network are rejected early.
@@ -359,6 +378,12 @@ pub fn initialize_admin(env: Env, admin: Address) {
             .set(&INSTANCE_NETWORK_ID, &network_id);
 
         seed_default_categories(&env);
+/// Rejects calls that depend on contract state established by `initialize_admin`.
+pub fn require_initialized(env: &Env) -> Result<(), Error> {
+    if env.storage().instance().has(&INSTANCE_ADMIN) {
+        Ok(())
+    } else {
+        Err(Error::NotInitialized)
     }
 }
 
@@ -515,6 +540,7 @@ fn publish_authorization_failure(env: &Env, caller: &Address, action: &str) {
 }
 
 fn require_admin(env: &Env, caller: &Address) -> Result<(), Error> {
+    require_initialized(env)?;
     let admin: Address = env
         .storage()
         .instance()
@@ -1345,6 +1371,7 @@ pub fn schedule_notification(
     priority: NotificationPriority,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
 
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
@@ -1410,6 +1437,13 @@ pub fn schedule_notification(
         creator.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_scheduled",
+        NotificationCategory::Notification,
+        priority,
+    );
     NotificationScheduled {
         creator,
         category: NotificationCategory::Notification,
@@ -1508,6 +1542,13 @@ pub fn expire_notification(env: Env, notification_id: BytesN<32>) -> Result<(), 
         env.current_contract_address(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_expired",
+        NotificationCategory::Notification,
+        NOTIFICATION_PRIORITY,
+    );
     NotificationExpired {
         notification_id,
         category: NotificationCategory::Notification,
@@ -1587,6 +1628,13 @@ pub fn cancel_notification(
         caller.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_cancelled",
+        NotificationCategory::Notification,
+        NotificationPriority::Low,
+    );
     ScheduledNotificationCancelled {
         caller,
         category: NotificationCategory::Notification,
@@ -1724,6 +1772,13 @@ pub fn batch_schedule_notifications(
 
         append_audit_record(&env, id.clone(), AuditAction::Created, creator.clone());
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_scheduled",
+            NotificationCategory::Notification,
+            priority,
+        );
         NotificationScheduled {
             creator: creator.clone(),
             category: NotificationCategory::Notification,
@@ -1808,6 +1863,13 @@ pub fn confirm_notification_delivery(
     // concurrent duplicate request observes the recorded state and is rejected.
     record_delivery_idempotency(&env, &idempotency_key, &notification_id, &caller);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_delivered",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationDelivered {
         notification_id: notification_id.clone(),
         delivered_by: caller,
@@ -1929,6 +1991,13 @@ pub fn recall_notification(
 
     env.storage().persistent().set(&key, &notification);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_recalled",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRecalled {
         notification_id,
         recalled_by: caller,
@@ -1984,6 +2053,13 @@ pub fn revoke_notification(
     env.storage().persistent().set(&key, &notification);
 
     // Emit revocation event
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_revoked",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRevoked {
         notification_id,
         revoked_by: caller,
@@ -2231,6 +2307,13 @@ pub fn acknowledge_notifications(
             return Err(Error::NotificationExpired);
         }
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_acknowledged",
+            NotificationCategory::Notification,
+            NOTIFICATION_PRIORITY,
+        );
         NotificationAcknowledged {
             notification_id: id,
             acknowledger: caller.clone(),
@@ -2353,19 +2436,6 @@ pub fn configure_notification_limits(
     admin.require_auth();
     require_admin(&env, &admin)?;
 
-    // Verify caller is admin
-    let current_admin = get_admin(env.clone())?;
-    if admin != current_admin {
-        AuthorizationFailure {
-            caller: admin,
-            category: NotificationCategory::Admin,
-            priority: NotificationPriority::Critical,
-            action: String::from_str(&env, "configure_notification_limits"),
-        }
-        .publish(&env);
-        return Err(Error::Unauthorized);
-    }
-
     // Validate that min <= max expiration
     if min_expiration_seconds > max_expiration_seconds {
         return Err(Error::InvalidExpirationDuration);
@@ -2442,11 +2512,7 @@ const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 1;
 /// - [`Error::InvalidInput`]  – `schema_version` is outside the supported range.
 pub fn set_schema_version(env: Env, admin: Address, schema_version: u32) -> Result<(), Error> {
     admin.require_auth();
-
-    let stored_admin = get_admin(env.clone())?;
-    if admin != stored_admin {
-        return Err(Error::Unauthorized);
-    }
+    require_admin(&env, &admin)?;
 
     if schema_version < MIN_SUPPORTED_SCHEMA_VERSION
         || schema_version > MAX_SUPPORTED_SCHEMA_VERSION
@@ -2557,6 +2623,7 @@ pub fn update_channel_metadata(
 
     let group = get_autoshare(env.clone(), channel_id.clone())?;
     if caller != group.creator {
+        publish_authorization_failure(&env, &caller, "update_channel_metadata");
         return Err(Error::Unauthorized);
     }
 
@@ -2686,4 +2753,161 @@ pub fn get_archived_notification(
 /// Returns the current notification protocol version constant.
 pub fn get_notification_version(_env: Env) -> u32 {
     CURRENT_NOTIFICATION_VERSION
+}
+
+// ============================================================================
+// Storage Migration  (Issue #1197)
+// ============================================================================
+
+/// The lowest storage version that migrations can target.
+const STORAGE_VERSION_INITIAL: u32 = 0;
+
+/// The highest storage version the current contract binary supports.
+/// Advance this constant whenever a new migration path is added.
+pub const STORAGE_VERSION_CURRENT: u32 = 1;
+
+/// Returns the persistent storage format version.
+///
+/// Returns `0` when storage has never been explicitly versioned (i.e. the
+/// contract was deployed before migration tracking was introduced — that is the
+/// original "v0" layout).
+pub fn get_storage_version(env: Env) -> u32 {
+    env.storage()
+        .persistent()
+        .get::<DataKey, u32>(&DataKey::StorageVersion)
+        .unwrap_or(STORAGE_VERSION_INITIAL)
+}
+
+/// Returns `true` when the migration to `target_version` has already been
+/// executed, preventing re-execution.
+pub fn is_migration_executed(env: Env, target_version: u32) -> bool {
+    env.storage()
+        .persistent()
+        .get::<DataKey, bool>(&DataKey::MigrationExecuted(target_version))
+        .unwrap_or(false)
+}
+
+/// Migrates persistent storage from the current version to `target_version`.
+///
+/// # Behaviour
+/// 1. Reads the current storage version (`from_version`).
+/// 2. Validates that `target_version > from_version` and that a migration
+///    path exists.
+/// 3. Checks the `MigrationExecuted(target_version)` guard to prevent
+///    repeated execution.
+/// 4. Emits `StorageMigrationStarted`.
+/// 5. Runs the appropriate per-version migration step.
+/// 6. Writes the new `StorageVersion` and sets `MigrationExecuted(target_version)`.
+/// 7. Emits `StorageMigrationCompleted`.
+///
+/// # Errors
+/// - [`Error::Unauthorized`]             – `admin` is not the stored admin.
+/// - [`Error::MigrationAlreadyExecuted`] – guard key already set for `target_version`.
+/// - [`Error::MigrationVersionNotHigher`] – `target_version <= from_version`.
+/// - [`Error::UnsupportedMigration`]     – no defined path from `from_version` to `target_version`.
+pub fn run_migration(env: Env, admin: Address, target_version: u32) -> Result<(), Error> {
+    admin.require_auth();
+
+    let stored_admin = get_admin(env.clone())?;
+    if admin != stored_admin {
+        return Err(Error::Unauthorized);
+    }
+
+    let from_version = get_storage_version(env.clone());
+
+    if target_version <= from_version {
+        return Err(Error::MigrationVersionNotHigher);
+    }
+
+    // Guard: refuse if this exact migration already ran.
+    if is_migration_executed(env.clone(), target_version) {
+        return Err(Error::MigrationAlreadyExecuted);
+    }
+
+    // Only migrations with an explicit implementation are supported.
+    if from_version != STORAGE_VERSION_INITIAL || target_version != 1 {
+        return Err(Error::UnsupportedMigration);
+    }
+
+    StorageMigrationStarted {
+        admin: admin.clone(),
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::Critical,
+        from_version,
+        to_version: target_version,
+    }
+    .publish(&env);
+
+    migrate_v0_to_v1(&env)?;
+
+    env.storage()
+        .persistent()
+        .set(&DataKey::StorageVersion, &target_version);
+    env.storage()
+        .persistent()
+        .set(&DataKey::MigrationExecuted(target_version), &true);
+
+    let migrated_at = current_time(&env);
+
+    StorageMigrationCompleted {
+        admin,
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::Critical,
+        from_version,
+        to_version: target_version,
+        migrated_at,
+    }
+    .publish(&env);
+
+    Ok(())
+}
+
+/// Migration step: v0 → v1.
+///
+/// v0 is the implicit pre-versioning layout shipped before Issue #1197.
+/// v1 is the first explicitly versioned layout. The only structural change is
+/// that any [`ScheduledNotification`] record carrying `version == 0` (written
+/// before Issue #309 added the field) is back-filled with
+/// [`CURRENT_NOTIFICATION_VERSION`]. Records that already carry a non-zero
+/// version are left untouched, making this step idempotent at the record level.
+fn migrate_v0_to_v1(env: &Env) -> Result<(), Error> {
+    // Soroban does not expose a key enumeration API, so we discover notification
+    // IDs via the audit log — the only durable index that spans all notifications.
+    let mut notification_ids: Vec<BytesN<32>> = Vec::new(env);
+
+    if let Some(audit_log) = env
+        .storage()
+        .persistent()
+        .get::<DataKey, Vec<AuditRecord>>(&DataKey::AuditLog)
+    {
+        for record in audit_log.iter() {
+            let id = record.notification_id.clone();
+            let mut found = false;
+            for existing in notification_ids.iter() {
+                if existing == id {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                notification_ids.push_back(id);
+            }
+        }
+    }
+
+    for id in notification_ids.iter() {
+        let key = DataKey::ScheduledNotification(id.clone());
+        if let Some(mut notification) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, ScheduledNotification>(&key)
+        {
+            if notification.version == 0 {
+                notification.version = CURRENT_NOTIFICATION_VERSION;
+                env.storage().persistent().set(&key, &notification);
+            }
+        }
+    }
+
+    Ok(())
 }
