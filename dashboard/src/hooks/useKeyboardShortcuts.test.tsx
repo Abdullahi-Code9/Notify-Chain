@@ -14,10 +14,12 @@ import { KeyboardShortcutsHelp } from '../components/KeyboardShortcutsHelp';
 function ShortcutTestHarness({
   onTabChange,
   onToggleTheme,
+  onOpenCommandPalette,
   onRefresh,
 }: {
   onTabChange: (tab: string) => void;
   onToggleTheme: () => void;
+  onOpenCommandPalette?: () => void;
   onRefresh?: () => void;
 }) {
   const [helpOpen, setHelpOpen] = useState(false);
@@ -26,6 +28,7 @@ function ShortcutTestHarness({
     activeTab: 'explorer',
     onTabChange,
     onToggleTheme,
+    onOpenCommandPalette,
     onRefresh,
     helpOpen,
     onToggleHelp: () => setHelpOpen((prev) => !prev),
@@ -113,6 +116,27 @@ describe('useKeyboardShortcuts (#505)', () => {
 
     fireEvent.keyDown(document, { key: '1', metaKey: true });
     expect(onTabChange).not.toHaveBeenCalled();
+  });
+
+  it('opens the command palette with Ctrl+K and Cmd+K, including from an input', () => {
+    const onOpenCommandPalette = jest.fn();
+    const { getByTestId } = render(
+      <div>
+        <ShortcutTestHarness
+          onTabChange={jest.fn()}
+          onToggleTheme={jest.fn()}
+          onOpenCommandPalette={onOpenCommandPalette}
+        />
+        <input data-testid="search-input" />
+      </div>,
+    );
+
+    const input = getByTestId('search-input');
+    input.focus();
+    fireEvent.keyDown(input, { key: 'k', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'k', metaKey: true });
+
+    expect(onOpenCommandPalette).toHaveBeenCalledTimes(2);
   });
 
   it('does not trigger shortcuts when help overlay is open', () => {

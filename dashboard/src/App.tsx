@@ -18,6 +18,7 @@ import { ContractDetailPage } from './pages/ContractDetailPage';
 import { TransactionTracePage } from './pages/TransactionTracePage';
 
 import { ThemeToggle } from './components/ThemeToggle';
+import { CommandPalette } from './components/CommandPalette';
 import { TimezoneSelector } from './components/TimezoneSelector';
 import { MobileNavDrawer, NAV_ITEMS, type Tab } from './components/MobileNavDrawer';
 import { ToastProvider } from './context/ToastContext';
@@ -50,6 +51,7 @@ export function App() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const isMobileNav = useIsMobileNav();
   const { theme, toggleTheme } = useTheme();
@@ -67,10 +69,19 @@ export function App() {
     setHelpOpen(false);
   }, []);
 
+  const handleOpenCommandPalette = useCallback(() => {
+    setCommandPaletteOpen(true);
+  }, []);
+
+  const handleCloseCommandPalette = useCallback(() => {
+    setCommandPaletteOpen(false);
+  }, []);
+
   useKeyboardShortcuts({
     activeTab: tab,
     onTabChange: setTab,
     onToggleTheme: toggleTheme,
+    onOpenCommandPalette: handleOpenCommandPalette,
     helpOpen,
     onToggleHelp: handleToggleHelp,
     onCloseHelp: handleCloseHelp,
@@ -172,6 +183,13 @@ export function App() {
       <KeyboardShortcutsHelp
         isOpen={helpOpen}
         onClose={handleCloseHelp}
+      />
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={handleCloseCommandPalette}
+        onSelectTab={setTab}
+        onToggleTheme={toggleTheme}
+        onShowShortcuts={handleToggleHelp}
       />
 
       <DashboardLayout

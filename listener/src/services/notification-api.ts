@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_PAYLOAD_SIZE_BYTES,
 } from '../utils/payload-size-validator';
 import { validateNotificationMetadata } from '../utils/metadata-validator';
+import { NotificationAmplificationGuard } from '../utils/notification-amplification-guard';
 import { ensureNotificationVersion } from '../utils/notification-version';
 import logger from '../utils/logger';
 import {
@@ -31,6 +32,10 @@ const PRIORITY_MAX = 10;
 import { buildRetryStatisticsPayload } from './retry-statistics';
 import { canModifyScheduleStatus } from './schedule-state-machine';
 import { DEFAULT_MAX_SCHEDULING_HORIZON_MS, validateScheduleInput } from './schedule-validator';
+import {
+  DestinationOwnershipError,
+  DestinationService,
+} from './destination-service';
 
 export { InvalidTimezoneError };
 
@@ -87,6 +92,7 @@ export class NotificationAPI {
     private maxSchedulingHorizonMs: number | null = DEFAULT_MAX_SCHEDULING_HORIZON_MS,
     private clock: () => Date = () => new Date(),
     private scheduleAudit?: ScheduleAuditTrail | null,
+    private amplificationGuard: NotificationAmplificationGuard = new NotificationAmplificationGuard(),
   ) {
     if (typeof maxPayloadSizeBytesOrIdempotency === 'number') {
       this.maxPayloadSizeBytes = maxPayloadSizeBytesOrIdempotency;
@@ -104,6 +110,11 @@ export class NotificationAPI {
     this.scheduleAudit = audit;
   }
 
+  /** Attach or replace the destination service used to validate destination ownership. */
+  setDestinationService(service: DestinationService | null): void {
+    this.destinationService = service;
+  }
+
   /**
    * Schedule a notification for future delivery
    * Supports idempotent request handling via idempotency keys
@@ -114,6 +125,36 @@ export class NotificationAPI {
     idempotencyKey?: string,
   ): Promise<number> {
     // Validate input
+    let resolvedDestination: Awaited<ReturnType<DestinationService['resolveOwnedDestination']>> | null =
+      null;
+    if (input.destinationId !== undefined) {
+      if (!this.destinationService) {
+        throw new DestinationOwnershipError(
+          'Destination service is unavailable to verify destination ownership.',
+        );
+      }
+      if (!isNonEmptyString(input.ownerId)) {
+        throw new DestinationOwnershipError(
+          'Authenticated ownerId is required when referencing a destination.',
+        );
+      }
+      resolvedDestination = await this.destinationService.resolveOwnedDestination(
+        input.destinationId,
+        input.ownerId,
+      );
+      const mappedType =
+        resolvedDestination.provider === 'discord'
+          ? NotificationType.DISCORD
+          : resolvedDestination.provider === 'email'
+            ? NotificationType.EMAIL
+            : NotificationType.WEBHOOK;
+      input = {
+        ...input,
+        notificationType: input.notificationType ?? mappedType,
+        targetRecipient: resolvedDestination.targetRecipient || input.targetRecipient,
+      };
+    }
+
     input = {
       ...input,
       recurrence: validateScheduleInput(
@@ -131,6 +172,13 @@ export class NotificationAPI {
     if (!isNonEmptyString(input.targetRecipient)) {
       throw new Error('targetRecipient is required and must be a non-empty string');
     }
+
+    // Apply per-destination limits and equivalent-request protection before
+    // validating or persisting further, so repeated triggers cannot amplify.
+    this.amplificationGuard.check(
+      input.targetRecipient,
+      JSON.stringify([input.targetRecipient, input.notificationType, input.payload]),
+    );
 
     const v = new InputValidator();
     v.check(
@@ -210,15 +258,23 @@ export class NotificationAPI {
 
     const createAndAudit = async (): Promise<number> => {
       const id = await this.repository.create(input, requestId);
+      if (resolvedDestination) {
+        await this.repository.bindDestinationOwnership(
+          id,
+          resolvedDestination.id,
+          resolvedDestination.ownerId,
+        );
+      }
       await this.scheduleAudit?.record({
         scheduledNotificationId: id,
         action: 'CREATED',
-        actor: 'api',
+        actor: input.ownerId ?? 'api',
         toStatus: NotificationStatus.PENDING,
         details: {
           notificationType: input.notificationType,
           eventId: input.eventId ?? null,
           contractAddress: input.contractAddress ?? null,
+          destinationId: resolvedDestination?.id ?? null,
           executeAt: input.executeAt.toISOString(),
         },
       });
