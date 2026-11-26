@@ -100,6 +100,14 @@ pub enum Error {
     NonceExpired = 44,
     /// Triggered when a nonce is bound to a different contract address.
     NonceContractMismatch = 45,
+    /// Triggered when a paginated enumeration request exceeds the maximum
+    /// supported page size (`MAX_ENUMERATION_PAGE_SIZE`).
+    PageLimitExceeded = 46,
+    /// Triggered when the network identifier supplied during initialization or
+    /// validation does not match the expected deployment network.
+    NetworkMismatch = 47,
+    /// Triggered when the network identifier is an empty string.
+    InvalidNetworkId = 48,
     /// Triggered when an operation requires `initialize_admin` to have run first.
     NotInitialized = 46,
     /// Triggered when `initialize_admin` is called more than once.

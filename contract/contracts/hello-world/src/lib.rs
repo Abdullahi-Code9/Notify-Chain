@@ -165,6 +165,11 @@ impl AutoShareContract {
     }
 
     /// Retrieves all AutoShare groups.
+    ///
+    /// # Note
+    /// For large group counts, prefer [`Self::get_all_groups_paged`] to avoid
+    /// exceeding Soroban ledger resource limits. The unbounded form is kept for
+    /// backward compatibility with existing consumers.
     pub fn get_all_groups(env: Env) -> Vec<base::types::AutoShareDetails> {
         autoshare_logic::get_all_groups(env)
     }
@@ -583,11 +588,19 @@ impl AutoShareContract {
     // ============================================================================
 
     /// Returns the full, immutable audit log in append order.
+    ///
+    /// # Note
+    /// For large audit logs, prefer [`Self::get_audit_log_paged`] to avoid
+    /// exceeding Soroban ledger resource limits. The unbounded form is kept for
+    /// backward compatibility with existing consumers.
     pub fn get_audit_log(env: Env) -> Vec<base::types::AuditRecord> {
         autoshare_logic::get_audit_log(env)
     }
 
     /// Returns all audit records for a specific notification identifier.
+    ///
+    /// # Note
+    /// For notifications with many records, prefer [`Self::get_notification_audit_paged`].
     pub fn get_notification_audit(
         env: Env,
         notification_id: BytesN<32>,
@@ -687,6 +700,116 @@ impl AutoShareContract {
     /// Returns the current notification limits.
     pub fn get_notification_limits(env: Env) -> base::types::NotificationLimits {
         autoshare_logic::get_notification_limits(env)
+    }
+
+    // ============================================================================
+    // Bounded Enumeration (Issue #1199)
+    // ============================================================================
+    //
+    // These paginated variants allow callers to read large collections safely.
+    // `page_size` must not exceed `MAX_ENUMERATION_PAGE_SIZE` (100). Requests
+    // for larger pages are rejected with `Error::PageLimitExceeded`.
+    //
+    // All results are deterministic: the same (offset, page_size) inputs
+    // return the same records as long as the ledger state has not changed.
+
+    /// Returns the maximum number of records a single paged call may request.
+    pub fn get_max_enumeration_page_size(_env: Env) -> u32 {
+        autoshare_logic::MAX_ENUMERATION_PAGE_SIZE
+    }
+
+    /// Returns up to `page_size` AutoShare groups starting at `offset` (creation
+    /// order). Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_all_groups_paged(
+        env: Env,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::AutoShareDetails>, base::errors::Error> {
+        autoshare_logic::get_all_groups_paged(env, offset, page_size)
+    }
+
+    /// Returns up to `page_size` audit records starting at `offset` (append
+    /// order). Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_audit_log_paged(
+        env: Env,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::AuditRecord>, base::errors::Error> {
+        autoshare_logic::get_audit_log_paged(env, offset, page_size)
+    }
+
+    /// Returns up to `page_size` payment history records for `user` starting at
+    /// `offset`. Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_user_payment_history_paged(
+        env: Env,
+        user: Address,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::PaymentHistory>, base::errors::Error> {
+        autoshare_logic::get_user_payment_history_paged(env, user, offset, page_size)
+    }
+
+    /// Returns up to `page_size` payment history records for group `id` starting
+    /// at `offset`. Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_group_payment_history_paged(
+        env: Env,
+        id: BytesN<32>,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::PaymentHistory>, base::errors::Error> {
+        autoshare_logic::get_group_payment_history_paged(env, id, offset, page_size)
+    }
+
+    /// Returns up to `page_size` audit records for a specific notification
+    /// starting at `offset`. Rejects requests where `page_size > 100` with
+    /// `PageLimitExceeded`.
+    pub fn get_notification_audit_paged(
+        env: Env,
+        notification_id: BytesN<32>,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::AuditRecord>, base::errors::Error> {
+        autoshare_logic::get_notification_audit_paged(env, notification_id, offset, page_size)
+    }
+
+    // ============================================================================
+    // Network Configuration (Issue #1196)
+    // ============================================================================
+
+    /// Stores the expected Stellar network passphrase for this deployment.
+    ///
+    /// Must be called by the admin. The passphrase is persisted so off-chain
+    /// integrations can detect cross-network mismatches before submitting
+    /// transactions. Calling with the same value twice is a no-op.
+    ///
+    /// Known passphrases:
+    /// - Testnet:   `"Test SDF Network ; September 2015"`
+    /// - Mainnet:   `"Public Global Stellar Network ; September 2015"`
+    /// - Futurenet: `"Test SDF Future Network ; October 2022"`
+    pub fn set_network_id(
+        env: Env,
+        admin: Address,
+        network_passphrase: String,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::set_network_id(env, admin, network_passphrase)
+    }
+
+    /// Returns the network passphrase stored for this deployment, or `None` if
+    /// [`set_network_id`] has not been called.
+    pub fn get_network_id(env: Env) -> Option<String> {
+        autoshare_logic::get_network_id(env)
+    }
+
+    /// Validates that `expected_passphrase` matches the stored network identifier.
+    ///
+    /// Returns `true` when passphrases match, `false` when no passphrase has
+    /// been set yet, and `Err(NetworkMismatch)` when they differ.
+    /// Returns `Err(InvalidNetworkId)` when `expected_passphrase` is empty.
+    pub fn validate_network_id(
+        env: Env,
+        expected_passphrase: String,
+    ) -> Result<bool, base::errors::Error> {
+        autoshare_logic::validate_network_id(env, expected_passphrase)
     }
 
     // ============================================================================
@@ -1167,6 +1290,8 @@ mod tests {
     mod storage_optimization_test;
     mod structured_error_codes_test;
     mod subscription_cancellation_test;
+    mod enumeration_limit_test;
+    mod network_config_test;
     mod template_registry_test;
     mod test_utils_test;
     mod version_test;
