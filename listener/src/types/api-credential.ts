@@ -34,8 +34,8 @@ export interface ApiCredentialRecord {
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
-  /** Optional ISO timestamp after which the key must not authorize requests. */
-  expiresAt?: string | null;
+  /** Owner credential id (or `admin` for static keys); never returned publicly. */
+  ownerId?: string;
 }
 
 /** Public view returned by list / get endpoints — no secret material. */
@@ -61,4 +61,6 @@ export interface CreateApiCredentialInput {
   scopes: ApiScope[];
   /** Optional ISO expiry; omitted keys never expire. */
   expiresAt?: string | null;
+  /** Set by the server from the authenticated principal, never from the body. */
+  ownerId?: string;
 }

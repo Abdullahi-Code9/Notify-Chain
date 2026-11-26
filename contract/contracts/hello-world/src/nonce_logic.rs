@@ -41,6 +41,57 @@ pub fn get_nonce_record(
         .get(&NonceKey::Consumed(signer.clone(), operation, nonce))
 }
 
+/// An authorization is expired once the ledger time is strictly greater than
+/// `valid_until`. At `valid_until == now` it is still valid, matching the
+/// deadline check in [`consume_nonce`].
+pub fn is_authorization_expired(valid_until: u64, now: u64) -> bool {
+    valid_until < now
+}
+
+/// Validates a persisted authorization record before it is relied upon.
+///
+/// Missing records fail with [`Error::NotFound`]; expired records fail with
+/// [`Error::NonceExpired`]. Neither case can authorize a protected operation.
+pub fn require_valid_authorization(
+    env: &Env,
+    signer: &Address,
+    operation: NonceOperation,
+    nonce: u64,
+) -> Result<NonceRecord, Error> {
+    let record = get_nonce_record(env, signer, operation, nonce).ok_or(Error::NotFound)?;
+    if is_authorization_expired(record.valid_until, current_time(env)) {
+        return Err(Error::NonceExpired);
+    }
+    Ok(record)
+}
+
+/// Removes expired consumed-authorization records, up to `max_nonce`.
+///
+/// The signer's expected nonce counter and every still-valid record are left
+/// untouched, so cleanup can never remove an active authorization or make a
+/// previously used nonce replayable. Returns the number of records removed.
+pub fn prune_expired_authorizations(
+    env: &Env,
+    signer: &Address,
+    operation: NonceOperation,
+    max_nonce: u64,
+) -> u32 {
+    let now = current_time(env);
+    let upper_bound = core::cmp::min(max_nonce, get_next_nonce(env, signer, operation));
+    let storage = env.storage().persistent();
+    let mut removed = 0u32;
+
+    for nonce in 0..upper_bound {
+        if let Some(record) = get_nonce_record(env, signer, operation, nonce) {
+            if is_authorization_expired(record.valid_until, now) {
+                storage.remove(&NonceKey::Consumed(signer.clone(), operation, nonce));
+                removed += 1;
+            }
+        }
+    }
+    removed
+}
+
 /// Validates and consumes a nonce for `(signer, operation)`.
 ///
 /// Validation order (first failure wins):
@@ -68,7 +119,7 @@ pub fn consume_nonce(
     }
 
     let now = current_time(env);
-    if valid_until < now {
+    if is_authorization_expired(valid_until, now) {
         return Err(Error::NonceExpired);
     }
     if valid_until > now.saturating_add(MAX_NONCE_VALIDITY_SECONDS) {
@@ -77,6 +128,14 @@ pub fn consume_nonce(
 
     let expected = get_next_nonce(env, signer, operation);
     if nonce < expected || is_nonce_consumed(env, signer, operation, nonce) {
+        // A replay of an already consumed authorization whose freshness window
+        // has since elapsed reports the expired deadline rather than silently
+        // treating the old signature as usable.
+        if let Some(record) = get_nonce_record(env, signer, operation, nonce) {
+            if is_authorization_expired(record.valid_until, now) {
+                return Err(Error::NonceExpired);
+            }
+        }
         return Err(Error::NonceAlreadyUsed);
     }
     if nonce != expected {
