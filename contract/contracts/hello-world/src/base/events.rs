@@ -667,6 +667,8 @@ pub struct OperationCorrelated {
     pub category: NotificationCategory,
     #[topic]
     pub priority: NotificationPriority,
+    /// The locked-in network identifier (SHA-256 of network passphrase).
+    pub network_id: BytesN<32>,
     /// Name of the lifecycle transition (e.g. `notification_scheduled`).
     pub operation: String,
 }

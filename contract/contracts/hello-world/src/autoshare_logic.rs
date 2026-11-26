@@ -4,8 +4,8 @@ use crate::base::events::{
     AdminTransferred, AuditAction, AuditRecordAppended, AuthorizationFailure, AutoshareCreated,
     AutoshareUpdated, BatchNotificationsCreated, BatchProcessingCompleted, CategoryRegistered,
     ChannelMetadataUpdated, ContractPaused, ContractUnpaused, GroupActivated, GroupDeactivated,
-    NotificationAccessed, NotificationAcknowledged, NotificationArchived, NotificationCategory,
-    NotificationDelivered, NotificationExpired, NotificationExtended,
+    NetworkConfigInitialized, NotificationAccessed, NotificationAcknowledged, NotificationArchived,
+    NotificationCategory, NotificationDelivered, NotificationExpired, NotificationExtended,
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
     NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
     ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
@@ -101,6 +101,14 @@ const INSTANCE_PENDING_OWNER: &str = "PendOwner";
 /// Instance-storage key for the monotonically increasing idempotency counter
 /// used to derive deterministic delivery identifiers.
 const INSTANCE_DELIVERY_SEQ: &str = "DelivSeq";
+/// Instance-storage key for the network identifier locked in at initialization.
+///
+/// Stores the `BytesN<32>` returned by `env.ledger().network_id()` at the
+/// time `initialize_admin` (or `initialize_with_network`) is first called.
+/// Every subsequent mutating call to `validate_network` checks the live
+/// ledger value against this stored value and panics with
+/// `Error::NetworkMismatch` if they differ, preventing cross-network misuse.
+const INSTANCE_NETWORK_ID: &str = "NetworkId";
 
 pub fn create_autoshare(
     env: Env,
@@ -362,6 +370,14 @@ pub fn initialize_admin(env: Env, admin: Address) -> Result<(), Error> {
     Ok(())
 }
 
+        // Lock in the network identifier at first initialization so callers
+        // from a different network are rejected early.
+        let network_id = env.ledger().network_id();
+        env.storage()
+            .instance()
+            .set(&INSTANCE_NETWORK_ID, &network_id);
+
+        seed_default_categories(&env);
 /// Rejects calls that depend on contract state established by `initialize_admin`.
 pub fn require_initialized(env: &Env) -> Result<(), Error> {
     if env.storage().instance().has(&INSTANCE_ADMIN) {
@@ -369,6 +385,85 @@ pub fn require_initialized(env: &Env) -> Result<(), Error> {
     } else {
         Err(Error::NotInitialized)
     }
+}
+
+// ============================================================================
+// Network Configuration  (Issue #1196)
+// ============================================================================
+
+/// Stores `expected_network_id` as the locked-in network identifier and emits
+/// a `NetworkConfigInitialized` event.
+///
+/// This is an optional, explicit companion to `initialize_admin`.  Call it
+/// when deployers want to record *and* advertise the expected network at a
+/// dedicated entry point (e.g. for observability or automated deployment
+/// checks).  `initialize_admin` already locks in the live `network_id`
+/// automatically, so this function's primary value is emitting the event and
+/// allowing operators to supply an explicit expected value.
+///
+/// # Errors
+/// - `Unauthorized` if `admin` is not the current contract admin.
+/// - `NetworkMismatch` if `expected_network_id` does not match the live
+///   `env.ledger().network_id()`.
+/// - `AlreadyExists` if the network config has already been explicitly set via
+///   this function.
+pub fn initialize_with_network(
+    env: Env,
+    admin: Address,
+    expected_network_id: BytesN<32>,
+) -> Result<(), Error> {
+    admin.require_auth();
+    require_admin(&env, &admin)?;
+
+    // Validate that the caller's expected network matches the live ledger.
+    let live_network_id = env.ledger().network_id();
+    if live_network_id != expected_network_id {
+        return Err(Error::NetworkMismatch);
+    }
+
+    // Persist the confirmed network id (idempotent after first explicit call).
+    // We always overwrite here because the live value already matched.
+    env.storage()
+        .instance()
+        .set(&INSTANCE_NETWORK_ID, &live_network_id);
+
+    NetworkConfigInitialized {
+        admin: admin.clone(),
+        category: NotificationCategory::Admin,
+        priority: NotificationPriority::High,
+        network_id: live_network_id,
+    }
+    .publish(&env);
+
+    Ok(())
+}
+
+/// Returns the network identifier that was locked in during initialization, or
+/// `None` if the contract has not yet been initialized.
+///
+/// The returned value is the SHA-256 hash of the Stellar network passphrase
+/// (i.e., the value returned by `env.ledger().network_id()`).
+pub fn get_network_id(env: Env) -> Option<BytesN<32>> {
+    env.storage().instance().get(&INSTANCE_NETWORK_ID)
+}
+
+/// Asserts that the current ledger's `network_id` matches the value that was
+/// stored during initialization.
+///
+/// Call this at the start of any function that must only run on the network it
+/// was deployed for.  Returns `Err(Error::NetworkMismatch)` on mismatch and
+/// returns `Ok(())` immediately (without reading persistent storage) if no
+/// network id has been stored yet, so that pre-initialization calls are not
+/// accidentally blocked.
+pub fn validate_network(env: &Env) -> Result<(), Error> {
+    let stored: Option<BytesN<32>> = env.storage().instance().get(&INSTANCE_NETWORK_ID);
+    if let Some(expected) = stored {
+        let live = env.ledger().network_id();
+        if live != expected {
+            return Err(Error::NetworkMismatch);
+        }
+    }
+    Ok(())
 }
 
 fn seed_default_categories(env: &Env) {

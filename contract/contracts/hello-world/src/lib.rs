@@ -73,6 +73,27 @@ impl AutoShareContract {
         autoshare_logic::initialize_admin(env, admin).unwrap();
     }
 
+    /// Explicitly locks in and validates the expected Stellar network.
+    ///
+    /// Pass the SHA-256 hash of the network passphrase (the value returned by
+    /// `env.ledger().network_id()` on the target network).  Returns
+    /// `NetworkMismatch` if `expected_network_id` does not match the live
+    /// ledger value, preventing mis-deployment across networks.
+    /// Emits `NetworkConfigInitialized` on success.
+    pub fn initialize_with_network(
+        env: Env,
+        admin: Address,
+        expected_network_id: BytesN<32>,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::initialize_with_network(env, admin, expected_network_id)
+    }
+
+    /// Returns the network identifier (SHA-256 of the network passphrase) that
+    /// was locked in during initialization, or `None` before first init.
+    pub fn get_network_id(env: Env) -> Option<BytesN<32>> {
+        autoshare_logic::get_network_id(env)
+    }
+
     /// Pauses the contract. Only admin can call.
     pub fn pause(env: Env, admin: Address) -> Result<(), base::errors::Error> {
         autoshare_logic::pause(env, admin)
@@ -1134,6 +1155,7 @@ mod tests {
     mod notification_test;
     mod notification_validation_test;
     mod notification_version_test;
+    mod network_config_test;
     mod nonce_replay_test;
     mod ownership_transfer_test;
     mod pause_test;
