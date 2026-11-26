@@ -222,7 +222,9 @@ Open [http://localhost:3000](http://localhost:3000) when you work on analytics U
 ## 8. Environment variables
 
 - Listener: see `listener/.env.example` and [ENVIRONMENT_VARIABLES_AND_SECRETS.md](../ENVIRONMENT_VARIABLES_AND_SECRETS.md)
-- Dashboard: `VITE_EVENTS_API_URL` (events API base URL)
+- Dashboard: `VITE_EVENTS_API_URL` (events API base URL) and
+  `VITE_STELLAR_NETWORK`; see [Stellar Network Configuration](./STELLAR_NETWORK_CONFIGURATION.md)
+  for Testnet and Mainnet examples.
 
 ---
 

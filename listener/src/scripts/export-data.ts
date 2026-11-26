@@ -29,6 +29,7 @@ import * as dotenv from 'dotenv';
 import { Database } from '../database/database';
 import { DataExportService, DataExportOptions } from '../services/data-export-service';
 import logger from '../utils/logger';
+import { resolveSafePath } from '../utils/safe-path';
 
 dotenv.config();
 
@@ -148,6 +149,22 @@ async function run(): Promise<void> {
     process.exit(0);
   }
 
+  // #1209: user-supplied output paths must stay inside the approved export
+  // directory. The default is the working directory; deployments can narrow it
+  // with EXPORT_OUTPUT_DIR.
+  const exportRoot = process.env.EXPORT_OUTPUT_DIR
+    ? path.resolve(process.env.EXPORT_OUTPUT_DIR)
+    : process.cwd();
+  let resolvedOutputPath: string | undefined;
+  if (outputPath) {
+    try {
+      resolvedOutputPath = resolveSafePath(outputPath, exportRoot);
+    } catch (error) {
+      console.error(`[ERROR] Invalid --output path: ${(error as Error).message}`);
+      process.exit(1);
+    }
+  }
+
   const databasePath =
     dbPath || process.env.DATABASE_PATH || './data/notifications.db';
 
@@ -170,8 +187,8 @@ async function run(): Promise<void> {
       outputContent = JSON.stringify(result, null, 2);
     }
 
-    if (outputPath) {
-      const resolvedPath = path.resolve(outputPath);
+    if (resolvedOutputPath) {
+      const resolvedPath = resolvedOutputPath;
       const parentDir = path.dirname(resolvedPath);
       if (!fs.existsSync(parentDir)) {
         fs.mkdirSync(parentDir, { recursive: true });

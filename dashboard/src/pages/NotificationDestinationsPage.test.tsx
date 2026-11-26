@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { NotificationDestinationsPage } from './NotificationDestinationsPage';
-import { DestinationApiError, type DestinationsClient } from '../services/destinationsApi';
+import {
+  DestinationApiError,
+  createHttpDestinationsClient,
+  type DestinationsClient,
+} from '../services/destinationsApi';
 import type { DestinationUpdate, NotificationDestination } from '../types/destination';
 import { maskSecret, validateDestination } from '../utils/destinationValidation';
 
@@ -241,5 +245,50 @@ describe('destination validation helpers (#1107)', () => {
     expect(
       validateDestination('telegram', true, { chatId: 'x' }, { botToken: '123456:ABCDEFGH' }, {}),
     ).toHaveProperty('chatId');
+  });
+});
+
+describe('destination ownership display & HTTP client', () => {
+  it('displays owner badge when destination includes ownerId', async () => {
+    const owned = makeDestinations().map((d) => ({ ...d, ownerId: 'credential:abc123' }));
+    await renderPage(makeClient({ list: jest.fn(async () => owned) }));
+    expect(screen.getByTestId('owner-webhook-main')).toHaveTextContent('Owner: credential:abc123');
+  });
+
+  it('attaches X-API-Key and supports create/get/remove on HTTP client', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ destinations: [] }),
+    })) as unknown as typeof fetch;
+
+    const client = createHttpDestinationsClient('http://localhost:8787', fetchMock, {
+      apiKey: 'nck_test_key',
+    });
+
+    await client.list();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8787/api/destinations',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'X-API-Key': 'nck_test_key' }),
+      }),
+    );
+
+    await client.create?.({
+      provider: 'webhook',
+      displayName: 'New Hook',
+      settings: { url: 'https://example.com/new' },
+      secrets: { signingSecret: 'secret-123456' },
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://localhost:8787/api/destinations',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    await client.remove?.('dest-1');
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'http://localhost:8787/api/destinations/dest-1',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
   });
 });

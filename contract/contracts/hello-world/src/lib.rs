@@ -49,13 +49,28 @@ impl AutoShareContract {
         VERSION
     }
 
+    /// Returns a consistent, read-only snapshot of related contract state.
+    ///
+    /// See `docs/CONTRACT_STATE_SNAPSHOT.md` for the meaning of every field.
+    /// This function performs no storage writes and emits no events.
+    pub fn get_state_snapshot(env: Env) -> base::types::ContractStateSnapshot {
+        base::types::ContractStateSnapshot {
+            admin: autoshare_logic::get_admin(env.clone()).ok(),
+            pending_owner: autoshare_logic::get_pending_owner(env.clone()),
+            paused: autoshare_logic::get_paused_status(&env),
+            schema_version: autoshare_logic::get_schema_version(env.clone()),
+            notification_version: autoshare_logic::get_notification_version(env.clone()),
+            limits: autoshare_logic::get_notification_limits(env),
+        }
+    }
+
     // ============================================================================
     // Admin Management
     // ============================================================================
 
     /// Initializes the contract admin. Can only be called once.
     pub fn initialize_admin(env: Env, admin: Address) {
-        autoshare_logic::initialize_admin(env, admin);
+        autoshare_logic::initialize_admin(env, admin).unwrap();
     }
 
     /// Pauses the contract. Only admin can call.
@@ -917,6 +932,40 @@ impl AutoShareContract {
         nonce_logic::get_nonce_record(&env, &signer, operation, nonce)
     }
 
+    /// Returns `true` when a persisted authorization record has expired.
+    ///
+    /// Missing records fail with `NotFound` instead of being treated as valid.
+    pub fn is_authorization_expired(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        nonce: u64,
+    ) -> Result<bool, base::errors::Error> {
+        let record = nonce_logic::require_valid_authorization(
+            &env,
+            &signer,
+            operation,
+            nonce,
+        );
+        match record {
+            Ok(_) => Ok(false),
+            Err(base::errors::Error::NonceExpired) => Ok(true),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Removes only expired authorization records up to `max_nonce`.
+    ///
+    /// Active records and the next-nonce counter are never modified.
+    pub fn prune_expired_authorizations(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        max_nonce: u64,
+    ) -> u32 {
+        nonce_logic::prune_expired_authorizations(&env, &signer, operation, max_nonce)
+    }
+
     /// Replay-protected variant of [`Self::pause`].
     ///
     /// The admin's signature covers `nonce`, `contract` and `valid_until`
@@ -1060,6 +1109,7 @@ pub mod test_utils;
 #[cfg(test)]
 mod tests {
     mod access_control_test;
+    mod event_payload_consistency_test;
     mod access_log_test;
     mod archive_notification_test;
     mod audit_log_test;
@@ -1071,10 +1121,13 @@ mod tests {
     mod channel_metadata_test;
     mod channel_subscription_test;
     mod clock_test;
+    mod event_compatibility_test;
     mod event_regression_test;
+    mod expired_authorization_test;
     mod expiration_test;
     mod extended_coverage_test;
     mod fuzz_test;
+    mod initialization_state_test;
     mod metadata_validation_test;
     mod mock_token_test;
     mod notification_lifetime_test;
@@ -1088,8 +1141,9 @@ mod tests {
     mod preferences_test;
     mod revocation_test;
     mod schema_version_test;
-    mod storage_migration_test;
+    mod state_snapshot_test;
     mod storage_optimization_test;
+    mod structured_error_codes_test;
     mod subscription_cancellation_test;
     mod template_registry_test;
     mod test_utils_test;

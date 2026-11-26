@@ -1,4 +1,4 @@
-use soroban_sdk::{contractevent, contracttype, Address, BytesN, String, Vec};
+use soroban_sdk::{contractevent, contracttype, Address, BytesN, Env, String, Vec};
 
 /// High-level notification category attached to every emitted event.
 ///
@@ -647,34 +647,48 @@ pub struct StorageMigrationStarted {
     /// Admin address that triggered the migration.
     #[topic]
     pub admin: Address,
+// Operation correlation (issue #1194)
+// ============================================================================
+
+/// Published alongside an entity's lifecycle events. All state transitions for
+/// the same entity share the entity's unique 32-byte identifier as their
+/// `correlation_id`, while different entities can never share one by accident.
+///
+/// This is a separate event type: existing event consumers continue to see the
+/// original events unchanged. Consumers that need end-to-end tracing can group
+/// by `correlation_id` and read `operation` for the transition name.
+#[contractevent(data_format = "single-value")]
+#[derive(Clone)]
+pub struct OperationCorrelated {
+    /// Identifier shared by all events in one entity's operation chain.
+    #[topic]
+    pub correlation_id: BytesN<32>,
     #[topic]
     pub category: NotificationCategory,
     #[topic]
     pub priority: NotificationPriority,
-    /// Storage version being migrated away from.
-    pub from_version: u32,
-    /// Storage version being migrated to.
-    pub to_version: u32,
+    /// Name of the lifecycle transition (e.g. `notification_scheduled`).
+    pub operation: String,
 }
 
-/// Emitted when a storage schema migration completes successfully.
-///
-/// After this event the contract state is fully consistent with `to_version`
-/// and off-chain consumers may resume normal indexing.
-#[contractevent]
-#[derive(Clone)]
-pub struct StorageMigrationCompleted {
-    /// Admin address that triggered the migration.
-    #[topic]
-    pub admin: Address,
-    #[topic]
-    pub category: NotificationCategory,
-    #[topic]
-    pub priority: NotificationPriority,
-    /// Storage version migrated away from.
-    pub from_version: u32,
-    /// Storage version now active.
-    pub to_version: u32,
-    /// Ledger timestamp when migration completed.
-    pub migrated_at: u64,
+/// Derives the stable correlation identifier for an entity's event chain.
+pub fn correlation_id_for(entity_id: &BytesN<32>) -> BytesN<32> {
+    entity_id.clone()
+}
+
+/// Emits the correlation metadata for a lifecycle transition.
+pub fn publish_operation_correlation(
+    env: &Env,
+    entity_id: &BytesN<32>,
+    operation: &str,
+    category: NotificationCategory,
+    priority: NotificationPriority,
+) {
+    OperationCorrelated {
+        correlation_id: correlation_id_for(entity_id),
+        category,
+        priority,
+        operation: String::from_str(env, operation),
+    }
+    .publish(env);
 }

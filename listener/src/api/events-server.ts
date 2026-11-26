@@ -8,6 +8,13 @@ import { PreferencesUpdateInput } from '../types/preferences';
 import { NotificationAPI } from '../services/notification-api';
 import { ApiCredentialService } from '../services/api-credential-service';
 import { handleCredentialRoutes } from './credentials-api';
+import {
+  DestinationNotFoundError,
+  DestinationOwnershipError,
+  DestinationService,
+  DestinationValidationError,
+} from '../services/destination-service';
+import { handleDestinationRoutes, resolveDestinationOwnerId } from './destinations-api';
 import { authorizeRequest, type AuthPrincipal } from './api-key-auth';
 import { NotificationType } from '../types/scheduled-notification';
 import { ScheduleValidationError, toScheduleValidationResponse } from '../services/schedule-validator';
@@ -79,6 +86,7 @@ import { ValidationError, validationErrorBody } from '../utils/validation';
 import { ResponseTimeMiddleware } from '../middleware/response-time';
 import { addSecurityHeaders } from '../middleware/security-headers';
 import { DEFAULT_MAX_BODY_BYTES, enforceBodyLimit } from '../middleware/body-limit';
+import { validateRequestFraming } from '../middleware/request-framing';
 import { sanitizeUrl } from '../utils/logger';
 import { sanitizeCredentials } from '../utils/credential-sanitizer';
 import { DiscordNotificationProvider } from '../services/providers/discord-provider';
@@ -100,6 +108,8 @@ export interface EventsServerOptions {
   apiKeys?: Array<{ key: string; name?: string }>;
   notificationAPI?: NotificationAPI | null;
   credentialService?: ApiCredentialService | null;
+  destinationService?: DestinationService | null;
+  requireDestinationAuth?: boolean;
   /** Idempotency-Key replay protection for mutating endpoints (webhooks, schedule). */
   idempotencyService?: IdempotencyKeyService | null;
   templateService?: NotificationTemplateService | null;
@@ -481,6 +491,10 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
     maxEntries: options.webhookReplayCacheMaxEntries ?? 10_000,
   });
   const webhookAuditService = new SecurityAuditService(getDatabase());
+  const destinationService =
+    options.destinationService !== undefined
+      ? options.destinationService
+      : new DestinationService({ db: getDatabase(), auditService: webhookAuditService });
   // Response-time tracking (#491)
   const responseTime =
     options.responseTimeMiddleware !== undefined && options.responseTimeMiddleware !== null
@@ -500,6 +514,21 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
     // Start response-time tracking for this request (#491)
     responseTime.start(res);
+
+    // Request framing (#1208): reject ambiguous Content-Length /
+    // Transfer-Encoding combinations before any body is read so proxies and
+    // this server always agree on request boundaries.
+    const framing = validateRequestFraming(req, res);
+    if (!framing.allowed) {
+      logger.warn('Rejected ambiguous HTTP request framing', {
+        requestId,
+        correlationId,
+        method: req.method,
+        url: sanitizeUrl(req.url ?? '/'),
+        reason: framing.reason,
+      });
+      return;
+    }
 
     // Request body size limit.
     //
@@ -623,6 +652,17 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
       await handleCredentialRoutes(req, res, url, {
         credentialService: options.credentialService,
         apiKeys: options.apiKeys,
+      })
+    ) {
+      return;
+    }
+
+    if (
+      await handleDestinationRoutes(req, res, url, {
+        destinationService,
+        credentialService: options.credentialService,
+        apiKeys: options.apiKeys,
+        requireAuthentication: options.requireDestinationAuth,
       })
     ) {
       return;
@@ -1225,15 +1265,63 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
 
         try {
           const hasLocalSchedule = data.timeZone != null || data.localDateTime != null;
-          if ((!data.executeAt && !hasLocalSchedule) || !data.payload || !data.targetRecipient) {
+          const hasDestinationRef = typeof data.destinationId === 'string' && data.destinationId.trim().length > 0;
+          if ((!data.executeAt && !hasLocalSchedule) || !data.payload || (!data.targetRecipient && !hasDestinationRef)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
-                error: 'Missing required fields: executeAt (or timeZone + localDateTime), payload, targetRecipient',
+                error: 'Missing required fields: executeAt (or timeZone + localDateTime), payload, targetRecipient (or destinationId)',
                 code: 'MISSING_FIELDS',
               }),
             );
             return;
+          }
+
+          let scheduleOwnerId: string | undefined;
+          let resolvedTargetRecipient: string = data.targetRecipient;
+          let resolvedNotificationType: NotificationType | undefined = data.notificationType;
+          let validatedDestinationId: string | undefined;
+
+          if (data.destinationId != null) {
+            if (typeof data.destinationId !== 'string' || !data.destinationId.trim()) {
+              sendErr(res, 400, 'destinationId must be a non-empty string', ErrorCode.BAD_REQUEST);
+              return;
+            }
+            const destAuth = await authorizeRequest(req, {
+              apiKeys: options.apiKeys,
+              credentialService: options.credentialService,
+              requiredScopes: ['webhooks:manage'],
+              requireAuthentication: options.requireDestinationAuth,
+            });
+            if (!destAuth.allowed) {
+              if (destAuth.status === 401) res.setHeader('WWW-Authenticate', 'ApiKey header="X-API-Key"');
+              sendErr(res, destAuth.status, destAuth.message, destAuth.code, destAuth.details);
+              return;
+            }
+            const resolvedOwner = resolveDestinationOwnerId(destAuth.principal, req);
+            if (!resolvedOwner) {
+              sendErr(res, 401, 'Unable to resolve destination owner', ErrorCode.UNAUTHORIZED);
+              return;
+            }
+            if (!destinationService) {
+              sendErr(res, 503, 'Destination service is not configured', ErrorCode.SERVICE_UNAVAILABLE);
+              return;
+            }
+            const ownedDestination = await destinationService.resolveOwnedDestination(
+              data.destinationId.trim(),
+              resolvedOwner,
+            );
+            scheduleOwnerId = ownedDestination.ownerId;
+            validatedDestinationId = ownedDestination.id;
+            resolvedTargetRecipient = ownedDestination.targetRecipient;
+            if (!resolvedNotificationType) {
+              resolvedNotificationType =
+                ownedDestination.provider === 'discord'
+                  ? NotificationType.DISCORD
+                  : ownedDestination.provider === 'email'
+                    ? NotificationType.EMAIL
+                    : NotificationType.WEBHOOK;
+            }
           }
 
           let executeAt: Date;
@@ -1307,8 +1395,8 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           }> => {
             const notificationId = await options.notificationAPI!.scheduleNotification({
               payload: data.payload,
-              notificationType: data.notificationType || NotificationType.DISCORD,
-              targetRecipient: data.targetRecipient,
+              notificationType: resolvedNotificationType || NotificationType.DISCORD,
+              targetRecipient: resolvedTargetRecipient,
               executeAt,
               timezone,
               expiresAt: data.expiresAt,
@@ -1318,6 +1406,8 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
               contractAddress: data.contractAddress,
               metadata: data.metadata,
               recurrence: data.recurrence,
+              ...(validatedDestinationId ? { destinationId: validatedDestinationId } : {}),
+              ...(scheduleOwnerId ? { ownerId: scheduleOwnerId } : {}),
             });
             logger.info('Notification scheduled via API', {
               requestId,
@@ -1368,6 +1458,18 @@ export function createEventsServer(options: EventsServerOptions): http.Server {
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(scheduled));
         } catch (error) {
+          if (error instanceof DestinationOwnershipError) {
+            sendErr(res, 403, error.message, ErrorCode.FORBIDDEN);
+            return;
+          }
+          if (error instanceof DestinationNotFoundError) {
+            sendErr(res, 404, error.message, ErrorCode.NOT_FOUND);
+            return;
+          }
+          if (error instanceof DestinationValidationError) {
+            sendErr(res, 422, error.message, ErrorCode.UNPROCESSABLE);
+            return;
+          }
           if (error instanceof ScheduleValidationError) {
             const response = toScheduleValidationResponse(error);
             res.writeHead(response.statusCode, { 'Content-Type': 'application/json' });

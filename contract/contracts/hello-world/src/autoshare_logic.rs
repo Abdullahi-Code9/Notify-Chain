@@ -8,8 +8,8 @@ use crate::base::events::{
     NotificationDelivered, NotificationExpired, NotificationExtended,
     NotificationLimitsConfigured, NotificationPriority, NotificationRecalled, NotificationRevoked,
     NotificationScheduled, OwnershipTransferInitiated, OwnershipTransferred,
-    ScheduledNotificationCancelled, SchemaVersionSet, StorageMigrationCompleted,
-    StorageMigrationStarted, SubscriptionCancelled, Withdrawal,
+    ScheduledNotificationCancelled, SchemaVersionSet, SubscriptionCancelled, Withdrawal,
+    publish_operation_correlation,
 };
 use crate::base::metadata_validation::{validate_metadata, NotificationMetadata};
 use crate::base::types::{
@@ -111,6 +111,7 @@ pub fn create_autoshare(
     payment_token: Address,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
 
     // Check if contract is paused
     if get_paused_status(&env) {
@@ -336,23 +337,37 @@ pub fn add_group_member(
 // Admin Management
 // ============================================================================
 
-pub fn initialize_admin(env: Env, admin: Address) {
+pub fn initialize_admin(env: Env, admin: Address) -> Result<(), Error> {
     admin.require_auth();
 
-    // Only set if not already initialized (instance storage)
-    if !env.storage().instance().has(&INSTANCE_ADMIN) {
-        env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    // Initialization is a one-time, authorized workflow. A repeat by the same
+    // admin is a safe no-op; any attempt to replace that admin must fail
+    // explicitly before touching state.
+    if let Some(current_admin) = env.storage().instance().get::<_, Address>(&INSTANCE_ADMIN) {
+        if current_admin == admin {
+            return Ok(());
+        }
+        return Err(Error::AlreadyInitialized);
+    }
 
-        // Initialize default usage fee (10 tokens per usage) in instance storage
-        env.storage().instance().set(&INSTANCE_FEE, &10u32);
+    env.storage().instance().set(&INSTANCE_ADMIN, &admin);
+    env.storage().instance().set(&INSTANCE_FEE, &10u32);
 
-        // Initialize empty supported tokens list in instance storage
-        let empty_tokens: Vec<Address> = Vec::new(&env);
-        env.storage()
-            .instance()
-            .set(&INSTANCE_TOKENS, &empty_tokens);
+    let empty_tokens: Vec<Address> = Vec::new(&env);
+    env.storage()
+        .instance()
+        .set(&INSTANCE_TOKENS, &empty_tokens);
 
-        seed_default_categories(&env);
+    seed_default_categories(&env);
+    Ok(())
+}
+
+/// Rejects calls that depend on contract state established by `initialize_admin`.
+pub fn require_initialized(env: &Env) -> Result<(), Error> {
+    if env.storage().instance().has(&INSTANCE_ADMIN) {
+        Ok(())
+    } else {
+        Err(Error::NotInitialized)
     }
 }
 
@@ -430,6 +445,7 @@ fn publish_authorization_failure(env: &Env, caller: &Address, action: &str) {
 }
 
 fn require_admin(env: &Env, caller: &Address) -> Result<(), Error> {
+    require_initialized(env)?;
     let admin: Address = env
         .storage()
         .instance()
@@ -1260,6 +1276,7 @@ pub fn schedule_notification(
     priority: NotificationPriority,
 ) -> Result<(), Error> {
     creator.require_auth();
+    require_initialized(&env)?;
 
     if get_paused_status(&env) {
         return Err(Error::ContractPaused);
@@ -1325,6 +1342,13 @@ pub fn schedule_notification(
         creator.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_scheduled",
+        NotificationCategory::Notification,
+        priority,
+    );
     NotificationScheduled {
         creator,
         category: NotificationCategory::Notification,
@@ -1423,6 +1447,13 @@ pub fn expire_notification(env: Env, notification_id: BytesN<32>) -> Result<(), 
         env.current_contract_address(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_expired",
+        NotificationCategory::Notification,
+        NOTIFICATION_PRIORITY,
+    );
     NotificationExpired {
         notification_id,
         category: NotificationCategory::Notification,
@@ -1502,6 +1533,13 @@ pub fn cancel_notification(
         caller.clone(),
     );
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_cancelled",
+        NotificationCategory::Notification,
+        NotificationPriority::Low,
+    );
     ScheduledNotificationCancelled {
         caller,
         category: NotificationCategory::Notification,
@@ -1639,6 +1677,13 @@ pub fn batch_schedule_notifications(
 
         append_audit_record(&env, id.clone(), AuditAction::Created, creator.clone());
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_scheduled",
+            NotificationCategory::Notification,
+            priority,
+        );
         NotificationScheduled {
             creator: creator.clone(),
             category: NotificationCategory::Notification,
@@ -1723,6 +1768,13 @@ pub fn confirm_notification_delivery(
     // concurrent duplicate request observes the recorded state and is rejected.
     record_delivery_idempotency(&env, &idempotency_key, &notification_id, &caller);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_delivered",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationDelivered {
         notification_id: notification_id.clone(),
         delivered_by: caller,
@@ -1844,6 +1896,13 @@ pub fn recall_notification(
 
     env.storage().persistent().set(&key, &notification);
 
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_recalled",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRecalled {
         notification_id,
         recalled_by: caller,
@@ -1899,6 +1958,13 @@ pub fn revoke_notification(
     env.storage().persistent().set(&key, &notification);
 
     // Emit revocation event
+    publish_operation_correlation(
+        &env,
+        &notification_id,
+        "notification_revoked",
+        NotificationCategory::Notification,
+        NotificationPriority::High,
+    );
     NotificationRevoked {
         notification_id,
         revoked_by: caller,
@@ -2146,6 +2212,13 @@ pub fn acknowledge_notifications(
             return Err(Error::NotificationExpired);
         }
 
+        publish_operation_correlation(
+            &env,
+            &id,
+            "notification_acknowledged",
+            NotificationCategory::Notification,
+            NOTIFICATION_PRIORITY,
+        );
         NotificationAcknowledged {
             notification_id: id,
             acknowledger: caller.clone(),
@@ -2268,19 +2341,6 @@ pub fn configure_notification_limits(
     admin.require_auth();
     require_admin(&env, &admin)?;
 
-    // Verify caller is admin
-    let current_admin = get_admin(env.clone())?;
-    if admin != current_admin {
-        AuthorizationFailure {
-            caller: admin,
-            category: NotificationCategory::Admin,
-            priority: NotificationPriority::Critical,
-            action: String::from_str(&env, "configure_notification_limits"),
-        }
-        .publish(&env);
-        return Err(Error::Unauthorized);
-    }
-
     // Validate that min <= max expiration
     if min_expiration_seconds > max_expiration_seconds {
         return Err(Error::InvalidExpirationDuration);
@@ -2357,11 +2417,7 @@ const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 1;
 /// - [`Error::InvalidInput`]  – `schema_version` is outside the supported range.
 pub fn set_schema_version(env: Env, admin: Address, schema_version: u32) -> Result<(), Error> {
     admin.require_auth();
-
-    let stored_admin = get_admin(env.clone())?;
-    if admin != stored_admin {
-        return Err(Error::Unauthorized);
-    }
+    require_admin(&env, &admin)?;
 
     if schema_version < MIN_SUPPORTED_SCHEMA_VERSION
         || schema_version > MAX_SUPPORTED_SCHEMA_VERSION
@@ -2472,6 +2528,7 @@ pub fn update_channel_metadata(
 
     let group = get_autoshare(env.clone(), channel_id.clone())?;
     if caller != group.creator {
+        publish_authorization_failure(&env, &caller, "update_channel_metadata");
         return Err(Error::Unauthorized);
     }
 

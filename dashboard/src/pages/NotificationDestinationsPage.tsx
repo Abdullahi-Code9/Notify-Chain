@@ -142,6 +142,11 @@ function DestinationCard({ destination, client, onUpdated }: DestinationCardProp
             {destination.displayName || PROVIDER_LABELS[destination.provider]}
           </h2>
           <p className="destination-card__provider">{PROVIDER_LABELS[destination.provider]}</p>
+          {destination.ownerId && (
+            <p className="destination-card__owner" data-testid={`owner-${destination.id}`}>
+              Owner: {destination.ownerId}
+            </p>
+          )}
         </div>
         <span
           className={`destination-status ${STATUS_BADGE[destination.status]}`}
