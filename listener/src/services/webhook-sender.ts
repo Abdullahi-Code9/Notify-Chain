@@ -16,6 +16,11 @@ export interface WebhookSendOptions {
    * @default false
    */
   skipDnsGuard?: boolean;
+  /**
+   * Maximum number of redirects followed. Each redirect target is validated
+   * independently before it is contacted. @default 3
+   */
+  maxRedirects?: number;
 }
 
 /** Maximum number of redirects followed for a single outbound webhook. */
@@ -100,6 +105,26 @@ export async function sendWebhook(
           ...(opts.headers ?? {}),
         },
         body: JSON.stringify(payload),
+        // Redirects are handled here so every target is validated, rather
+        // than letting the HTTP client follow an untrusted Location header.
+        redirect: 'manual',
+        signal: controller.signal as any,
+      });
+
+      const location = response.headers.get('location');
+      if (!location || response.status < 300 || response.status >= 400 || !isRedirect(response.status)) {
+        return response;
+      }
+      if (hop >= maxRedirects) {
+        return response;
+      }
+
+      const redirectUrl = new URL(location, currentUrl).toString();
+      // Independent validation: a redirect to a private address is blocked
+      // even when the original destination was public.
+      await assertSafeDestination(redirectUrl, opts);
+      void response.body?.cancel().catch(() => {});
+      currentUrl = redirectUrl;
         signal: controller.signal as any,
         redirect: 'manual',
       });
@@ -125,6 +150,32 @@ export async function sendWebhook(
     }
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+async function assertSafeDestination(
+  url: string,
+  opts: WebhookSendOptions,
+): Promise<void> {
+  if (opts.skipDnsGuard) return;
+
+  const guardResult = await guardWebhookUrl(url, opts.dnsResolver);
+  if (!guardResult.safe) {
+    logger.warn('Webhook delivery blocked by DNS rebinding guard', {
+      url,
+      hostname: guardResult.hostname,
+      blockedAddress: guardResult.blockedAddress,
+      reason: guardResult.reason,
+    });
+    throw new DnsRebindingError(
+      guardResult.reason ?? `Webhook destination blocked: ${url}`,
+      guardResult.hostname,
+      guardResult.blockedAddress,
+    );
   }
 }
 
