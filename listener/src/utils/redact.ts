@@ -106,6 +106,8 @@ const STELLAR_SECRET_SEED_RE = /\bS[A-Z2-7]{55}\b/g;
 
 // Prefixed webhook secrets (whsec_...) and hex HMAC signatures (sha256=...).
 const WHSEC_RE = /\bwhsec_[A-Za-z0-9+/=_-]+/g;
+// Scoped API keys: nck_<id>_<secret>.
+const NCK_KEY_RE = /\bnck_[0-9a-f]{16}_[A-Za-z0-9_-]{43}\b/g;
 const HMAC_SIGNATURE_RE = /\bsha(?:1|256|512)=[0-9a-f]{16,}/gi;
 
 /** Guard against deeply nested or cyclic structures in the logging path. */
@@ -145,6 +147,7 @@ export function redactString(value: string): string {
   result = result.replace(BEARER_HEADER_RE, `$1 ${REDACTED_PLACEHOLDER}`);
   result = result.replace(STELLAR_SECRET_SEED_RE, REDACTED_PLACEHOLDER);
   result = result.replace(WHSEC_RE, REDACTED_PLACEHOLDER);
+  result = result.replace(NCK_KEY_RE, REDACTED_PLACEHOLDER);
   result = result.replace(HMAC_SIGNATURE_RE, REDACTED_PLACEHOLDER);
   return result;
 }

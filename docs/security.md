@@ -277,6 +277,20 @@ We follow a 90-day disclosure window, aligned with the industry standard.
 
 ---
 
+## Contract Configuration Authorization
+
+Configuration mutations are protected by an explicit caller check in `autoshare_logic`:
+
+| Function | Required role | Failure |
+|---|---|---|
+| `initialize_admin` | Caller authorizes as the new admin; a repeat by the same admin is a safe no-op, a different admin is rejected | `AlreadyInitialized` |
+| `register_category`, `add_supported_token`, `remove_supported_token`, `set_usage_fee`, `configure_notification_limits`, `set_schema_version`, `transfer_admin`, `initiate_ownership_transfer`, `pause`, `unpause`, `withdraw` | Current admin (`require_admin`) | `Unauthorized`, plus an `AuthorizationFailure` event |
+| `update_channel_metadata`, `update_members`, `add_group_member`, `deactivate_group`, `activate_group` | Channel creator / group owner | `Unauthorized` |
+| `register_template`, `update_template` | Template owner (`creator`); `update_template` requires the stored owner | `Unauthorized` |
+| `set_preferences`, `set_channel_preference`, `set_category_preference`, `reset_preferences` | Recipient controls its own preferences | `Unauthorized` |
+
+All checks run **before** any storage mutation. A rejected call leaves configuration and other state unchanged. Protected calls also require `initialize_admin` to have completed; before initialization they fail with `NotInitialized`.
+
 ## Reference Links
 
 - CI workflow definition: [`.github/workflows/ci.yml`](file:///c:/Users/USA/Documents/Osuocha/Notify-Chain/.github/workflows/ci.yml)

@@ -49,13 +49,49 @@ impl AutoShareContract {
         VERSION
     }
 
+    /// Returns a consistent, read-only snapshot of related contract state.
+    ///
+    /// See `docs/CONTRACT_STATE_SNAPSHOT.md` for the meaning of every field.
+    /// This function performs no storage writes and emits no events.
+    pub fn get_state_snapshot(env: Env) -> base::types::ContractStateSnapshot {
+        base::types::ContractStateSnapshot {
+            admin: autoshare_logic::get_admin(env.clone()).ok(),
+            pending_owner: autoshare_logic::get_pending_owner(env.clone()),
+            paused: autoshare_logic::get_paused_status(&env),
+            schema_version: autoshare_logic::get_schema_version(env.clone()),
+            notification_version: autoshare_logic::get_notification_version(env.clone()),
+            limits: autoshare_logic::get_notification_limits(env),
+        }
+    }
+
     // ============================================================================
     // Admin Management
     // ============================================================================
 
     /// Initializes the contract admin. Can only be called once.
     pub fn initialize_admin(env: Env, admin: Address) {
-        autoshare_logic::initialize_admin(env, admin);
+        autoshare_logic::initialize_admin(env, admin).unwrap();
+    }
+
+    /// Explicitly locks in and validates the expected Stellar network.
+    ///
+    /// Pass the SHA-256 hash of the network passphrase (the value returned by
+    /// `env.ledger().network_id()` on the target network).  Returns
+    /// `NetworkMismatch` if `expected_network_id` does not match the live
+    /// ledger value, preventing mis-deployment across networks.
+    /// Emits `NetworkConfigInitialized` on success.
+    pub fn initialize_with_network(
+        env: Env,
+        admin: Address,
+        expected_network_id: BytesN<32>,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::initialize_with_network(env, admin, expected_network_id)
+    }
+
+    /// Returns the network identifier (SHA-256 of the network passphrase) that
+    /// was locked in during initialization, or `None` before first init.
+    pub fn get_network_id(env: Env) -> Option<BytesN<32>> {
+        autoshare_logic::get_network_id(env)
     }
 
     /// Pauses the contract. Only admin can call.
@@ -129,6 +165,11 @@ impl AutoShareContract {
     }
 
     /// Retrieves all AutoShare groups.
+    ///
+    /// # Note
+    /// For large group counts, prefer [`Self::get_all_groups_paged`] to avoid
+    /// exceeding Soroban ledger resource limits. The unbounded form is kept for
+    /// backward compatibility with existing consumers.
     pub fn get_all_groups(env: Env) -> Vec<base::types::AutoShareDetails> {
         autoshare_logic::get_all_groups(env)
     }
@@ -547,11 +588,19 @@ impl AutoShareContract {
     // ============================================================================
 
     /// Returns the full, immutable audit log in append order.
+    ///
+    /// # Note
+    /// For large audit logs, prefer [`Self::get_audit_log_paged`] to avoid
+    /// exceeding Soroban ledger resource limits. The unbounded form is kept for
+    /// backward compatibility with existing consumers.
     pub fn get_audit_log(env: Env) -> Vec<base::types::AuditRecord> {
         autoshare_logic::get_audit_log(env)
     }
 
     /// Returns all audit records for a specific notification identifier.
+    ///
+    /// # Note
+    /// For notifications with many records, prefer [`Self::get_notification_audit_paged`].
     pub fn get_notification_audit(
         env: Env,
         notification_id: BytesN<32>,
@@ -651,6 +700,116 @@ impl AutoShareContract {
     /// Returns the current notification limits.
     pub fn get_notification_limits(env: Env) -> base::types::NotificationLimits {
         autoshare_logic::get_notification_limits(env)
+    }
+
+    // ============================================================================
+    // Bounded Enumeration (Issue #1199)
+    // ============================================================================
+    //
+    // These paginated variants allow callers to read large collections safely.
+    // `page_size` must not exceed `MAX_ENUMERATION_PAGE_SIZE` (100). Requests
+    // for larger pages are rejected with `Error::PageLimitExceeded`.
+    //
+    // All results are deterministic: the same (offset, page_size) inputs
+    // return the same records as long as the ledger state has not changed.
+
+    /// Returns the maximum number of records a single paged call may request.
+    pub fn get_max_enumeration_page_size(_env: Env) -> u32 {
+        autoshare_logic::MAX_ENUMERATION_PAGE_SIZE
+    }
+
+    /// Returns up to `page_size` AutoShare groups starting at `offset` (creation
+    /// order). Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_all_groups_paged(
+        env: Env,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::AutoShareDetails>, base::errors::Error> {
+        autoshare_logic::get_all_groups_paged(env, offset, page_size)
+    }
+
+    /// Returns up to `page_size` audit records starting at `offset` (append
+    /// order). Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_audit_log_paged(
+        env: Env,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::AuditRecord>, base::errors::Error> {
+        autoshare_logic::get_audit_log_paged(env, offset, page_size)
+    }
+
+    /// Returns up to `page_size` payment history records for `user` starting at
+    /// `offset`. Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_user_payment_history_paged(
+        env: Env,
+        user: Address,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::PaymentHistory>, base::errors::Error> {
+        autoshare_logic::get_user_payment_history_paged(env, user, offset, page_size)
+    }
+
+    /// Returns up to `page_size` payment history records for group `id` starting
+    /// at `offset`. Rejects requests where `page_size > 100` with `PageLimitExceeded`.
+    pub fn get_group_payment_history_paged(
+        env: Env,
+        id: BytesN<32>,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::PaymentHistory>, base::errors::Error> {
+        autoshare_logic::get_group_payment_history_paged(env, id, offset, page_size)
+    }
+
+    /// Returns up to `page_size` audit records for a specific notification
+    /// starting at `offset`. Rejects requests where `page_size > 100` with
+    /// `PageLimitExceeded`.
+    pub fn get_notification_audit_paged(
+        env: Env,
+        notification_id: BytesN<32>,
+        offset: u32,
+        page_size: u32,
+    ) -> Result<Vec<base::types::AuditRecord>, base::errors::Error> {
+        autoshare_logic::get_notification_audit_paged(env, notification_id, offset, page_size)
+    }
+
+    // ============================================================================
+    // Network Configuration (Issue #1196)
+    // ============================================================================
+
+    /// Stores the expected Stellar network passphrase for this deployment.
+    ///
+    /// Must be called by the admin. The passphrase is persisted so off-chain
+    /// integrations can detect cross-network mismatches before submitting
+    /// transactions. Calling with the same value twice is a no-op.
+    ///
+    /// Known passphrases:
+    /// - Testnet:   `"Test SDF Network ; September 2015"`
+    /// - Mainnet:   `"Public Global Stellar Network ; September 2015"`
+    /// - Futurenet: `"Test SDF Future Network ; October 2022"`
+    pub fn set_network_id(
+        env: Env,
+        admin: Address,
+        network_passphrase: String,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::set_network_id(env, admin, network_passphrase)
+    }
+
+    /// Returns the network passphrase stored for this deployment, or `None` if
+    /// [`set_network_id`] has not been called.
+    pub fn get_network_id(env: Env) -> Option<String> {
+        autoshare_logic::get_network_id(env)
+    }
+
+    /// Validates that `expected_passphrase` matches the stored network identifier.
+    ///
+    /// Returns `true` when passphrases match, `false` when no passphrase has
+    /// been set yet, and `Err(NetworkMismatch)` when they differ.
+    /// Returns `Err(InvalidNetworkId)` when `expected_passphrase` is empty.
+    pub fn validate_network_id(
+        env: Env,
+        expected_passphrase: String,
+    ) -> Result<bool, base::errors::Error> {
+        autoshare_logic::validate_network_id(env, expected_passphrase)
     }
 
     // ============================================================================
@@ -755,6 +914,33 @@ impl AutoShareContract {
     /// Returns true if the given schema version is within the supported range.
     pub fn is_version_supported(env: Env, version: u32) -> bool {
         autoshare_logic::is_version_supported(env, version)
+    }
+
+    // ============================================================================
+    // Storage Migration  (Issue #1197)
+    // ============================================================================
+
+    /// Returns the persistent storage format version (0 before the first migration).
+    pub fn get_storage_version(env: Env) -> u32 {
+        autoshare_logic::get_storage_version(env)
+    }
+
+    /// Returns `true` if the migration to `target_version` has already been executed.
+    pub fn is_migration_executed(env: Env, target_version: u32) -> bool {
+        autoshare_logic::is_migration_executed(env, target_version)
+    }
+
+    /// Runs the storage migration from the current version to `target_version`.
+    ///
+    /// Only the contract admin may call this. Reverts if the migration has
+    /// already been executed (idempotency guard) or if no migration path is
+    /// defined between the two versions.
+    pub fn run_migration(
+        env: Env,
+        admin: Address,
+        target_version: u32,
+    ) -> Result<(), base::errors::Error> {
+        autoshare_logic::run_migration(env, admin, target_version)
     }
 
     // ============================================================================
@@ -888,6 +1074,40 @@ impl AutoShareContract {
         nonce: u64,
     ) -> Option<base::nonce::NonceRecord> {
         nonce_logic::get_nonce_record(&env, &signer, operation, nonce)
+    }
+
+    /// Returns `true` when a persisted authorization record has expired.
+    ///
+    /// Missing records fail with `NotFound` instead of being treated as valid.
+    pub fn is_authorization_expired(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        nonce: u64,
+    ) -> Result<bool, base::errors::Error> {
+        let record = nonce_logic::require_valid_authorization(
+            &env,
+            &signer,
+            operation,
+            nonce,
+        );
+        match record {
+            Ok(_) => Ok(false),
+            Err(base::errors::Error::NonceExpired) => Ok(true),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Removes only expired authorization records up to `max_nonce`.
+    ///
+    /// Active records and the next-nonce counter are never modified.
+    pub fn prune_expired_authorizations(
+        env: Env,
+        signer: Address,
+        operation: base::nonce::NonceOperation,
+        max_nonce: u64,
+    ) -> u32 {
+        nonce_logic::prune_expired_authorizations(&env, &signer, operation, max_nonce)
     }
 
     /// Replay-protected variant of [`Self::pause`].
@@ -1033,6 +1253,7 @@ pub mod test_utils;
 #[cfg(test)]
 mod tests {
     mod access_control_test;
+    mod event_payload_consistency_test;
     mod access_log_test;
     mod archive_notification_test;
     mod audit_log_test;
@@ -1044,16 +1265,20 @@ mod tests {
     mod channel_metadata_test;
     mod channel_subscription_test;
     mod clock_test;
+    mod event_compatibility_test;
     mod event_regression_test;
+    mod expired_authorization_test;
     mod expiration_test;
     mod extended_coverage_test;
     mod fuzz_test;
+    mod initialization_state_test;
     mod metadata_validation_test;
     mod mock_token_test;
     mod notification_lifetime_test;
     mod notification_test;
     mod notification_validation_test;
     mod notification_version_test;
+    mod network_config_test;
     mod nonce_replay_test;
     mod ownership_transfer_test;
     mod pause_test;
@@ -1061,8 +1286,12 @@ mod tests {
     mod preferences_test;
     mod revocation_test;
     mod schema_version_test;
+    mod state_snapshot_test;
     mod storage_optimization_test;
+    mod structured_error_codes_test;
     mod subscription_cancellation_test;
+    mod enumeration_limit_test;
+    mod network_config_test;
     mod template_registry_test;
     mod test_utils_test;
     mod version_test;

@@ -395,9 +395,7 @@ Each entry contains:
 
 ---
 
-### `NotificationLifetimeTooLong` (code: 36)
-
-*Note: shares discriminant 36 in the current errors.rs source; consult contract tests to disambiguate at runtime by call site.*
+### `NotificationLifetimeTooLong` (code: 37)
 
 - **Meaning**: `ttl_seconds` in `schedule_notification` exceeded the absolute `MAX_NOTIFICATION_LIFETIME_SECONDS` protocol constant, regardless of admin-configured limits.
 - **Triggers**: Secondary range guard inside `schedule_notification`.
@@ -409,9 +407,7 @@ Each entry contains:
 
 ---
 
-### `TemplateNotFound` (code: 31)
-
-*Shares discriminant 31 with `NoPendingOwnershipTransfer`; disambiguate by call site.*
+### `TemplateNotFound` (code: 38)
 
 - **Meaning**: The template `id` referenced does not exist in the on-chain template registry.
 - **Triggers**:
@@ -421,9 +417,7 @@ Each entry contains:
 
 ---
 
-### `TemplateNameTooLong` (code: 32)
-
-*Shares discriminant 32 with `NotPendingOwner`; disambiguate by call site.*
+### `TemplateNameTooLong` (code: 39)
 
 - **Meaning**: The `name` parameter in `register_template` / `update_template` exceeded `MAX_TEMPLATE_NAME_BYTES`.
 - **Triggers**: `name.len() > MAX_TEMPLATE_NAME_BYTES` constant.
@@ -431,13 +425,29 @@ Each entry contains:
 
 ---
 
-### `TemplateContentEmpty` (code: 33)
-
-*Shares discriminant 33 with `NotAuthorizedToAcknowledge`; disambiguate by call site.*
+### `TemplateContentEmpty` (code: 40)
 
 - **Meaning**: Template `content` was provided as a zero-byte or whitespace-only String in a register or update call.
 - **Triggers**: `content.len() == 0` inside `register_template` / `update_template`.
 - **Remediation**: Provide a non-empty template body (Markdown, Handlebars, plain text, JSON — whichever renderer the off-chain consumer uses).
+
+---
+
+## 7b. Stable codes 41–47 (structured error coverage)
+
+| Code | Identifier | Resolution |
+|------|------------|------------|
+| 41 | `DuplicateDelivery` | Idempotency key was already used. Treat the previously delivered notification as the result; do not resubmit. |
+| 42 | `NonceAlreadyUsed` | Nonce was consumed or is stale. Fetch `get_next_nonce` and sign with the fresh value. |
+| 43 | `InvalidNonce` | Nonce is ahead of the expected sequence or outside its freshness window. Re-read `get_next_nonce` and retry. |
+| 44 | `NonceExpired` | Nonce's `valid_until` has passed. Generate a new nonce and deadline. |
+| 45 | `NonceContractMismatch` | Nonce was signed for a different contract. Re-sign bound to this contract address. |
+| 46 | `NotInitialized` | `initialize_admin` has not run. Initialize through the authorized workflow, then retry. |
+| 47 | `AlreadyInitialized` | A different admin attempted to replace the initialized admin. Do not retry initialization; use the existing admin. A repeat by the same admin is an idempotent no-op. |
+
+`base::errors::code(Error)` and `base::errors::from_code(u32)` expose the same
+centralized mapping to contract and off-chain tooling. Unknown codes return
+`None` so new failures cannot be mistaken for an existing error category.
 
 ---
 

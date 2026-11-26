@@ -66,7 +66,7 @@ describe('critical event claim and completion transitions', () => {
     );
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0][1]).toEqual([
-      'ERROR', sent ? 1 : 0, 'delivery failed', expect.any(String),
+      'ERROR', sent ? 1 : 0, 'delivery failed', null, null, expect.any(String),
     ]);
   });
 
@@ -76,7 +76,7 @@ describe('critical event claim and completion transitions', () => {
     expect(run).toHaveBeenCalledTimes(2);
     expect(run.mock.calls[1][0]).toContain('INSERT INTO processed_events');
     expect(run.mock.calls[1][1]).toEqual([
-      'event', 'contract', expect.any(String), 20, null, 'contract', 1, 'PROCESSED', null,
+      'event', 'contract', expect.any(String), 20, null, 'contract', 1, 'PROCESSED', null, null, null,
     ]);
   });
 

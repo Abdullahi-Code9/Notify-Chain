@@ -1,4 +1,5 @@
 import { guardWebhookUrl, DnsResolver } from './dns-rebinding-guard';
+import { validateNotificationDestinationUrl } from '../utils/ssrf-url-validation';
 import logger from '../utils/logger';
 
 export interface WebhookSendOptions {
@@ -22,7 +23,14 @@ export interface WebhookSendOptions {
   provider?: string;
   /** Overrides for the provider's circuit breaker configuration. */
   circuitBreaker?: CircuitBreakerOptions;
+   * Maximum number of redirects followed. Each redirect target is validated
+   * independently before it is contacted. @default 3
+   */
+  maxRedirects?: number;
 }
+
+/** Maximum number of redirects followed for a single outbound webhook. */
+export const MAX_WEBHOOK_REDIRECTS = 5;
 
 /**
  * Classification of an outbound webhook failure.
@@ -207,10 +215,11 @@ export function isWebhookTimeoutError(error: unknown): boolean {
 /**
  * Sends a single outbound POST webhook to `url`.
  *
- * Before the HTTP request is made the destination is validated against the
- * DNS rebinding guard (issue #994). If the resolved address falls within any
- * blocked range (RFC 1918, loopback, link-local, etc.) the request is
- * rejected with a `DnsRebindingError` before a single byte leaves the process.
+ * Before every hop the destination is validated against the DNS rebinding
+ * guard (issue #994) and the URL policy (issue #1205). Redirects are followed
+ * manually so a 3xx response cannot bypass either check. If any resolved
+ * address falls within a blocked range (RFC 1918, loopback, link-local, etc.)
+ * the request is rejected before a single byte leaves the process.
  */
 export async function sendWebhook(
   url: string,
@@ -218,34 +227,11 @@ export async function sendWebhook(
   opts: WebhookSendOptions = {},
 ): Promise<Response> {
   const timeoutMs = opts.timeoutMs ?? 5000;
+  validateNotificationDestinationUrl(url);
 
-  // ── DNS rebinding guard ────────────────────────────────────────────────────
-  if (!opts.skipDnsGuard) {
-    const guardResult = await guardWebhookUrl(url, opts.dnsResolver);
-    if (!guardResult.safe) {
-      logger.warn('Webhook delivery blocked by DNS rebinding guard', {
-        url,
-        hostname: guardResult.hostname,
-        blockedAddress: guardResult.blockedAddress,
-        reason: guardResult.reason,
-      });
-      const err = new DnsRebindingError(
-        guardResult.reason ?? `Webhook destination blocked: ${url}`,
-        guardResult.hostname,
-        guardResult.blockedAddress,
-      );
-      throw err;
-    }
-  }
-
-  // ── Circuit breaker gate ───────────────────────────────────────────────────
-  const provider = opts.provider ?? resolveProviderKey(url);
-  const breaker = getCircuitBreaker(provider, opts.circuitBreaker);
-  breaker.tryAcquire();
-
-  // ── Outbound HTTP POST ─────────────────────────────────────────────────────
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let currentUrl = url;
 
   try {
     const response = await fetch(url, {
@@ -274,6 +260,32 @@ export async function sendWebhook(
     throw error;
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+async function assertSafeDestination(
+  url: string,
+  opts: WebhookSendOptions,
+): Promise<void> {
+  if (opts.skipDnsGuard) return;
+
+  const guardResult = await guardWebhookUrl(url, opts.dnsResolver);
+  if (!guardResult.safe) {
+    logger.warn('Webhook delivery blocked by DNS rebinding guard', {
+      url,
+      hostname: guardResult.hostname,
+      blockedAddress: guardResult.blockedAddress,
+      reason: guardResult.reason,
+    });
+    throw new DnsRebindingError(
+      guardResult.reason ?? `Webhook destination blocked: ${url}`,
+      guardResult.hostname,
+      guardResult.blockedAddress,
+    );
   }
 }
 

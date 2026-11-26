@@ -1,3 +1,5 @@
+import { RawEventPayload, TransactionMetadata } from './transaction-metadata';
+
 export interface DisplayEvent {
   eventId: string;
   contractAddress: string;
@@ -8,4 +10,8 @@ export interface DisplayEvent {
   value: string;
   txHash?: string;
   receivedAt: number;
+  /** Blockchain transaction context enriched during ingestion. */
+  txMetadata?: TransactionMetadata;
+  /** The decoded event payload exactly as ingested, preserved unmodified. */
+  rawPayload?: RawEventPayload;
 }

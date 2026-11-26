@@ -19,6 +19,7 @@ interface UseKeyboardShortcutsOptions {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   onToggleTheme: () => void;
+  onOpenCommandPalette?: () => void;
   onRefresh?: () => void;
   helpOpen: boolean;
   onToggleHelp: () => void;
@@ -37,6 +38,7 @@ export function useKeyboardShortcuts({
   activeTab,
   onTabChange,
   onToggleTheme,
+  onOpenCommandPalette,
   onRefresh,
   helpOpen,
   onToggleHelp,
@@ -50,6 +52,16 @@ export function useKeyboardShortcuts({
         return;
       }
 
+      const commandPaletteShortcut =
+        (e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k';
+      if (commandPaletteShortcut) {
+        e.preventDefault();
+        if (!helpOpen) onOpenCommandPalette?.();
+        return;
+      }
+
+      if (helpOpen) return;
+
       // Skip shortcuts while typing in form fields
       if (isEditableElement(e.target as Element)) return;
 
@@ -62,9 +74,6 @@ export function useKeyboardShortcuts({
         onToggleHelp();
         return;
       }
-
-      // Don't process further shortcuts if help is open
-      if (helpOpen) return;
 
       // 1-9 — Switch tabs
       const num = parseInt(e.key, 10);
@@ -89,7 +98,16 @@ export function useKeyboardShortcuts({
         return;
       }
     },
-    [activeTab, onTabChange, onToggleTheme, onRefresh, helpOpen, onToggleHelp, onCloseHelp],
+    [
+      activeTab,
+      onTabChange,
+      onToggleTheme,
+      onOpenCommandPalette,
+      onRefresh,
+      helpOpen,
+      onToggleHelp,
+      onCloseHelp,
+    ],
   );
 
   useEffect(() => {

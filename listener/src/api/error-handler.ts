@@ -2,6 +2,8 @@ import http from 'http';
 import logger from '../utils/logger';
 import { sendErr, ErrorCode } from '../utils/response';
 import { ValidationError } from '../utils/validation';
+import { NotificationAmplificationError } from '../utils/notification-amplification-guard';
+import { redactString, redactValue } from '../utils/redact';
 
 export class ApiError extends Error {
   public readonly statusCode: number;
@@ -87,6 +89,12 @@ export function handleApiError(
     return;
   }
 
+  if (error instanceof NotificationAmplificationError) {
+    logger.warn('Notification amplification blocked', { reason: error.reason, requestId, correlationId });
+    sendErr(res, error.statusCode, error.message, ErrorCode.RATE_LIMITED, undefined, correlationId);
+    return;
+  }
+
   if (error instanceof ValidationError) {
     logger.warn('Validation error', {
       requestId,
@@ -108,9 +116,10 @@ export function handleApiError(
   logger.error('Unhandled API error', {
     requestId,
     correlationId,
-    error,
+    error: redactValue(error),
   });
-  sendErr(res, 500, message, ErrorCode.INTERNAL_ERROR, undefined, correlationId);
+  const safeMessage = process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : redactString(message);
+  sendErr(res, 500, safeMessage, ErrorCode.INTERNAL_ERROR, undefined, correlationId);
 }
 
 export function wrapAsyncHandler(
