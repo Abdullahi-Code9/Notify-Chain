@@ -15,6 +15,7 @@ import { ChannelDetailsPage } from './pages/ChannelDetailsPage';
 import { RpcBenchmarkPage } from './pages/RpcBenchmarkPage';
 import { NotificationDestinationsPage } from './pages/NotificationDestinationsPage';
 import { ContractDetailPage } from './pages/ContractDetailPage';
+import { TransactionTracePage } from './pages/TransactionTracePage';
 
 import { ThemeToggle } from './components/ThemeToggle';
 import { CommandPalette } from './components/CommandPalette';
@@ -334,6 +335,13 @@ function renderPanel(tab: Tab, events: any[]) {
       return (
         <ErrorBoundary section="RPC Benchmark">
           <RpcBenchmarkPage />
+        </ErrorBoundary>
+      );
+
+    case 'transaction-trace':
+      return (
+        <ErrorBoundary section="Transaction Trace">
+          <TransactionTracePage />
         </ErrorBoundary>
       );
 
